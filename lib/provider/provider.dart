@@ -9,7 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:flutter/material.dart';
 // import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer_library.dart' hide CapabilityProfile, Generator, PaperSize;
 import 'package:intl/intl.dart';
-import 'package:open_filex/open_filex.dart';
+// import 'package:open_filex/open_filex.dart';
 // import 'package:intl/intl.dart';
 import 'package:sales_ordering_app/model/attendance_model.dart';
 import 'package:sales_ordering_app/model/brand_list_response.dart';
@@ -43,7 +43,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../model/payment_entry.dart';
 import '../model/pos_invoice_model.dart';
 
-import 'dart:typed_data';
+// import 'dart:typed_data';
 
 import '../utils/invoice_formatter.dart';
 import 'package:sales_ordering_app/model/customer_list_model.dart' as customer;
