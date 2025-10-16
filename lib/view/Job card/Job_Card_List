@@ -1,0 +1,702 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:sales_ordering_app/provider/provider.dart';
+import 'package:sales_ordering_app/utils/app_colors.dart';
+import 'package:sales_ordering_app/utils/common/common_widgets.dart';
+import 'package:sales_ordering_app/view/Job%20card/job_card_transfer_form.dart';
+
+class JobCardListScreen extends StatefulWidget {
+  @override
+  _JobCardListScreenState createState() => _JobCardListScreenState();
+}
+
+class _JobCardListScreenState extends State<JobCardListScreen> {
+  late ScrollController _scrollController;
+  final FocusNode _focusNode = FocusNode();
+    final Set<int> _expandedCards = {}; // Tracks expanded cards
+
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_scrollListener);
+
+    // Fetch initial data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+      provider.fetchJobCards(context);
+    });
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      Provider.of<SalesOrderProvider>(context, listen: false)
+          .fetchJobCards(context);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<SalesOrderProvider>(context);
+
+    return Scaffold(
+      appBar: CommonAppBar(
+        title: 'Job Cards',
+        onBackTap: () {
+          Navigator.pop(context);
+        },
+        backgroundColor: AppColors.primaryColor,
+        actions: Row(
+          children: [
+            IconButton(
+              icon: Icon(Icons.refresh, color: Colors.white),
+              onPressed: () {
+                provider.refreshJobCards(context);
+              },
+            ),
+          ],
+        ),
+      ),
+      body: provider.isJobCardsLoading && provider.jobCards == null
+          ? Center(child: CircularProgressIndicator())
+          : provider.hasError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red, size: 80),
+                      SizedBox(height: 16),
+                      Text(
+                        'Failed to load job cards',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (provider.errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text(
+                            provider.errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () => provider.refreshJobCards(context),
+                        icon: Icon(Icons.refresh),
+                        label: Text('Retry'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'Total Job Cards: ${provider.jobCards?.length ?? 0}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () => provider.refreshJobCards(context),
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          itemCount: provider.jobCards!.length +
+                              (provider.isJobCardsLoading ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == provider.jobCards!.length) {
+                              return provider.isJobCardsLoading
+                                  ? Center(child: CircularProgressIndicator())
+                                  : provider.hasMoreJobCards
+                                      ? SizedBox.shrink()
+                                      : Padding(
+                                          padding: const EdgeInsets.all(16.0),
+                                          child: Text(
+                                            'No more job cards to show.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        );
+                            }
+                            final jobCard = provider.jobCards![index];
+                            return _buildJobCard(jobCard, index);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+    );
+  }
+
+
+Widget _buildJobCard(Map<String, dynamic> jobCard, int index) {
+  final cardColors = [
+    Color.fromARGB(255, 205, 227, 225),
+    Color.fromARGB(255, 205, 213, 221),
+  ];
+  final cardColor = cardColors[index % cardColors.length];
+
+  return Card(
+    color: cardColor,
+    elevation: 4,
+    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Job Card Title
+          Text(
+            jobCard['name'] ?? 'No Name',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          SizedBox(height: 8),
+
+          // Job Card Details
+          _buildDetailText('Work Order', jobCard['work_order']),
+          _buildDetailText('Production Item', jobCard['production_item']),
+          _buildDetailText('Operation', jobCard['operation']),
+          _buildDetailText('Workstation', jobCard['workstation_type']),
+          _buildDetailText(
+            'Quantity',
+            jobCard['for_quantity']?.toString(),
+          ),
+          _buildStatusText(jobCard['status']),
+          SizedBox(height: 8),
+
+          // Future Builder for Employees
+          FutureBuilder<Map<String, dynamic>?>(
+            future: Provider.of<SalesOrderProvider>(context, listen: false)
+                .getJobCardDetails(context, jobCard['name']),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Text(
+                  'Checking employees...',
+                  style: TextStyle(color: Colors.grey),
+                );
+              } else if (snapshot.hasError) {
+                return Text(
+                  'Error checking employees',
+                  style: TextStyle(color: Colors.red),
+                );
+              } else if (snapshot.hasData) {
+                final employees = snapshot.data?['employee'] ?? [];
+                if (employees.isEmpty) {
+                  return Text(
+                    'No Employees Assigned',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                } else {
+                  return SizedBox.shrink(); // No need to show anything if employees are assigned
+                }
+              } else {
+                return Text(
+                  'No Employees Assigned',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              }
+            },
+          ),
+
+          // Icons Row at the Bottom
+          SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                icon: Icon(Icons.remove_red_eye, color: Colors.black),
+                onPressed: () async {
+                  final provider =
+                      Provider.of<SalesOrderProvider>(context, listen: false);
+                  final details = await provider.getJobCardDetails(
+                      context, jobCard['name']);
+                  _showDetailsDialog(
+                      context, 'Employees', details?['employee']);
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.inventory, color: Colors.blue),
+                onPressed: () async {
+                  final provider =
+                      Provider.of<SalesOrderProvider>(context, listen: false);
+                  final details = await provider.getJobCardDetails(
+                      context, jobCard['name']);
+                  _showInventoryDetails(context, 'Items', details?['items']);
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.person, color: Colors.deepPurple),
+                onPressed: () {
+                  _showAddEmployeeBottomSheet(context, jobCard);
+                },
+              ),
+              IconButton(
+  icon: Icon(Icons.transfer_within_a_station, color: Colors.teal),
+  onPressed: () async {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+    final jobCardDetails =
+        await provider.getJobCardDetails(context, jobCard['name']);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => JobCardTransferFormScreen(
+          jobCard: jobCardDetails ?? jobCard, // Pass jobCard details
+        ),
+      ),
+    );
+  },
+),
+
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+
+void _showDetailsDialog(BuildContext context, String title, List<dynamic>? details) {
+  final colors = [
+    Color.fromARGB(255, 230, 245, 250), // Light blue
+    Color.fromARGB(255, 240, 255, 240), // Light green
+  ];
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text(title),
+        content: details == null || details.isEmpty
+            ? Text('No $title Available.')
+            : SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: details.length,
+                  itemBuilder: (context, index) {
+                    final detail = details[index];
+                    final backgroundColor = colors[index % colors.length];
+                    final employeeId = detail['employee'];
+
+                    return Container(
+                      color: backgroundColor,
+                      child: FutureBuilder<String?>(
+                        future: Provider.of<SalesOrderProvider>(context, listen: false)
+                            .getEmployeeName(context, employeeId),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return ListTile(
+                              title: Text('Fetching...'),
+                              subtitle: Text('ID: $employeeId'),
+                            );
+                          } else if (snapshot.hasError) {
+                            return ListTile(
+                              title: Text('Error fetching name'),
+                              subtitle: Text('ID: $employeeId'),
+                            );
+                          } else {
+                            return ListTile(
+                              title: Text(snapshot.data ?? 'Unknown'),
+                              subtitle: Text('ID: $employeeId'),
+                            );
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
+void _showInventoryDetails(BuildContext context, String title, List<dynamic>? items) {
+  final colors = [
+    Color.fromARGB(255, 230, 245, 250), // Light blue
+    Color.fromARGB(255, 240, 255, 240), // Light green
+  ];
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text(title),
+        content: items == null || items.isEmpty
+            ? Text('No $title Available.')
+            : SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final backgroundColor = colors[index % colors.length];
+                    return Container(
+                      color: backgroundColor,
+                      child: ListTile(
+                        title: Text(item['item_code'] ?? 'Unknown'),
+                        subtitle: Text('Quantity: ${item['required_qty']?.toString() ?? 'N/A'}'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+
+void _showAddEmployeeBottomSheet(BuildContext context, Map<String, dynamic> jobCard) async {
+  final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+  // Fetch already assigned employees
+  List<dynamic>? assignedEmployees = await provider
+      .getJobCardDetails(context, jobCard['name'])
+      ?.then((details) => details?['employee'] ?? []);
+
+  for (var employee in assignedEmployees!) {
+    if (employee['employee_name'] == null) {
+      final employeeName = await provider.getEmployeeName(context, employee['employee']);
+      employee['employee_name'] = employeeName ?? 'Unknown';
+    }
+  }
+
+  String query = '';
+  TextEditingController searchController = TextEditingController();
+  bool isSearchPerformed = false;
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          Future<void> performSearch(String value) async {
+            query = value;
+            isSearchPerformed = true;
+            setState(() {}); // Rebuild UI to show loading indicator
+            await provider.searchEmployees(context, query); // Fetch employees
+            setState(() {}); // Rebuild UI with updated results
+          }
+
+          return Padding(
+            padding: MediaQuery.of(context).viewInsets, // Handle keyboard
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.8,
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
+                    'Manage Employees',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 10),
+
+                  // Search Field
+                  TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      labelText: 'Search Employee',
+                      hintText: 'Type employee name or ID...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onChanged: (value) async {
+                      if (value.isNotEmpty) {
+                        await performSearch(value); // Fetch employees dynamically
+                      } else {
+                        setState(() {
+                          isSearchPerformed = false;
+                        });
+                      }
+                    },
+                    onSubmitted: (value) {
+                      FocusScope.of(context).unfocus(); // Close the keyboard on Enter
+                    },
+                  ),
+                  SizedBox(height: 16),
+
+                  // Search Results Section
+                  if (isSearchPerformed)
+                    provider.isEmployeesLoading
+                        ? Center(child: CircularProgressIndicator())
+                        : provider.employees != null && provider.employees!.isNotEmpty
+                            ? Expanded(
+                                child: ListView.separated(
+                                  itemCount: provider.employees!.length,
+                                  separatorBuilder: (_, __) => Divider(),
+                                  itemBuilder: (context, index) {
+                                    final employee = provider.employees![index];
+                                    return ListTile(
+                                      title: Text(employee['employee_name'] ?? 'Unknown'),
+                                      subtitle: Text(employee['name'] ?? ''),
+                                      trailing: Icon(Icons.add_circle, color: Colors.green),
+                                      onTap: () {
+                                        setState(() {
+                                          if (!assignedEmployees.any((e) => e['employee'] == employee['name'])) {
+                                            assignedEmployees.add({
+                                              'employee': employee['name'],
+                                              'employee_name': employee['employee_name'],
+                                            });
+                                          }
+                                        });
+                                      },
+                                    );
+                                  },
+                                ),
+                              )
+                            : Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No employees found.',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+
+                  // Divider
+                  Divider(),
+
+
+                  // Assigned Employees Section
+                  Text(
+                    'Assigned Employees:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.green,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: assignedEmployees.length,
+                      separatorBuilder: (_, __) => Divider(),
+                      itemBuilder: (context, index) {
+                        final employee = assignedEmployees[index];
+                        // Alternate background colors
+                        final backgroundColor = index.isEven
+                            ? Color.fromARGB(255, 230, 245, 250) // Light blue
+                            : Color.fromARGB(255, 240, 255, 240); // Light green
+                        return Container(
+                          color: backgroundColor,
+                          child: ListTile(
+                            title: Text(employee['employee_name'] ?? 'Unknown'),
+                            subtitle: Text(employee['employee'] ?? ''),
+                            trailing: IconButton(
+                              icon: Icon(Icons.remove_circle, color: Colors.red),
+                              onPressed: () {
+                                setState(() {
+                                  assignedEmployees.removeAt(index);
+                                });
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // Confirm Button
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await provider.updateJobCardEmployees(context, jobCard['name'], assignedEmployees);
+                    },
+                    child: Text('Confirm'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+
+
+
+Widget _buildEmployeeDetails(List<dynamic>? employees) {
+  if (employees == null || employees.isEmpty) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Text(
+        'No employees assigned.',
+        style: TextStyle(color: Colors.red),
+      ),
+    );
+  }
+
+  return Padding(
+    padding: const EdgeInsets.only(top: 8.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Assigned Employees:',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        SizedBox(height: 8),
+        ...employees.map((employee) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    ' ${employee['employee'] ?? 'Unknown'}',
+                    style: TextStyle(fontSize: 14,fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (employee['employee_name'] != null)
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'Name: ${employee['employee_name']}',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
+    ),
+  );
+}
+
+
+  Widget _buildDetailText(String title, String? value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$title: ',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value ?? 'Unknown',
+              softWrap: true,
+              overflow: TextOverflow.visible,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusText(String? status) {
+    final statusText = status ?? 'Unknown';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Status: ',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              statusText,
+              style: TextStyle(
+                color: _getStatusColor(statusText),
+                fontWeight: FontWeight.bold,
+              ),
+              softWrap: true,
+              overflow: TextOverflow.visible,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'open':
+        return Colors.red;
+      case 'draft':
+        return Colors.orange;
+      case 'in process':
+        return const Color.fromARGB(235, 6, 46, 247);
+      case 'completed':
+        return const Color.fromARGB(255, 0, 214, 7);
+      default:
+        return Colors.black;
+    }
+  }
+}
+
+
