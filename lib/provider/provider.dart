@@ -51,7 +51,7 @@ import 'package:sales_ordering_app/model/customer_list_model.dart' as customer;
 
 
 
-
+//demo change 2
 class SalesOrderProvider extends ChangeNotifier {
   final SharedPrefService _sharedPrefService = SharedPrefService();
   String _domain = '';
