@@ -45,6 +45,15 @@ class SharedPrefService {
       'domain': domain,
     };
   }
+  Future<void> saveAutoSubmitPickList(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool("auto_submit_picklist", value);
+  }
+
+  Future<bool> getAutoSubmitPickList() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool("auto_submit_picklist") ?? false;
+  }
 
   Future<Map<String, String?>> getDomainName() async {
     final prefs = await SharedPreferences.getInstance();

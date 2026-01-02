@@ -98,7 +98,8 @@ class _PurchaseReceiptItemsScreenState extends State<PurchaseReceiptItemsScreen>
     super.dispose();
   }
 
-  void _saveAndReturn() {
+  void _saveAndReturn() async {
+
     final rejectedQty = double.tryParse(widget.selectedItem.rejectedQtyController.text) ?? 0.0;
     final rejectedWarehouse = widget.selectedItem.rejectedWarehouseController.text.trim();
 
@@ -112,7 +113,19 @@ class _PurchaseReceiptItemsScreenState extends State<PurchaseReceiptItemsScreen>
       );
       return; // Stop execution if validation fails
     }
-widget.selectedItem.finalReceivedQty =
+    if (widget.selectedItem.hasBatchNo &&
+        widget.selectedItem.batchNoController.text.trim().isEmpty) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Batch No is required for this item"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    widget.selectedItem.finalReceivedQty =
     double.tryParse(widget.selectedItem.acceptedQtyController.text) ?? 0.0;
 
     // widget.selectedItem.receivedQty = double.tryParse(widget.selectedItem.acceptedQtyController.text) ?? 0.0;
@@ -139,13 +152,22 @@ widget.selectedItem.finalReceivedQty =
         },
         isAction: false,
       ),
-      body: SingleChildScrollView(
-        // ✅ Fix Overflow by enabling scrolling
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        body: Stack(
+          children: [
+            SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: _buildForm(item),
+              ),
+            ),
+          ],
+        )
+    );
+  }
+  Widget _buildForm(item) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Card(
                 margin: EdgeInsets.symmetric(vertical: 8),
@@ -166,115 +188,113 @@ widget.selectedItem.finalReceivedQty =
                 ),
               ),
 
-Row(
-  crossAxisAlignment: CrossAxisAlignment.end,
-  children: [
-    // Accepted Quantity Field
-    Expanded(
-      child: TextFormField(
-        controller: item.acceptedQtyController,
-        focusNode: _acceptedQtyFocusNode,
-        decoration: const InputDecoration(labelText: "Accepted Quantity"),
-        keyboardType: TextInputType.number,
-      ),
-    ),
-    const SizedBox(width: 12),
-
-ElevatedButton(
-  onPressed: () {
-    showDialog(
-      context: context,
-      builder: (context) {
-        // ✅ Initialize controllers with existing values if available
-        List<int> existingQuantities = [];
-        if (item.itemPackDetails != null && item.itemPackDetails!.isNotEmpty) {
-          existingQuantities = item.itemPackDetails!
-              .split(',')
-              .map((e) => int.tryParse(e.trim()) ?? 0)
-              .toList();
-        }
-
-        List<TextEditingController> packControllers = existingQuantities.isNotEmpty
-            ? existingQuantities.map((qty) => TextEditingController(text: qty.toString())).toList()
-            : [TextEditingController()];
-
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text("Enter Pack Quantities"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ...List.generate(packControllers.length, (index) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: TextFormField(
-                          controller: packControllers[index],
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: "Pack ${index + 1} Quantity",
-                            border: const OutlineInputBorder(),
-                          ),
-                        ),
-                      );
-                    }),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        icon: const Icon(Icons.add_circle_outline),
-                        tooltip: "Add another pack",
-                        onPressed: () {
-                          setState(() {
-                            packControllers.add(TextEditingController());
-                          });
-                        },
-                      ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Accepted Quantity Field
+                  Expanded(
+                    child: TextFormField(
+                      controller: item.acceptedQtyController,
+                      focusNode: _acceptedQtyFocusNode,
+                      decoration: const InputDecoration(labelText: "Accepted Quantity"),
+                      keyboardType: TextInputType.number,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  ElevatedButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          // ✅ Initialize controllers with existing values if available
+                          List<int> existingQuantities = [];
+                          if (item.itemPackDetails != null && item.itemPackDetails!.isNotEmpty) {
+                            existingQuantities = item.itemPackDetails!
+                                .split(',')
+                                .map((e) => int.tryParse(e.trim()) ?? 0)
+                                .toList();
+                          }
+
+                          List<TextEditingController> packControllers = existingQuantities.isNotEmpty
+                              ? existingQuantities.map((qty) => TextEditingController(text: qty.toString())).toList()
+                              : [TextEditingController()];
+
+                          return StatefulBuilder(
+                            builder: (context, setState) {
+                              return AlertDialog(
+                                title: const Text("Enter Pack Quantities"),
+                                content: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ...List.generate(packControllers.length, (index) {
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 6.0),
+                                          child: TextFormField(
+                                            controller: packControllers[index],
+                                            keyboardType: TextInputType.number,
+                                            decoration: InputDecoration(
+                                              labelText: "Pack ${index + 1} Quantity",
+                                              border: const OutlineInputBorder(),
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                      const SizedBox(height: 10),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.add_circle_outline),
+                                          tooltip: "Add another pack",
+                                          onPressed: () {
+                                            setState(() {
+                                              packControllers.add(TextEditingController());
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    child: const Text("Cancel"),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      final quantities = packControllers
+                                          .map((c) => int.tryParse(c.text.trim()) ?? 0)
+                                          .toList();
+
+                                      final totalAcceptedQty =
+                                      quantities.fold(0, (sum, qty) => sum + qty);
+
+                                      // ✅ Save accepted quantity and CSV string
+                                      item.acceptedQtyController.text =
+                                          totalAcceptedQty.toString();
+                                      item.itemPackDetails = quantities.join(","); // ✅ Save as CSV
+
+                                      Navigator.of(context).pop();
+                                    },
+                                    child: const Text("Save"),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    child: const Text("Details"),
+                  ),
+
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final quantities = packControllers
-                        .map((c) => int.tryParse(c.text.trim()) ?? 0)
-                        .toList();
-
-                    final totalAcceptedQty =
-                        quantities.fold(0, (sum, qty) => sum + qty);
-
-                    // ✅ Save accepted quantity and CSV string
-                    item.acceptedQtyController.text =
-                        totalAcceptedQty.toString();
-                    item.itemPackDetails = quantities.join(","); // ✅ Save as CSV
-
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  },
-  style: ElevatedButton.styleFrom(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-  ),
-  child: const Text("Details"),
-),
-
-  ],
-),
-
-
 
               // ✅ Rejected Quantity Field
               TextFormField(
@@ -296,79 +316,87 @@ ElevatedButton(
                     SizedBox(height: 12),
                     Text("Rejected Warehouse", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     SizedBox(height: 6),
- Autocomplete<String>(
-  optionsBuilder: (TextEditingValue textEditingValue) async {
-    if (textEditingValue.text.isEmpty) {
-      return const Iterable<String>.empty();
-    }
+                    Autocomplete<String>(
+                      optionsBuilder: (TextEditingValue textEditingValue) async {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<String>.empty();
+                        }
 
-    try {
-      // ✅ Fetch warehouse list dynamically
-      final warehouseList = await Provider.of<SalesOrderProvider>(
-        context,
-        listen: false,
-      ).fetchWarehouse(textEditingValue.text);
+                        try {
+                          // ✅ Fetch warehouse list dynamically
+                          final warehouseList = await Provider.of<SalesOrderProvider>(
+                            context,
+                            listen: false,
+                          ).fetchWarehouse(textEditingValue.text);
 
-      return warehouseList; // ✅ Return the list or empty if no results
-    } catch (e) {
-      debugPrint("❗ Error fetching warehouse list: $e");
-      return const Iterable<String>.empty();
-    }
-  },
-  onSelected: (String selection) {
-    setState(() {
-      item.rejectedWarehouseController.text = selection; // ✅ Auto-select warehouse
-    });
-  },
-  fieldViewBuilder:
-      (context, controller, focusNode, onFieldSubmitted) {
-    controller.text = item.rejectedWarehouseController.text;
+                          return warehouseList; // ✅ Return the list or empty if no results
+                        } catch (e) {
+                          debugPrint("❗ Error fetching warehouse list: $e");
+                          return const Iterable<String>.empty();
+                        }
+                      },
+                      onSelected: (String selection) {
+                        setState(() {
+                          item.rejectedWarehouseController.text = selection; // ✅ Auto-select warehouse
+                        });
+                      },
+                      fieldViewBuilder:
+                          (context, controller, focusNode, onFieldSubmitted) {
+                        controller.text = item.rejectedWarehouseController.text;
 
-    return TextFormField(
-      controller: controller,
-      focusNode: focusNode,
-      decoration: InputDecoration(
-        labelText: "Select Warehouse",
-        prefixIcon: const Icon(Icons.warehouse),
-        suffixIcon: const Icon(Icons.search),
-      ),
-      // ✅ Auto-select text when the field is tapped
-      onTap: () {
-        controller.selection = TextSelection(
-          baseOffset: 0,
-          extentOffset: controller.text.length,
-        );
-      },
-      onChanged: (value) {
-        setState(() {
-          item.rejectedWarehouseController.text = value;
-        });
-      },
-    );
-  },
-  optionsViewBuilder: (context, onSelected, options) {
-    return Align(
-      alignment: Alignment.topLeft,
-      child: Material(
-        elevation: 4,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 200), // ✅ Limit dropdown height
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            itemCount: options.length,
-            itemBuilder: (BuildContext context, int index) {
-              final String option = options.elementAt(index);
-              return ListTile(
-                title: Text(option),
-                onTap: () => onSelected(option),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  },
-),
+                        return TextFormField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: "Select Warehouse",
+                            prefixIcon: const Icon(Icons.warehouse),
+                            suffixIcon: const Icon(Icons.search),
+                          ),
+                          // ✅ Auto-select text when the field is tapped
+                          onTap: () {
+                            controller.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: controller.text.length,
+                            );
+                          },
+                          onChanged: (value) {
+                            setState(() {
+                              item.rejectedWarehouseController.text = value;
+                            });
+                          },
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxHeight: 200, // limit height so it can scroll
+                                minWidth: double.infinity,
+                              ),
+                              child: NotificationListener<ScrollNotification>(
+                                onNotification: (_) => true, // prevents parent scroll
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length,
+                                  shrinkWrap: true,
+                                  itemBuilder: (context, index) {
+                                    final String option = options.elementAt(index);
+                                    return ListTile(
+                                      title: Text(option),
+                                      onTap: () => onSelected(option),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+
+                    ),
 
 
                   ],
@@ -389,6 +417,19 @@ ElevatedButton(
                 decoration: InputDecoration(labelText: "Excess Quantity"),
                 keyboardType: TextInputType.number,
               ),
+              SizedBox(height: 16),
+
+// 🔥 SHOW THIS ONLY IF has_batch_no IS TRUE
+              if (item.hasBatchNo) ...[
+                TextFormField(
+                  controller: item.batchNoController,
+                  decoration: const InputDecoration(
+                    labelText: "Batch No",
+                    hintText: "Enter batch number",
+                  ),
+                ),
+                SizedBox(height: 16),
+              ],
 
               SizedBox(height: 20),
               ElevatedButton(
@@ -396,9 +437,7 @@ ElevatedButton(
                 child: Text("Save"),
               ),
             ],
-          ),
-        ),
-      ),
-    );
+          );
   }
+
 }

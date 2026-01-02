@@ -8,6 +8,9 @@ import 'package:sales_ordering_app/provider/provider.dart';
 import 'package:sales_ordering_app/utils/app_colors.dart';
 import 'package:sales_ordering_app/utils/common/common_widgets.dart';
 
+import '../../service/apiservices.dart';
+import '../../utils/sharedpreference.dart';
+import 'add_customer.dart';
 import 'ledger_pdf_builder.dart';
 import 'map_screen.dart';
 
@@ -22,7 +25,7 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
   String? _selectedFilter;
   List<String> _filters = [];
   final TextEditingController _searchController = TextEditingController();
-
+  final SharedPrefService _sharedPrefService = SharedPrefService();
   @override
   void initState() {
     super.initState();
@@ -181,11 +184,41 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
       },
     );
   }
+  Future<void> showLoadingDialog(BuildContext context) async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false, // prevent closing
+      builder: (context) {
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      },
+    );
+  }
+
+  DateTime? _selectedPostingDate;
+
+  // String get formattedPostingDate {
+  //   if (_selectedPostingDate == null) return "";
+  //   return "${_selectedPostingDate!.year}-"
+  //       "${_selectedPostingDate!.month.toString().padLeft(2, '0')}-"
+  //       "${_selectedPostingDate!.day.toString().padLeft(2, '0')}";
+  // }
+  String formatDateForDisplay(DateTime date) {
+    return "${date.day.toString().padLeft(2, '0')}-"
+        "${date.month.toString().padLeft(2, '0')}-"
+        "${date.year}";
+  }
+
+  String formatDateForApi(DateTime date) {
+    return "${date.year}-"
+        "${date.month.toString().padLeft(2, '0')}-"
+        "${date.day.toString().padLeft(2, '0')}";
+  }
+
 
   @override
   Widget build(BuildContext context) {
-    // final provider = Provider.of<SalesOrderProvider>(context);
-
     return Scaffold(
       appBar: CommonAppBar(
         title: 'Customers',
@@ -194,14 +227,23 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
         },
         actions: Row(
           children: [
+            // ➕ ADD NEW CUSTOMER BUTTON
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.white, size: 28),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddCustomerScreen()),
+                ).then((_) {
+                  _fetchCustomerList();   // Refresh after adding customer
+                });
+              },
+            ),
             IconButton(
                 icon: Icon(
                   Icons.refresh,
                   color: Colors.white,
                 ),
-                // onPressed: () {
-                //   _fetchCustomerList();
-                // }
               onPressed: () {
                 _searchController.clear();
                 setState(() {
@@ -236,7 +278,7 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                 children: [
                   Container(
                     padding:
-                        EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                        EdgeInsets.symmetric(horizontal: 10.0, vertical: 2.0),
                     decoration: BoxDecoration(
                       color: Colors.grey[200],
                       borderRadius: BorderRadius.circular(10.0),
@@ -308,196 +350,403 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(15.0),
-                          child: Row(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // 👉 Customer details
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (customer.name != null)
-                                      Text("Name : ${customer.name}",
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              // 🧾 Customer details
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (customer.name != null)
+                                    Text("Name : ${customer.name}",
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
 
-                                    if (customer.gstin != null)
-                                      Text("GSTIN : ${customer.gstin}",
-                                          style: const TextStyle(fontSize: 16)),
+                                  if (customer.gstin != null)
+                                    Text("GSTIN : ${customer.gstin}",
+                                        style: const TextStyle(fontSize: 16)),
 
-                                    if (customer.territory != null)
-                                      Text("Territory : ${customer.territory}",
-                                          style: const TextStyle(fontSize: 16)),
+                                  if (customer.territory != null)
+                                    Text("Territory : ${customer.territory}",
+                                        style: const TextStyle(fontSize: 16)),
 
-                                    if (customer.customerPrimaryContact != null)
-                                      Text("Primary Contact : ${customer.customerPrimaryContact}",
-                                          style: const TextStyle(fontSize: 16)),
+                                  if (customer.customerPrimaryContact != null)
+                                    Text("Primary Contact : ${customer.customerPrimaryContact}",
+                                        style: const TextStyle(fontSize: 16)),
 
-                                    if (customer.mobileNo != null)
-                                      Text("Mobile Number : ${customer.mobileNo}",
-                                          style: const TextStyle(fontSize: 16)),
+                                  if (customer.mobileNo != null)
+                                    Text("Mobile Number : ${customer.mobileNo}",
+                                        style: const TextStyle(fontSize: 16)),
 
-                                    if (customer.taxCategory != null)
-                                      Text("Tax Category : ${customer.taxCategory}",
-                                          style: const TextStyle(fontSize: 16)),
+                                  if (customer.taxCategory != null)
+                                    Text("Tax Category : ${customer.taxCategory}",
+                                        style: const TextStyle(fontSize: 16)),
 
-                                    if (customer.customerGroup != null)
-                                      Text("Customer Group : ${customer.customerGroup}",
-                                          style: const TextStyle(fontSize: 16)),
+                                  if (customer.customerGroup != null)
+                                    Text("Customer Group : ${customer.customerGroup}",
+                                        style: const TextStyle(fontSize: 16)),
 
-                                    // 🔥 New fields (only show if > 0)
-                                    if (customer.billingThisYear != null && customer.billingThisYear! > 0)
-                                      Text(
-                                        "Billing This Year : ₹${customer.billingThisYear!.toStringAsFixed(2)}",
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-                                      ),
+                                  if (customer.billingThisYear != null && customer.billingThisYear! > 0)
+                                    Text(
+                                      "Billing This Year : ₹${customer.billingThisYear!.toStringAsFixed(2)}",
+                                      style: const TextStyle(
+                                          fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                                    ),
 
-                                    if (customer.totalUnpaid != null && customer.totalUnpaid! > 0)
-                                      Text(
-                                        "Total Unpaid : ₹${customer.totalUnpaid!.toStringAsFixed(2)}",
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
-                                      ),
-                                  ],
-                                ),
+                                  if (customer.totalUnpaid != null && customer.totalUnpaid! > 0)
+                                    Text(
+                                      "Total Unpaid : ₹${customer.totalUnpaid!.toStringAsFixed(2)}",
+                                      style: const TextStyle(
+                                          fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+                                    ),
+                                ],
                               ),
 
-                              // 👉 Download Icon button
-                              IconButton(
-                                icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                                onPressed: () async {
-                                  final api = Provider.of<SalesOrderProvider>(context, listen: false);
+                              // const SizedBox(height: 12),
+                              const Divider(thickness: 1),
+                             Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                               crossAxisAlignment: CrossAxisAlignment.center,
+                               children: [
+                                 // // 🧾 General Ledger
+                                 // IconButton(
+                                 //   iconSize: 24,
+                                 //   padding: EdgeInsets.zero,
+                                 //   constraints: const BoxConstraints(),
+                                 //   icon: const Icon(Icons.file_download, color: Colors.orangeAccent),
+                                 //   tooltip: "Download General Ledger",
+                                 // 🧾 General Ledger
+                                 Column(
+                                   mainAxisSize: MainAxisSize.min,
+                                   children: [
+                                     IconButton(
+                                       iconSize: 24,
+                                       padding: EdgeInsets.zero,
+                                       constraints: const BoxConstraints(),
+                                       icon: const Icon(Icons.file_download, color: Colors.orangeAccent),
+                                       tooltip: "Download General Ledger",
+                                   onPressed: () async {
+                                     final api = Provider.of<SalesOrderProvider>(context, listen: false);
 
-                                  final now = DateTime.now();
+                                     // Step 1: Ask user for "From Date"
+                                     final DateTime? fromDate = await showDatePicker(
+                                       context: context,
+                                       initialDate: DateTime.now().subtract(const Duration(days: 30)),
+                                       firstDate: DateTime(2020),
+                                       lastDate: DateTime.now(),
+                                       helpText: "Select From Date",
+                                     );
 
-                                  String formatDate(DateTime date) =>
-                                      "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+                                     if (fromDate == null) return; // user cancelled
 
-                                  final toDate = formatDate(now);
-                                  final fromDate = formatDate(safeSubtractOneMonth(now));
+                                     // Step 2: Ask user for "To Date"
+                                     final DateTime? toDate = await showDatePicker(
+                                       context: context,
+                                       initialDate: DateTime.now(),
+                                       firstDate: fromDate,
+                                       lastDate: DateTime.now(),
+                                       helpText: "Select To Date",
+                                     );
 
-                                  final ledgerJson = await api.apiService!.fetchGeneralLedger(
-                                    context,
-                                    customer.name!,
-                                    fromDate,
-                                    toDate,
-                                  );
+                                     if (toDate == null) return; // user cancelled
 
-                                  if (ledgerJson != null) {
-                                    final html = buildLedgerHtml(ledgerJson, fromDate, toDate, fallbackCustomerName: customer.name);
-                                    final pdfBytes = await api.apiService!.generatePdfFromHtml(context, html);
+                                     // Step 3: Format selected dates
+                                     String formatDate(DateTime date) =>
+                                         "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
 
-                                    if (pdfBytes != null) {
-                                      await saveAndOpenPdf(pdfBytes as List<int>, "General_Ledger_${customer.name}");
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text("PDF Downloaded Successfully")),
-                                      );
-                                    }
-                                  }
+                                     final fromDateStr = formatDate(fromDate);
+                                     final toDateStr = formatDate(toDate);
 
-                                },
+                                     // Step 4: Fetch Ledger
+                                     final ledgerJson = await api.apiService!.FetchGeneralLedger(
+                                       context,
+                                       customer.name!,
+                                       fromDateStr,
+                                       toDateStr,
+                                     );
 
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.location_on, color: Colors.blue),
-                                onPressed: () async {
-                                  final api = Provider.of<SalesOrderProvider>(context, listen: false);
+                                     if (ledgerJson != null) {
+                                       // Step 5: Build HTML & Generate PDF
+                                       final html = BuildLedgerHtml(
+                                         ledgerJson,
+                                         fromDateStr,
+                                         toDateStr,
+                                         fallbackCustomerName: customer.name,
+                                       );
 
-                                  // ✅ Show loading while calling ERP API
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (ctx) => const Center(child: CircularProgressIndicator()),
-                                  );
+                                       final pdfBytes =
+                                       await api.apiService!.generatePdfFromHtml(context, html);
 
-                                  try {
-                                    final customerDetails =
-                                    await api.apiService!.fetchCustomerLocation(customer.name!, context);
+                                       if (pdfBytes != null) {
+                                         await saveAndOpenPdf(
+                                           pdfBytes as List<int>,
+                                           "General_Ledger_${customer.name}",
+                                         );
+                                         ScaffoldMessenger.of(context).showSnackBar(
+                                           const SnackBar(content: Text("PDF Downloaded Successfully")),
+                                         );
+                                       }
+                                     }
+                                   },
+                                     ),
+                                     const SizedBox(height: 4),
+                                     const Text(
+                                       "GL",
+                                       style: TextStyle(fontSize: 12, color: Colors.black54),
+                                     ),
+                                   ],
+                                 ),
 
-                                    double? lat = customerDetails?["latitude"]?.toDouble();
-                                    double? lng = customerDetails?["longitude"]?.toDouble();
 
-                                    Navigator.pop(context); // ✅ Close loading dialog
+                                 // Accounts Receivable
+                                 Column(
+                                   mainAxisSize: MainAxisSize.min,
+                                   children: [
+                                     // IconButton(
+                                     //   iconSize: 24,
+                                     //   padding: EdgeInsets.zero,
+                                     //   constraints: const BoxConstraints(),
+                                     //   icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                                     //   tooltip: "Download Accounts Receivable",
+                                     //   onPressed: () async {
+                                     //     // 1️⃣ Pick date
+                                     //     final pickedDate = await showDatePicker(
+                                     //       context: context,
+                                     //       initialDate: DateTime.now(),
+                                     //       firstDate: DateTime(2000),
+                                     //       lastDate: DateTime.now(),
+                                     //     );
+                                     //
+                                     //     if (pickedDate == null) return;
+                                     //
+                                     //     final postingDate =
+                                     //         "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+                                     //
+                                     //     // 2️⃣ Pick aging range
+                                     //     final range = await showRangeInputDialog(context);
+                                     //     if (range == null) return;
+                                     //
+                                     //     showLoadingDialog(context);
+                                     //
+                                     //     try {
+                                     //       final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+                                     //       final api = provider.apiService!;
+                                     //       final company = await _sharedPrefService.getCompany();
+                                     //       final party = customer.name!;
+                                     //
+                                     //       // 3️⃣ Fetch report
+                                     //       final report = await api.fetchAccountsReceivable(
+                                     //         context,
+                                     //         company!,
+                                     //         postingDate,
+                                     //         party,
+                                     //         range,
+                                     //       );
+                                     //
+                                     //       if (report == null) return;
+                                     //
+                                     //       // 4️⃣ Build human-readable labels
+                                     //       final rangeLabel = buildRangeLabel(range);
+                                     //
+                                     //       final letterheadContent =
+                                     //       await api.fetchLetterHeadContent(context);
+                                     //
+                                     //       final html = buildAccountsReceivableHtml(
+                                     //         report,
+                                     //         party,
+                                     //         postingDate,
+                                     //         rangeLabel,
+                                     //         letterheadContent,
+                                     //         provider.domain,
+                                     //       );
+                                     //
+                                     //       final pdfBytes = await api.generatePdfFromHtml(context, html);
+                                     //
+                                     //       if (pdfBytes != null) {
+                                     //         await saveAndOpenPdf(
+                                     //           pdfBytes,
+                                     //           "Accounts_Receivable_${party}_$postingDate.pdf",
+                                     //         );
+                                     //       }
+                                     //     } finally {
+                                     //       Navigator.pop(context);
+                                     //     }
+                                     //   },
+                                     //
+                                     // ),
+                                     IconButton(
+                                       iconSize: 24,
+                                       padding: EdgeInsets.zero,
+                                       constraints: const BoxConstraints(),
+                                       icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                                       tooltip: "Download Accounts Receivable",
+                                       onPressed: () async {
+                                         final result = await showReceivableFilterDialog(context);
+                                         if (result == null) return;
 
-                                    // ✅ If ERP does not have location → ask user
-                                    if (lat == null || lng == null || lat == 0.0 || lng == 0.0) {
-                                      final shouldFetch = await showDialog<bool>(
+                                         // final postingDate =
+                                         //     "${result.postingDate.year}-${result.postingDate.month.toString().padLeft(2, '0')}-${result.postingDate.day.toString().padLeft(2, '0')}";
+                                         final postingDate = formatDateForApi(result.postingDate);
+
+                                         showLoadingDialog(context);
+
+                                         try {
+                                           final provider =
+                                           Provider.of<SalesOrderProvider>(context, listen: false);
+                                           final api = provider.apiService!;
+                                           final company = await _sharedPrefService.getCompany();
+                                           final party = customer.name!;
+
+                                           final report = await api.fetchAccountsReceivable(
+                                             context,
+                                             company!,
+                                             postingDate,
+                                             party,
+                                             result.range,
+                                           );
+
+                                           if (report == null) return;
+
+                                           final rangeLabel = buildRangeLabel(result.range);
+
+                                           final letterheadContent =
+                                           await api.fetchLetterHeadContent(context);
+
+                                           final html = buildAccountsReceivableHtml(
+                                             report,
+                                             party,
+                                             postingDate,
+                                             rangeLabel,
+                                             letterheadContent,
+                                             provider.domain,
+                                           );
+
+                                           final pdfBytes =
+                                           await api.generatePdfFromHtml(context, html);
+
+                                           if (pdfBytes != null) {
+                                             await saveAndOpenPdf(
+                                               pdfBytes,
+                                               "Accounts_Receivable_${party}_$postingDate.pdf",
+                                             );
+                                           }
+                                         } finally {
+                                           Navigator.pop(context);
+                                         }
+                                       },
+                                     ),
+
+                                     const SizedBox(height: 4),
+                                 const Text(
+                                   "AR",
+                                   style: TextStyle(fontSize: 12, color: Colors.black54),
+                                 ),
+                                 ]),
+
+
+                                 Column(
+                                   mainAxisSize: MainAxisSize.min,
+                                   children: [
+                                     IconButton(
+                                       iconSize: 24,
+                                       padding: EdgeInsets.zero,
+                                       constraints: const BoxConstraints(),
+                                       icon: const Icon(Icons.location_on, color: Colors.blue),
+                                       tooltip: "View Location",
+                                    onPressed: () async {
+                                      final api = Provider.of<SalesOrderProvider>(context, listen: false);
+                                      showDialog(
                                         context: context,
-                                        barrierDismissible: false, // ❌ Prevent dismiss outside
-                                        builder: (ctx) {
-                                          return AlertDialog(
-                                            title: const Text("Location Not Found"),
-                                            content: const Text(
-                                                "No location found. Do you want to fetch location from this device?"),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(ctx, false), // Cancel
-                                                child: const Text("No"),
-                                              ),
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(ctx, true), // Yes
-                                                child: const Text("Yes"),
-                                              ),
-                                            ],
+                                        barrierDismissible: false,
+                                        builder: (ctx) => const Center(child: CircularProgressIndicator()),
+                                      );
+
+                                      try {
+                                        final customerDetails =
+                                        await api.apiService!.fetchCustomerLocation(customer.name!, context);
+
+                                        double? lat = customerDetails?["latitude"]?.toDouble();
+                                        double? lng = customerDetails?["longitude"]?.toDouble();
+
+                                        Navigator.pop(context);
+
+                                        if (lat == null || lng == null || lat == 0.0 || lng == 0.0) {
+                                          final shouldFetch = await showDialog<bool>(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            builder: (ctx) => AlertDialog(
+                                              title: const Text("Location Not Found"),
+                                              content: const Text(
+                                                  "No location found. Do you want to fetch from this device?"),
+                                              actions: [
+                                                TextButton(
+                                                    onPressed: () => Navigator.pop(ctx, false),
+                                                    child: const Text("No")),
+                                                TextButton(
+                                                    onPressed: () => Navigator.pop(ctx, true),
+                                                    child: const Text("Yes")),
+                                              ],
+                                            ),
                                           );
-                                        },
-                                      );
 
-                                      if (shouldFetch == true) {
-                                        // ✅ Show loader while fetching device location
-                                        showDialog(
-                                          context: context,
-                                          barrierDismissible: false,
-                                          builder: (ctx) => const Center(child: CircularProgressIndicator()),
-                                        );
+                                          if (shouldFetch == true) {
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder: (ctx) =>
+                                              const Center(child: CircularProgressIndicator()),
+                                            );
 
-                                        final position = await _getDeviceLocation(context);
-
-                                        Navigator.pop(context); // close loader
-
-                                        if (position != null) {
-                                          lat = position.latitude;
-                                          lng = position.longitude;
+                                            final position = await _getDeviceLocation(context);
+                                            Navigator.pop(context);
+                                            if (position != null) {
+                                              lat = position.latitude;
+                                              lng = position.longitude;
+                                            }
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text("Location not available.")),
+                                            );
+                                            return;
+                                          }
                                         }
-                                      } else {
-                                        // User chose No → show message and stop
+
+                                        if (lat != null && lng != null) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (ctx) => CustomerMapScreen(
+                                                latitude: lat!,
+                                                longitude: lng!,
+                                                customerName: customer.name!,
+                                              ),
+                                            ),
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text("No location data available.")),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        Navigator.pop(context);
                                         ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text("Location not available.")),
+                                          SnackBar(content: Text("Error: $e")),
                                         );
-                                        return; // 🚀 Prevent navigation
                                       }
-                                    }
-
-                                    if (lat != null && lng != null) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (ctx) => CustomerMapScreen(
-                                            latitude: lat!,
-                                            longitude: lng!,
-                                            customerName: customer.name!,                                          ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text("No location data available.")),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    Navigator.pop(context); // close dialog if API failed
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text("Error: $e")),
-                                    );
-                                  }
-                                },
-                              ),
+                                    },
+                                     ),
+                                     const SizedBox(height: 4),
+                                     const Text(
+                                       "Location",
+                                       style: TextStyle(fontSize: 12, color: Colors.black54),
+                                     ),
+                                   ],
+                                 ),
+                               ],
+                             ),
+                        ]),
 
 
-
-
-
-                            ],
-                          ),
-                        ),
-                      );
+                      ));
                     },
                   )
 
@@ -515,6 +764,150 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
       ),
     );
   }
+  String buildRangeLabel(String range) {
+    final values = range.split(',').map(int.parse).toList();
+    final labels = <String>[];
+
+    int start = 0;
+    for (final v in values) {
+      labels.add("$start–$v");
+      start = v + 1;
+    }
+    labels.add("${start}-Above");
+
+    return labels.join(", ");
+  }
+
+  // Future<String?> showRangeInputDialog(BuildContext context) async {
+  //   final controller = TextEditingController(text: "30,60,90,120");
+  //
+  //   return showDialog<String>(
+  //     context: context,
+  //     builder: (_) => AlertDialog(
+  //       title: const Text("Aging Ranges"),
+  //       content: TextField(
+  //         controller: controller,
+  //         keyboardType: TextInputType.number,
+  //         decoration: const InputDecoration(
+  //           hintText: "Example: 30,60 or 30,60,90",
+  //         ),
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: const Text("Cancel"),
+  //         ),
+  //         ElevatedButton(
+  //           onPressed: () {
+  //             final value = controller.text.trim();
+  //             if (value.isEmpty) return;
+  //             Navigator.pop(context, value);
+  //           },
+  //           child: const Text("Continue"),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+  Future<ReceivableFilterResult?> showReceivableFilterDialog(
+      BuildContext context,
+      ) async {
+    DateTime selectedDate = DateTime.now();
+    final rangeController = TextEditingController(text: "30,60,90,120");
+
+    return showDialog<ReceivableFilterResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text("Accounts Receivable Filter"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Date Picker Field
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                      );
+
+                      if (picked != null) {
+                        setState(() => selectedDate = picked);
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: "Posting Date",
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.calendar_today),
+                      ),
+                      // child: Text(
+                      //   "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
+                      // ),
+                      child: Text(
+                        formatDateForDisplay(selectedDate),
+                      ),
+
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Aging Range Field
+                  TextField(
+                    controller: rangeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: "Aging Ranges",
+                      hintText: "Example: 30,60,90",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final range = rangeController.text.trim();
+                    if (range.isEmpty) return;
+
+                    Navigator.pop(
+                      context,
+                      ReceivableFilterResult(
+                        postingDate: selectedDate,
+                        range: range,
+                      ),
+                    );
+                  },
+                  child: const Text("Continue"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
+}
+class ReceivableFilterResult {
+  final DateTime postingDate;
+  final String range;
+
+  ReceivableFilterResult({
+    required this.postingDate,
+    required this.range,
+  });
 }
 
 class BuildCustomerDetail extends StatelessWidget {
@@ -612,23 +1005,13 @@ class BuildItemDetail extends StatelessWidget {
           GestureDetector(
             onTap: () {
               onTapAdd.call();
-              //  setState(() {
-              //    _addedItems.add(Data(
-              //      itemCode: item.itemCode,
-              //      itemName: item.itemName,
-              //      qty: 1,
-              //      rate: item.valuationRate,
-              //    ));
-              // });
             },
             child: Icon(Icons.add),
           ),
           GestureDetector(
             onTap: () {
               onTapClose.call();
-              //  setState(() {
-              //    _addedItems.removeWhere((addedItem) => addedItem.itemCode == item.itemCode);
-              //  });
+
             },
             child: Icon(Icons.close),
           ),
@@ -674,14 +1057,6 @@ class BuildItemListTile extends StatelessWidget {
             child: GestureDetector(
               onTap: () {
                 onTapAdd.call();
-                //  setState(() {
-                //    _addedItems.add(Data(
-                //      itemCode: item.itemCode,
-                //      itemName: item.itemName,
-                //      qty: 1,
-                //      rate: item.valuationRate,
-                //    ));
-                // });
               },
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -696,9 +1071,6 @@ class BuildItemListTile extends StatelessWidget {
           GestureDetector(
             onTap: () {
               onTapClose.call();
-              //  setState(() {
-              //    _addedItems.removeWhere((addedItem) => addedItem.itemCode == item.itemCode);
-              //  });
             },
             child: Icon(Icons.minimize),
           ),

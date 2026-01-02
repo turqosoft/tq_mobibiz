@@ -7,6 +7,7 @@ import '../../../utils/sharedpreference.dart';
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
 
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -14,18 +15,29 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final SharedPrefService _sharedPrefService = SharedPrefService();
   String? _savedPrinter;
+  bool _autoSubmitPickList = false;
 
   @override
   void initState() {
     super.initState();
     _loadSavedPrinter();
+    _loadSubmitToggle();
+
+  }
+  Future<void> _loadSubmitToggle() async {
+    final value = await _sharedPrefService.getAutoSubmitPickList();
+    setState(() {
+      _autoSubmitPickList = value;
+    });
   }
 
+  Future<void> _updateSubmitToggle(bool value) async {
+    await _sharedPrefService.saveAutoSubmitPickList(value);
+    setState(() {
+      _autoSubmitPickList = value;
+    });
+  }
   Future<void> _loadSavedPrinter() async {
-    // final printer = await _sharedPrefService.getPrinterAddress();
-    // setState(() {
-    //   _savedPrinter = printer;
-    // });
     final name = await _sharedPrefService.getPrinterName();
     final address = await _sharedPrefService.getPrinterAddress();
     setState(() {
@@ -85,6 +97,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             )
                 : null,
           ),
+          SwitchListTile(
+            title: const Text("Auto Submit Pick List"),
+            subtitle: const Text("If ON: Pick List will be submitted automatically"),
+            value: _autoSubmitPickList,
+            onChanged: (value) async {
+              await _updateSubmitToggle(value);
+            },
+          ),
+
         ],
       ),
     );

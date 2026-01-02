@@ -160,20 +160,7 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       backgroundColor: backgroundColor,
       actions: [actions??SizedBox.shrink()],
-      // actions: [
-      //   isAction
-      //       ? Padding(
-      //           padding: const EdgeInsets.only(right: 5),
-      //           child: GestureDetector(
-      //               onTap: () {
-      //                 onAction!.call();
-      //               },
-      //               child: Icon(
-      //                 Icons.search,
-      //                 color: Colors.white,
-      //               )))
-      //       : SizedBox.shrink(),
-      // ],
+
     );
   }
 

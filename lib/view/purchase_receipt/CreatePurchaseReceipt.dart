@@ -44,21 +44,73 @@ class _PurchaseReceiptCreateScreenState
   late TextEditingController _rejectedWarehouseController;
   bool _setPostingTime = false;
 late List<double> _orderedQuantities;
+  bool _isSaved = false; // false = not saved, true = saved
 
   // ✅ Track updated items
   final Set<String> _updatedItems = {};
+  void _markUnsaved() {
+    if (_isSaved) {
+      setState(() {
+        _isSaved = false;
+      });
+    }
+  }
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   // Attach listeners to detect user changes
+  //   _supplierController.addListener(_markUnsaved);
+  //   _warehouseController.addListener(_markUnsaved);
+  //   _rejectedWarehouseController.addListener(_markUnsaved);
+  //   _postingDateController.addListener(_markUnsaved);
+  //
+  //   // Listeners for each item’s controllers
+  //   for (var item in widget.items) {
+  //     item.acceptedQtyController.addListener(_markUnsaved);
+  //     item.rejectedQtyController.addListener(_markUnsaved);
+  //     item.wastageQtyController.addListener(_markUnsaved);
+  //     item.excessQtyController.addListener(_markUnsaved);
+  //   }
+  //   _supplierController = TextEditingController(text: widget.supplier);
+  //   _warehouseController = TextEditingController(text: widget.warehouse);
+  //   _rejectedWarehouseController = TextEditingController();
+  // _orderedQuantities = widget.items.map((item) => item.qty).toList();
+  //
+  //   // ✅ Load saved data via provider if available
+  //   _loadSavedData();
+  // }
   @override
   void initState() {
     super.initState();
+
+    // 1️⃣ Initialize controllers FIRST
     _supplierController = TextEditingController(text: widget.supplier);
     _warehouseController = TextEditingController(text: widget.warehouse);
     _rejectedWarehouseController = TextEditingController();
-  _orderedQuantities = widget.items.map((item) => item.qty).toList();
+    // _postingDateController = TextEditingController();
 
-    // ✅ Load saved data via provider if available
+    // 2️⃣ Now safely add listeners
+    _supplierController.addListener(_markUnsaved);
+    _warehouseController.addListener(_markUnsaved);
+    _rejectedWarehouseController.addListener(_markUnsaved);
+    _postingDateController.addListener(_markUnsaved);
+
+    // 3️⃣ Listeners for each item’s controllers
+    for (var item in widget.items) {
+      item.acceptedQtyController.addListener(_markUnsaved);
+      item.rejectedQtyController.addListener(_markUnsaved);
+      item.wastageQtyController.addListener(_markUnsaved);
+      item.excessQtyController.addListener(_markUnsaved);
+    }
+
+    // 4️⃣ Save ordered quantities
+    _orderedQuantities = widget.items.map((item) => item.qty).toList();
+
+    // 5️⃣ Load saved data
     _loadSavedData();
   }
+
 
   @override
   void dispose() {
@@ -77,38 +129,85 @@ Future<void> _setPendingStatus(String purchaseOrderName) async {
 
 
 // ✅ Load Saved Data Using Provider
-Future<void> _loadSavedData() async {
-  final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  final savedReceipt =
-      await provider.loadSavedPurchaseReceipt(widget.purchaseOrderName);
+  Future<void> _loadSavedData() async {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+    final savedReceipt =
+    await provider.loadSavedPurchaseReceipt(widget.purchaseOrderName);
 
-  if (savedReceipt != null) {
-    // ✅ Restore Updated Items State BEFORE setState
-    final prefs = await SharedPreferences.getInstance();
-    List<String>? updatedItems =
-        prefs.getStringList('updated_items_${widget.purchaseOrderName}');
+    if (savedReceipt != null) {
 
-    setState(() {
-      _supplierController.text = savedReceipt.supplier ?? '';
-      _warehouseController.text = savedReceipt.warehouse ?? '';
-      _rejectedWarehouseController.text =
-          savedReceipt.rejectedWarehouse ?? '';
-      _setPostingTime = savedReceipt.setPostingTime == 1;
-      _postingDateController.text = savedReceipt.postingDate ?? '';
+      // Load updated items state BEFORE setState
+      final prefs = await SharedPreferences.getInstance();
+      List<String>? updatedItems =
+      prefs.getStringList('updated_items_${widget.purchaseOrderName}');
 
-      // ✅ Correctly modify items by clearing and adding updated items
-      widget.items.clear();
-      widget.items.addAll(savedReceipt.items ?? []);
+      // First restore all saved form fields + items
+      setState(() {
+        _supplierController.text = savedReceipt.supplier ?? '';
+        _warehouseController.text = savedReceipt.warehouse ?? '';
+        _rejectedWarehouseController.text = savedReceipt.rejectedWarehouse ?? '';
+        _setPostingTime = savedReceipt.setPostingTime == 1;
+        _postingDateController.text = savedReceipt.postingDate ?? '';
 
-      // ✅ Restore Updated Items State in setState
-      _updatedItems.clear();
-      if (updatedItems != null) {
-        _updatedItems.addAll(updatedItems);
-        debugPrint("🎨 Restored updated items for ${widget.purchaseOrderName}");
+        widget.items.clear();
+        widget.items.addAll(savedReceipt.items ?? []);
+// Restore qty into accepted qty controller for each item
+        for (var item in widget.items) {
+          // Restore Accepted Qty
+          item.acceptedQtyController.text = item.qty.toString();
+
+          // Restore Rejected Qty
+          if (item.rejectedQty != null) {
+            item.rejectedQtyController.text = item.rejectedQty.toString();
+          }
+
+          // Restore Wastage Qty
+          if (item.wastageQuantity != null) {
+            item.wastageQtyController.text = item.wastageQuantity.toString();
+          }
+
+          // Restore Excess Qty
+          if (item.excessQuantity != null) {
+            item.excessQtyController.text = item.excessQuantity.toString();
+          }
+        }
+        _isSaved = true;
+        _updatedItems.clear();
+        if (updatedItems != null) {
+          _updatedItems.addAll(updatedItems);
+          debugPrint("🎨 Restored updated items for ${widget.purchaseOrderName}");
+        }
+      });
+
+      // -------------------------------------------------------------
+      // 🔥 RE-FETCH ITEM DETAILS TO RESTORE `hasBatchNo` FLAG
+      // -------------------------------------------------------------
+      for (var item in widget.items) {
+        try {
+          if (item.itemCode == null || item.itemCode!.isEmpty) {
+            debugPrint("⚠ Skipping item with null itemCode");
+            continue;
+          }
+
+          final itemDetails =
+          await provider.apiService?.fetchItemDetails(item.itemCode!);
+
+          if (itemDetails != null && itemDetails['has_batch_no'] != null) {
+            item.hasBatchNo = itemDetails['has_batch_no'] == 1;
+            debugPrint("♻ Restored batch flag for ${item.itemCode}: ${item.hasBatchNo}");
+          }
+
+        } catch (e) {
+          debugPrint("❗ Error restoring batch flag for ${item.itemCode}: $e");
+        }
       }
-    });
+
+
+      // Force rebuild AFTER restoring batch flags
+      setState(() {});
+    }
   }
-}
+
 
   // ✅ Save Updated Items to SharedPreferences
 Future<void> _saveUpdatedItems() async {
@@ -192,122 +291,110 @@ Color _getCardColor(PurchaseItem item) {
 }
 
 // ✅ Submit Purchase Receipt
-void _submitForm(BuildContext context) {
-  if (_formKey.currentState!.validate()) {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  void _submitForm(BuildContext context) {
+    if (_formKey.currentState!.validate()) {
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
-    // ✅ Convert date format before sending
-    String formattedPostingDate = "";
-    if (_setPostingTime && _postingDateController.text.isNotEmpty) {
-      DateTime parsedDate =
-          DateFormat('dd-MM-yyyy').parse(_postingDateController.text);
-      formattedPostingDate = DateFormat('yyyy-MM-dd').format(parsedDate);
-    }
-
-    // ✅ Update item values before sending
-    for (var item in widget.items) {
-      item.qty = double.tryParse(item.acceptedQtyController.text) ?? item.qty;
-      item.rejectedQty =
-          double.tryParse(item.rejectedQtyController.text) ?? item.rejectedQty;
-      item.wastageQuantity =
-          double.tryParse(item.wastageQtyController.text) ?? item.wastageQuantity;
-      item.excessQuantity =
-          double.tryParse(item.excessQtyController.text) ?? item.excessQuantity;
-
-      // ✅ Assign rejected warehouse if applicable
-      item.rejectedWarehouseController.text =
-          item.rejectedQty > 0 ? item.rejectedWarehouseController.text : "";
-    }
-
-    // ✅ Mandatory field check for purchase_order and purchase_order_item
-    for (var item in widget.items) {
-      if (item.purchaseOrder == null || item.purchaseOrder!.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                "⚠️ Purchase Order is missing for item: ${item.itemName ?? 'Unknown'}"),
-          ),
-        );
-        debugPrint(
-            "⚠️ Missing purchase_order for item: ${item.itemName ?? 'Unknown'}");
-        return; // Prevent submission if missing
+      // ---------------------------------------
+      // 1️⃣ Format Posting Date
+      // ---------------------------------------
+      String formattedPostingDate = "";
+      if (_setPostingTime && _postingDateController.text.isNotEmpty) {
+        DateTime parsedDate =
+        DateFormat('dd-MM-yyyy').parse(_postingDateController.text);
+        formattedPostingDate = DateFormat('yyyy-MM-dd').format(parsedDate);
       }
 
-      if (item.purchaseOrderItem == null || item.purchaseOrderItem!.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                "⚠️ Purchase Order Item is missing for item: ${item.itemName ?? 'Unknown'}"),
-          ),
-        );
-        debugPrint(
-            "⚠️ Missing purchase_order_item for item: ${item.itemName ?? 'Unknown'}");
-        return; // Prevent submission if missing
-      }
-    }
+      // ---------------------------------------
+      // 2️⃣ Update item values
+      // ---------------------------------------
+      for (var item in widget.items) {
+        item.qty = double.tryParse(item.acceptedQtyController.text) ?? item.qty;
+        item.rejectedQty =
+            double.tryParse(item.rejectedQtyController.text) ?? item.rejectedQty;
+        item.wastageQuantity =
+            double.tryParse(item.wastageQtyController.text) ?? item.wastageQuantity;
+        item.excessQuantity =
+            double.tryParse(item.excessQtyController.text) ?? item.excessQuantity;
 
-    // ✅ Create PurchaseReceipt object with validated data
-    final receipt = PurchaseReceipt(
-      supplier: _supplierController.text,
-      warehouse: _warehouseController.text,
-      rejectedWarehouse: _rejectedWarehouseController.text,
-      items: widget.items, // Items now have updated and validated values
-      setPostingTime: _setPostingTime ? 1 : 0,
-      postingDate: formattedPostingDate,
-    );
-
-    // ✅ Submit the purchase receipt and handle error messages
-    provider.createPurchaseReceipt(context, receipt).then((result) {
-      if (result == true) {
-        // ✅ Success: Purchase receipt created
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Purchase Receipt Created")),
-        );
-
-        _formKey.currentState!.reset();
-        setState(() {
-          widget.items.clear(); // Clear items after success
-        });
-
-        // 🧹 Clear saved data after successful submission
-        _clearSavedData();
-
-        // ✅ Navigate to PurchaseReceiptScreen after success
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PurchaseReceiptScreen(),
-          ),
-        );
+        // assign rejected warehouse only when qty > 0
+        item.rejectedWarehouseController.text =
+        item.rejectedQty > 0 ? item.rejectedWarehouseController.text : "";
       }
 
-      // 🚨 Handle custom error messages
-      else if (result is String) {
+      // ---------------------------------------
+      // 3️⃣ Build Purchase Receipt data
+      // ---------------------------------------
+      final receipt = PurchaseReceipt(
+        supplier: _supplierController.text,
+        warehouse: _warehouseController.text,
+        rejectedWarehouse: _rejectedWarehouseController.text,
+        items: widget.items,
+        setPostingTime: _setPostingTime ? 1 : 0,
+        postingDate: formattedPostingDate,
+      );
+
+      // ---------------------------------------
+      // 4️⃣ Inject PO Name for mapping API
+      //     (THIS FIXES YOUR ERROR)
+      // ---------------------------------------
+      if (widget.purchaseOrderName.isNotEmpty) {
+        receipt.purchaseOrder = widget.purchaseOrderName;
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "❗ $result",
-              style: const TextStyle(color: Colors.white),
+          const SnackBar(content: Text("❗ Purchase Order Name missing")),
+        );
+        return; // stop submission
+      }
+
+      // ---------------------------------------
+      // 5️⃣ Call API
+      // ---------------------------------------
+      // provider.createPurchaseReceipt(context, receipt).then((result) {
+      provider.submitPurchaseReceipt(context, receipt).then((result) {
+        if (result == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("✅ Purchase Receipt Created")),
+          );
+
+          _formKey.currentState!.reset();
+          setState(() {
+            widget.items.clear();
+          });
+
+          _clearSavedData();
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PurchaseReceiptScreen(),
             ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        debugPrint("❗ API Error: $result");
-      }
+          );
+        }
 
-      // ❌ General error fallback
-      else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("❌ Failed to create receipt. Please try again."),
-            backgroundColor: Colors.red,
-          ),
-        );
-        debugPrint("❌ Unknown error while creating receipt.");
-      }
-    });
+        // Error returned as String
+        else if (result is String) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("❗ $result"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+
+        // Unknown fallback
+        else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("❌ Failed to create receipt. Please try again."),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      });
+    }
   }
-}
+
   void _confirmDeleteItem(int index) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -336,19 +423,144 @@ void _submitForm(BuildContext context) {
       });
     }
   }
+  void _saveForm(BuildContext context) async {
+    if (_formKey.currentState!.validate()) {
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+      // format posting date
+      String formattedPostingDate = "";
+      if (_setPostingTime && _postingDateController.text.isNotEmpty) {
+        DateTime parsedDate =
+        DateFormat('dd-MM-yyyy').parse(_postingDateController.text);
+        formattedPostingDate = DateFormat('yyyy-MM-dd').format(parsedDate);
+      }
+
+      // update items
+      for (var item in widget.items) {
+        item.qty = double.tryParse(item.acceptedQtyController.text) ?? item.qty;
+        item.rejectedQty =
+            double.tryParse(item.rejectedQtyController.text) ?? item.rejectedQty;
+
+        item.wastageQuantity =
+            double.tryParse(item.wastageQtyController.text) ?? item.wastageQuantity;
+
+        item.excessQuantity =
+            double.tryParse(item.excessQtyController.text) ?? item.excessQuantity;
+
+        item.rejectedWarehouseController.text =
+        item.rejectedQty > 0 ? item.rejectedWarehouseController.text : "";
+      }
+
+      // build doc
+      final receipt = PurchaseReceipt(
+        supplier: _supplierController.text,
+        warehouse: _warehouseController.text,
+        rejectedWarehouse: _rejectedWarehouseController.text,
+        items: widget.items,
+        setPostingTime: _setPostingTime ? 1 : 0,
+        postingDate: formattedPostingDate,
+      );
+
+      // Add po name
+      if (widget.purchaseOrderName.isNotEmpty) {
+        receipt.purchaseOrder = widget.purchaseOrderName;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❗ Purchase Order Name missing")),
+        );
+        return;
+      }
+
+      // call API as draft
+      final result =
+      await provider.savePurchaseReceipt(context, receipt);
+
+      if (result == true) {
+        setState(() {
+          _isSaved = true;   // mark as saved
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("💾 Saved as Draft")),
+        );
+        return;
+      }
+
+      if (result is String) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Failed to save. Try again."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CommonAppBar(
-        title: "Purchase Receipt",
-        automaticallyImplyLeading: true,
+      appBar: AppBar(
         backgroundColor: AppColors.primaryColor,
-        onBackTap: () {
-          Navigator.pop(context);
-        },
-        isAction: false,
+        elevation: 0,
+
+        // Back button
+        leading: IconButton(
+          color: Colors.white,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+
+        title: const Text(
+          "Purchase Receipt",
+          style: TextStyle(
+            // fontWeight: FontWeight.w600,
+            // fontSize: 18,
+              color: Colors.white
+          ),
+        ),
+
+        // Save action button
+        // actions: [
+        //   IconButton(
+        //     color: Colors.white,
+        //     icon: const Icon(Icons.save),
+        //     onPressed: () => _saveForm(context),
+        //   ),
+        // ],
+        actions: [
+          // Status Indicator
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  _isSaved ? Icons.check_circle : Icons.error_outline,
+                  color: _isSaved ? Colors.greenAccent : Colors.yellowAccent,
+                  size: 20,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  _isSaved ? "Saved" : "Not Saved",
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+
+          // Save Button
+          IconButton(
+            color: Colors.white,
+            icon: const Icon(Icons.save),
+            onPressed: () => _saveForm(context),
+          ),
+        ],
+
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -559,96 +771,100 @@ ListView.builder(
     final item = widget.items[index];
     final orderedQty = _orderedQuantities[index];
 
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      elevation: 4,
-      color: _getCardColor(item), // ✅ Dynamic Card Color
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Main content (item info)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _navigateToItemScreen(item),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "${item.itemName ?? 'Unknown Item'} (${item.itemCode ?? 'N/A'})",
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      "Ordered: ${orderedQty.toStringAsFixed(2)} ${item.uom ?? ''}",
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ✅ Row for Recd Qty and Received Qty
-                    Row(
+    return Stack(
+      children: [
+        Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          elevation: 4,
+          color: _getCardColor(item), // ✅ Dynamic Card Color
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Main content (item info)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => _navigateToItemScreen(item),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-Text(
-  "Received: ${(item.receivedQty ?? 0.0).toStringAsFixed(2)} ${item.uom ?? ''}",
-),
+                        Text(
+                          "${item.itemName ?? 'Unknown Item'} (${item.itemCode ?? 'N/A'})",
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
 
-                        const SizedBox(width: 12),
+                        const SizedBox(height: 6),
 
-                        // Received Qty (Read-only)
-// Text(
-//   "Accepted: ${max(0, (orderedQty - (item.receivedQty ?? 0.0))).toStringAsFixed(2)} ${item.uom ?? ''}",
-//   style: const TextStyle(fontSize: 14),
-// ),
-// Text(
-//   "Accepted: ${item.defaultAcceptedQty.toStringAsFixed(2)} ${item.uom ?? ''}",
-//   style: const TextStyle(fontSize: 14),
-// ),
+                        Text(
+                          "Ordered: ${orderedQty.toStringAsFixed(2)} ${item.uom ?? ''}",
+                        ),
 
-// ValueListenableBuilder<TextEditingValue>(
-//   valueListenable: item.acceptedQtyController,
-//   builder: (context, value, _) {
-//     final acceptedQty = double.tryParse(value.text) ?? 0.0;
-//     return Text(
-//       "Accepted: ${acceptedQty.toStringAsFixed(2)} ${item.uom ?? ''}",
-//       style: const TextStyle(fontSize: 14),
-//     );
-//   },
-// ),
+                        const SizedBox(height: 8),
 
-ValueListenableBuilder<TextEditingValue>(
-  valueListenable: item.acceptedQtyController,
-  builder: (context, value, _) {
-    final rawQty = double.tryParse(value.text) ?? 0.0;
-    final acceptedQty = rawQty < 0 ? 0.0 : rawQty; // Clamp to zero
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                "Received: ${(item.receivedQty ?? 0.0).toStringAsFixed(2)} ${item.uom ?? ''}",
+                              ),
+                            ),
 
-    return Text(
-      "Accepted: ${acceptedQty.toStringAsFixed(2)} ${item.uom ?? ''}",
-      style: const TextStyle(fontSize: 14),
-    );
-  },
-),
+                            SizedBox(width: 12),
 
+                            Expanded(
+                              child: ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: item.acceptedQtyController,
+                                builder: (context, value, _) {
+                                  final rawQty = double.tryParse(value.text) ?? 0.0;
+                                  final acceptedQty = rawQty < 0 ? 0.0 : rawQty;
 
+                                  return Text(
+                                    "Accepted: ${acceptedQty.toStringAsFixed(2)} ${item.uom ?? ''}",
+                                    style: const TextStyle(fontSize: 14),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        )
 
                       ],
                     ),
-                  ],
+                  ),
                 ),
+
+                // Delete button
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _confirmDeleteItem(index),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 🔥 BATCH INDICATOR IN TOP RIGHT CORNER
+        if (item.hasBatchNo)
+          Positioned(
+            top: 14,
+            right: 8,
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor,
+                shape: BoxShape.circle,
               ),
             ),
+          ),
 
-            // Delete button
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _confirmDeleteItem(index),
-            ),
-          ],
-        ),
-      ),
+      ],
     );
+
   },
 ),
 
@@ -680,12 +896,17 @@ ValueListenableBuilder<TextEditingValue>(
   },
   child: const Text("Submit Purchase Receipt"),
 ),
+                const SizedBox(height: 35),
 
               ],
             ),
+
           ),
+
         ),
+
       ),
+
     );
   }
 }

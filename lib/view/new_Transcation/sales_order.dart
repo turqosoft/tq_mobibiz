@@ -45,10 +45,17 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
   bool _customerSelected = false;
   bool _itemSelected = false;
   bool _isSaving = false;
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  final GlobalKey _textFieldKey = GlobalKey();
+  final FocusNode _itemSearchFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+    provider.clearItem();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchCustomerGroupList();
     });
@@ -274,6 +281,7 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
           items,
           context,
           customerDetails: customerDetails,
+          setWarehouse: provider.setWarehouse, // 🆕
         );
 
         if (provider.salesOrderModel != null) {
@@ -284,6 +292,7 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
               duration: Duration(seconds: 2),
             ),
           );
+          provider.clearWarehouse();
           await Future.delayed(const Duration(milliseconds: 500));
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => SalesOrderPage()),
@@ -352,6 +361,136 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
     });
     super.dispose();
   }
+
+  void _showOverlay(BuildContext context, List items) {
+    _hideOverlay(); // remove any old overlay
+
+    if (items.isEmpty) return;
+
+    final RenderBox renderBox =
+    _textFieldKey.currentContext!.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
+
+    // _overlayEntry = OverlayEntry(
+    //   builder: (context) => Positioned(
+    _overlayEntry = OverlayEntry(
+        builder: (context) => Stack(
+            children: [
+              // 👇 This invisible full-screen layer catches outside taps
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _hideOverlay, // hide overlay when tapping anywhere else
+                ),
+              ),
+
+              // 👇 The actual dropdown positioned below the search box
+              Positioned(
+                left: offset.dx,
+                top: offset.dy + size.height + 4,
+                width: size.width,
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(8),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 400),
+                    child: GestureDetector(
+                      // 👇 Prevent taps inside overlay from closing it
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {},
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          return ListTile(
+                            title: Text(item.itemName ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text(item.itemCode ?? '',
+                                style: const TextStyle(color: Colors.grey)),
+                            onTap: () async {
+                              _hideOverlay();
+
+                              final quotationProvider =
+                              Provider.of<SalesOrderProvider>(context, listen: false);
+
+                              if (quotationProvider.allowMultipleItems == 0) {
+                                bool alreadyExists = quotationProvider.itemsList.any(
+                                      (i) => i.itemCode == item.itemCode,
+                                );
+                                if (alreadyExists) {
+                                  Fluttertoast.showToast(
+                                    msg: "This item is already added and duplicates are not allowed.",
+                                    toastLength: Toast.LENGTH_SHORT,
+                                    gravity: ToastGravity.BOTTOM,
+                                  );
+                                  return;
+                                }
+                              }
+
+                              setState(() {
+                                _selectedItem = item.itemName;
+                                _itemSelected = true;
+                              });
+
+                              try {
+                                final itemDetails = await quotationProvider.fetchItemDetail(
+                                  context: context,
+                                  itemCode: item.itemCode ?? '',
+                                  currency: _currency ?? '',
+                                  quantity: 1.0,
+                                  customerName: _selectedCustomer ?? '',
+                                );
+
+                                if (itemDetails != null && itemDetails['message'] != null) {
+                                  final fetchedRate = itemDetails['message']['price_list_rate'] ?? 0.0;
+                                  final fetchedDiscountPercentage =
+                                      itemDetails['message']['discount_percentage'] ?? 0.0;
+
+                                  _showAddItemDialog(
+                                    itemName: item.itemName ?? "",
+                                    itemCode: item.itemCode ?? "",
+                                    rate: fetchedRate,
+                                    quantity: 1,
+                                    priceListRate: fetchedRate,
+                                    discountPercentage: fetchedDiscountPercentage,
+                                  );
+                                } else {
+                                  Fluttertoast.showToast(msg: "Select Customer first");
+                                }
+                              } catch (e) {
+                                Fluttertoast.showToast(msg: "Error fetching item details: $e");
+                              }
+
+                              // 👇 reset and refocus for next entry
+                              setState(() {
+                                _itemSearchController.clear();
+                                _itemSelected = false;
+                                _selectedItem = null;
+                              });
+
+                              await Future.delayed(const Duration(milliseconds: 200));
+                              _itemSearchFocusNode.requestFocus();
+                            },
+
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ]));
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _hideOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
   bool isAdd = false;
 
   @override
@@ -574,152 +713,63 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
 
 
                               // ✅ Item Search (Compact)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: TextField(
-                      controller: _itemSearchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search Item',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _itemSearchController.text.isNotEmpty
-                            ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() {
-                              _itemSearchController.clear();
-                              _itemSelected = false;
-                              _selectedItem = null;
-                            });
-                            provider.clearItemSearch();
-                          },
-                        )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      ),
-                      onChanged: (content) {
-                        if (content.isEmpty) {
-                          setState(() {
-                            _itemSelected = false;
-                            _selectedItem = null;
-                          });
-                              // ✅ clear list immediately
-                              Provider.of<SalesOrderProvider>(context, listen: false).clearItemSearch();
-                            } else {
-                              setState(() {
-                                _itemSelected = false; // allow new search
-                              });
-                              _searchItemList(_itemSearchController.text);
-                            }
-                          },
-                      onSubmitted: (query) {
-                        // 👇 Prevent search when input is empty or just whitespace
-                        if (query.trim().isEmpty) {
-                          setState(() {
-                            _itemSelected = false;
-                            _selectedItem = null;
-                          });
-                          // ✅ Clear the list if it's currently shown
-                          Provider.of<SalesOrderProvider>(context, listen: false).clearItemSearch();
-                          return; // ❌ Stop here — don't trigger search
-                        }
 
-                        setState(() {
-                          _itemSelected = false;
-                        });
-
-                        // ✅ Proceed only if there's valid text
-                        _searchItemList(query.trim());
-                      },
-
-                    ),
-                      ),
-// ✅ Item search results
-                      if (!_itemSelected && items.isNotEmpty)
-                        SizedBox(
-                          height: 155,
-                          child: ListView.builder(
-                            itemCount: items.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              var item = items[index];
-                              return RadioListTile<String>(
-                                title: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item.itemName ?? '',
-                                        style: TextStyle(fontWeight: FontWeight.bold)),
-                                    SizedBox(height: 4),
-                                    Text(item.itemCode ?? '', style: TextStyle(color: Colors.grey)),
-                                  ],
-                                ),
-                                value: item.itemName ?? '',
-                                groupValue: _selectedItem,
-                                onChanged: (selected) async {
-                                  if (selected != null) {
-                                    final salesOrderProvider =
-                                    Provider.of<SalesOrderProvider>(context, listen: false);
-
-                                    // ✅ Prevent duplicates if not allowed
-                                    if (salesOrderProvider.allowMultipleItems == 0) {
-                                      bool alreadyExists = salesOrderProvider.itemsList.any(
-                                            (i) => i.itemCode == item.itemCode,
-                                      );
-                                      if (alreadyExists) {
-                                        Fluttertoast.showToast(
-                                          msg: "This item is already added and duplicates are not allowed.",
-                                          toastLength: Toast.LENGTH_SHORT,
-                                          gravity: ToastGravity.BOTTOM,
-                                        );
-                                        return; // stop here
-                                      }
-                                    }
-      setState(() {
-        _selectedItem = selected;
-        _itemSelected = true;
-        _itemSearchController.clear();
-      });
-
-      try {
-        final itemDetails = await salesOrderProvider.fetchItemDetails(
-          context: context,
-          itemCode: item.itemCode ?? '',
-          currency: _currency ?? '',
-          quantity: 1.0,
-          customerName: _selectedCustomer ?? '',
-        );
-
-        if (itemDetails != null && itemDetails['message'] != null) {
-          final fetchedRate = itemDetails['message']['price_list_rate'] ?? 0.0;
-          final fetchedDiscountPercentage =
-              itemDetails['message']['discount_percentage'] ?? 0.0;
-
-          _showAddItemDialog(
-            itemName: item.itemName ?? "",
-            itemCode: item.itemCode ?? "",
-            rate: fetchedRate,
-            quantity: 1,
-            priceListRate: fetchedRate,
-            discountPercentage: fetchedDiscountPercentage,
-          );
-        } else {
-          Fluttertoast.showToast(msg: "Select Customer");
-        }
-      } catch (e) {
-        Fluttertoast.showToast(msg: "Error fetching item details: $e");
-      }
-    }
-  },
-
-
-);
-
-                    },
-                  ),
+            CompositedTransformTarget(
+              link: _layerLink,
+              child: Container(
+                key: _textFieldKey,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: TextField(
+                  focusNode: _itemSearchFocusNode,
+                  controller: _itemSearchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search Item',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _itemSearchController.text.isNotEmpty
+                        ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          _itemSearchController.clear();
+                          _itemSelected = false;
+                          _selectedItem = null;
+                        });
+                        _hideOverlay();
+                        Provider.of<SalesOrderProvider>(context, listen: false)
+                            .clearItemSearch();
+                      },
+                    )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                  onChanged: (query) async {
+                    if (query.isEmpty) {
+                      setState(() {
+                        _itemSelected = false;
+                        _selectedItem = null;
+                      });
+                      _hideOverlay();
+                      Provider.of<SalesOrderProvider>(context, listen: false)
+                          .clearItemSearch();
+                    } else {
+                      await _searchItemList(query);
+                      final provider =
+                      Provider.of<SalesOrderProvider>(context, listen: false);
+                      _showOverlay(context, provider.itemListModel?.data ?? []);
+                    }
+                  },
+                  onEditingComplete: () => _itemSearchFocusNode.unfocus(),
+                  // ❌ remove onTapOutside to prevent unwanted closing
+                ),
+              ),
+            ),
+
+// ✅ Item search results
             const SizedBox(height: 10),
 
             // ✅ Expanded: Scrollable Items List

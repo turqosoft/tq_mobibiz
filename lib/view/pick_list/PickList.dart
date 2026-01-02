@@ -6,123 +6,6 @@ import 'package:sales_ordering_app/utils/common/common_widgets.dart';
 import 'package:sales_ordering_app/view/pick_list/PickListDetails.dart';
 
 
-// class PickListPage extends StatefulWidget {
-//   @override
-//   _PickListPageState createState() => _PickListPageState();
-// }
-
-// class _PickListPageState extends State<PickListPage> {
-//   @override
-//   void initState() {
-//     super.initState();
-//     Future.microtask(() => Provider.of<SalesOrderProvider>(context, listen: false).fetchPickList(context));
-//   }
-
-//   Color getStatusColor(String status) {
-//     switch (status) {
-//       case 'Open':
-//         return const Color.fromARGB(255, 65, 211, 237);
-//       case 'Draft':
-//         return const Color.fromARGB(255, 244, 77, 31);
-//       case 'Completed':
-//         return const Color.fromARGB(255, 143, 234, 113);
-//       case 'Cancelled':
-//         return Colors.redAccent;
-//       default:
-//         return Colors.white;
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: CommonAppBar(
-//         title: "Pick List",
-//         automaticallyImplyLeading: true,
-//         backgroundColor: AppColors.primaryColor,
-//         onBackTap: () {
-//           Navigator.pop(context);
-//         },
-//         isAction: false,
-//       ),
-//       body: Consumer<SalesOrderProvider>(
-//         builder: (context, provider, child) {
-//           if (provider.isLoading) {
-//             return Center(child: CircularProgressIndicator());
-//           } else if (provider.hasError) {
-//             return Center(child: Text(provider.errorMessage ?? "Error loading data"));
-//           } else if (provider.pickList.isEmpty) {
-//             return Center(child: Text("No Pick List data available"));
-//           }
-
-//           // Filter pick list where status is "Draft"
-//           final draftPickList = provider.pickList.where((item) {
-//             return item["status"]?.toLowerCase() == "draft";
-//           }).toList();
-
-//           if (draftPickList.isEmpty) {
-//             return Center(child: Text("No Pick List data available"));
-//           }
-
-//           final cardColors = [
-//             const Color.fromARGB(255, 205, 227, 225),
-//             const Color.fromARGB(255, 205, 213, 221),
-//           ];
-
-//           return ListView.builder(
-//             itemCount: draftPickList.length,
-//             itemBuilder: (context, index) {
-//               final pickItem = draftPickList[index];
-//               final cardColor = cardColors[index % cardColors.length];
-//               final statusColor = getStatusColor(pickItem["status"] ?? "");
-
-//               return GestureDetector(
-//                 onTap: () {
-//                   Navigator.push(
-//                     context,
-//                     MaterialPageRoute(
-//                       builder: (context) => PickListDetailsPage(pickListName: pickItem["name"]),
-//                     ),
-//                   );
-//                 },
-//                 child: Card(
-//                   color: cardColor,
-//                   margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-//                   child: ListTile(
-//                     title: Text(
-//                       pickItem["name"] ?? "Unknown",
-//                       style: TextStyle(fontWeight: FontWeight.bold),
-//                     ),
-//                     subtitle: Column(
-//                       crossAxisAlignment: CrossAxisAlignment.start,
-//                       children: [
-//                         Text.rich(
-//                           TextSpan(
-//                             text: "Status: ",
-//                             style: TextStyle(fontWeight: FontWeight.bold),
-//                             children: [
-//                               TextSpan(
-//                                 text: pickItem["status"] ?? "N/A",
-//                                 style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
-//                               ),
-//                             ],
-//                           ),
-//                         ),
-//                         Text("Customer: ${pickItem["customer"] ?? "N/A"}"),
-//                         Text("Picked By: ${pickItem["employee_name"] ?? "Not Available"}"),
-//                       ],
-//                     ),
-//                   ),
-//                 ),
-//               );
-//             },
-//           );
-//         },
-//       ),
-//     );
-//   }
-// }
-
 class PickListPage extends StatefulWidget {
   @override
   _PickListPageState createState() => _PickListPageState();
@@ -137,18 +20,15 @@ class _PickListPageState extends State<PickListPage> {
 
   Color getStatusColor(String status) {
     switch (status) {
-      case 'Open':
-        return const Color.fromARGB(255, 65, 211, 237);
       case 'Draft':
         return const Color.fromARGB(255, 244, 77, 31);
-      case 'Completed':
-        return const Color.fromARGB(255, 143, 234, 113);
-      case 'Cancelled':
-        return Colors.redAccent;
       default:
-        return Colors.white;
+        return Colors.black;
     }
   }
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +51,7 @@ class _PickListPageState extends State<PickListPage> {
           } else if (provider.pickList.isEmpty) {
             return Center(child: Text("No Pick List data available"));
           }
+          // final latestPickList = provider.pickList.first;
 
           // Filter pick list where status is "Draft"
           final draftPickList = provider.pickList.where((item) {
@@ -202,57 +83,141 @@ class _PickListPageState extends State<PickListPage> {
                   ),
                 ),
               ),
-              // List of Draft Pick Lists
-              Expanded(
-                child: ListView.builder(
+          Expanded(
+          child: RefreshIndicator(
+          onRefresh: () async {
+          await Provider.of<SalesOrderProvider>(context, listen: false)
+              .fetchPickList(context);
+          },
+          child: ListView.builder(
                   itemCount: draftPickList.length,
                   itemBuilder: (context, index) {
                     final pickItem = draftPickList[index];
-                    final cardColor = cardColors[index % cardColors.length];
+                    final alreadyOpened = provider.openedPickLists.contains(pickItem["name"]);
+                    final salesOrder = pickItem["sales_order"];
+                    final computedStatus =
+                    provider.computePickListStatus(pickItem);
+
+                    final statusColors =
+                    provider.picklistStatusColor(computedStatus);
+
+                    final cardColor = alreadyOpened
+                        ? cardColors[index % cardColors.length]              // Normal card
+                        : Colors.yellow.shade200;     // Highlight for untouched
+
                     final statusColor = getStatusColor(pickItem["status"] ?? "");
 
                     return GestureDetector(
                       onTap: () {
+                        Provider.of<SalesOrderProvider>(context, listen: false)
+                            .markPickListOpened(pickItem["name"]);    // 👈 Mark as opened
+
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => PickListDetailsPage(pickListName: pickItem["name"]),
+                            builder: (context) => PickListDetailsPage(
+                              pickListName: pickItem["name"],
+                            ),
                           ),
-                        );
+                        ).then((_) {
+                          Provider.of<SalesOrderProvider>(context, listen: false)
+                              .fetchPickList(context);
+                        });
                       },
                       child: Card(
                         color: cardColor,
                         margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          title: Text(
-                            pickItem["name"] ?? "Unknown",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text.rich(
-                                TextSpan(
-                                  text: "Status: ",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                        child: Stack(
+                          children: [
+                            // MAIN CARD CONTENT
+                            Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: ListTile(
+                                title: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    TextSpan(
-                                      text: pickItem["status"] ?? "N/A",
-                                      style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
+                                    // LEFT — Existing title
+                                    Text(
+                                      pickItem["name"] ?? "Unknown",
+                                      style: TextStyle(fontWeight: FontWeight.bold),
                                     ),
                                   ],
                                 ),
+
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text.rich(
+                                      TextSpan(
+                                        text: "Status: ",
+                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                        children: [
+                                          TextSpan(
+                                            text: pickItem["status"] ?? "N/A",
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text("Customer: ${pickItem["customer"] ?? "N/A"}"),
+                                    Text("Warehouse: ${pickItem["parent_warehouse"] ?? "Not Available"}"),
+                                    if (salesOrder != null) Text("Sales Order: $salesOrder"),
+                                  ],
+                                ),
                               ),
-                              Text("Customer: ${pickItem["customer"] ?? "N/A"}"),
-                              Text("Picked By: ${pickItem["employee_name"] ?? "Not Available"}"),
-                            ],
-                          ),
+                            ),
+                            // ⭐ TOP-RIGHT STATUS BADGE (small) ⭐
+
+                            if (alreadyOpened)
+                              Positioned(
+                                right: 6,
+                                top: 6,
+                                child: Builder(
+                                  builder: (context) {
+                                    final computedStatus = provider.computePickListStatus(pickItem);
+                                    final progressColor = provider.picklistStatusColor(computedStatus);
+
+                                    return Container(
+                                      padding: EdgeInsets.symmetric(vertical: 2, horizontal: 6),
+                                      decoration: BoxDecoration(
+                                        color: progressColor.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: progressColor, width: 0.8),
+                                      ),
+                                      child: Text(
+                                        computedStatus,
+                                        style: TextStyle(
+                                          color: progressColor,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 10,          // ⭐ Smaller text
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            // ⭐ NEW ICON AT TOP RIGHT ⭐
+                            if (!alreadyOpened)
+                              Positioned(
+                                right: 6,
+                                top: 6,
+                                child: Icon(
+                                  Icons.fiber_new,
+                                  color: Colors.red,
+                                  size: 28,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
+
                     );
                   },
                 ),
-              ),
+              ),),
             ],
           );
         },

@@ -23,22 +23,6 @@ class MaterialRequest {
   }
 }
 
-// class MaterialRequestItem {
-//   final String itemCode;
-//   final double qty;
-
-//   MaterialRequestItem({
-//     required this.itemCode,
-//     required this.qty,
-//   });
-
-//   Map<String, dynamic> toJson() {
-//     return {
-//       'item_code': itemCode,
-//       'qty': qty,
-//     };
-//   }
-// }
 class MaterialRequestItem {
   final String itemCode;
   final String itemName; // New field for item name

@@ -445,38 +445,72 @@ Column(
       ],
     ),
     const SizedBox(height: 8),
+    // Container(
+    //   padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 0.0),
+    //   decoration: BoxDecoration(
+    //     color: Colors.grey[200],
+    //     borderRadius: BorderRadius.circular(10.0),
+    //   ),
+    //   child: TextField(
+    //     controller: _searchController,
+    //     decoration: const InputDecoration(
+    //       labelText: 'Search Customer',
+    //       suffixIcon: Icon(Icons.search),
+    //       border: InputBorder.none,
+    //       contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
+    //     ),
+    //     onChanged: (content) {
+    //       _searchCustomer(_searchController.text);
+    //     },
+    //     onSubmitted: (query) {
+    //       setState(() {
+    //         _customerSelected = false;
+    //       });
+    //       _searchCustomer(_searchController.text);
+    //     },
+    //   ),
+    // ),
     Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 0.0),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(10.0),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: TextField(
         controller: _searchController,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Search Customer',
-          suffixIcon: Icon(Icons.search),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+            icon: const Icon(Icons.clear),
+            onPressed: () {
+              setState(() {
+                _searchController.clear();
+                _selectedCustomer = null;
+                customerController.clear();
+                customerList.clear();
+              });
+            },
+          )
+              : const Icon(Icons.search),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
         ),
-        onChanged: (content) {
-          _searchCustomer(_searchController.text);
-        },
-        onSubmitted: (query) {
-          setState(() {
-            _customerSelected = false;
-          });
-          _searchCustomer(_searchController.text);
+        onChanged: (value) {
+          _selectedCustomer = null; // allow reselection
+          _searchCustomer(value);
         },
       ),
     ),
+
   ],
 ),
 
 
 // List of Matching Customers
-if (!_customerSelected && customerList.isNotEmpty)
-  SizedBox(
+// if (!_customerSelected && customerList.isNotEmpty)
+              if (customerList.isNotEmpty)
+
+                SizedBox(
     height: 200,
     child: ListView.builder(
       itemCount: customerList.length,
@@ -496,11 +530,17 @@ if (!_customerSelected && customerList.isNotEmpty)
             onChanged: (String? selected) async {
               if (selected == null) return;
 
+              // setState(() {
+              //   _selectedCustomer = selected;
+              //   _searchCustomerName = customer.customerName;
+              //   _customerSelected = true;
+              //   customerController.text = customer.name ?? '';
+              // });
               setState(() {
-                _selectedCustomer = selected;
-                _searchCustomerName = customer.customerName;
-                _customerSelected = true;
+                _selectedCustomer = customer.name;
+                _searchController.text = customer.customerName ?? '';
                 customerController.text = customer.name ?? '';
+                customerList.clear(); // hide list after selection
               });
 
               try {
@@ -536,22 +576,22 @@ if (!_customerSelected && customerList.isNotEmpty)
     ),
   ),
 
-// Show Selected Customer Details
-if (_selectedCustomer != null)
-  Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const SizedBox(height: 15),
-      const Text(
-        'Customer:',
-        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-      ListTile(
-        title: Text(_searchCustomerName ?? ''),
-        subtitle: Text(_selectedCustomer ?? ''),
-      ),
-    ],
-  ),
+// // Show Selected Customer Details
+// if (_selectedCustomer != null)
+//   Column(
+//     crossAxisAlignment: CrossAxisAlignment.start,
+//     children: [
+//       const SizedBox(height: 15),
+//       const Text(
+//         'Customer:',
+//         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+//       ),
+//       ListTile(
+//         title: Text(_searchCustomerName ?? ''),
+//         subtitle: Text(_selectedCustomer ?? ''),
+//       ),
+//     ],
+//   ),
 
 // Loading Indicator
 if (Provider.of<SalesOrderProvider>(context).isLoading)
@@ -710,11 +750,28 @@ if (!_itemSelected && items.isNotEmpty)
                   }
                 }
 
-                final priceList = provider.invoiceCustomerDetails?["selling_price_list"];
-                if (priceList == null) {
-                  Fluttertoast.showToast(msg: "Selling Price List not found in customer details.");
+                // final priceList = provider.invoiceCustomerDetails?["selling_price_list"];
+                // if (priceList == null) {
+                //   Fluttertoast.showToast(msg: "Selling Price List not found in customer details.");
+                //   return;
+                // }
+                final customerDetails = provider.invoiceCustomerDetails ??
+                    await provider.fetchCustomer(context, customer);
+
+                if (customerDetails == null) {
+                  Fluttertoast.showToast(msg: "Failed to load customer details.");
                   return;
                 }
+
+                final priceList = provider.sellingPriceList;
+
+                if (priceList == null || priceList.isEmpty) {
+                  Fluttertoast.showToast(
+                    msg: "Selling Price List is not configured for this customer.",
+                  );
+                  return;
+                }
+
                 try {
                   final item = items[index];
 

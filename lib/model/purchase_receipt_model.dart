@@ -9,11 +9,13 @@ class PurchaseReceipt {
   String? rejectedWarehouse;
   int? setPostingTime;
   String? postingDate;
+  String? purchaseOrder;
   List<PurchaseItem>? items;
 
   PurchaseReceipt({
     this.docstatus = 1, // ✅ Default to 1 (Submitted)
     this.supplier,
+    this.purchaseOrder,
     this.branch,
     this.warehouse,
     this.rejectedWarehouse,
@@ -40,6 +42,7 @@ class PurchaseReceipt {
   Map<String, dynamic> toJson() {
     return {
       "docstatus": docstatus,
+      "purchase_order": purchaseOrder,
       "supplier": supplier,
       "branch": branch,
       "set_warehouse": warehouse,
@@ -152,13 +155,13 @@ class PurchaseItem {
   double priceListRate;
   double? receivedQty;
   double? finalReceivedQty; // <-- This will be used only for API
-
+  bool hasBatchNo = false;
 
   String? uom;
   String? purchaseOrder;
   String? purchaseOrderItem;
   String? itemPackDetails;
-
+  late TextEditingController batchNoController;
   late TextEditingController acceptedQtyController;
   late TextEditingController rejectedQtyController;
   late TextEditingController wastageQtyController;
@@ -178,6 +181,7 @@ class PurchaseItem {
     this.purchaseOrder,
     this.purchaseOrderItem,
     this.itemPackDetails,
+    this.hasBatchNo = false,
     this.receivedQty,
   }) {
     acceptedQtyController = TextEditingController(
@@ -193,6 +197,7 @@ class PurchaseItem {
       text: excessQuantity.toStringAsFixed(2),
     );
     rejectedWarehouseController = TextEditingController();
+    batchNoController = TextEditingController();
 
         initAcceptedQtyListener(); // ✅ Set up listener
 
@@ -230,6 +235,7 @@ class PurchaseItem {
       receivedQty: json['received_qty'] != null
           ? (json['received_qty']).toDouble()
           : 0.0,
+      hasBatchNo: json['has_batch_no'] == 1,
     );
 
     item.acceptedQtyController.text =
@@ -255,11 +261,16 @@ class PurchaseItem {
       "excess_quantity": double.tryParse(excessQtyController.text) ?? 0.0,
       "price_list_rate": priceListRate,
       "uom": uom,
-      // "received_qty": receivedQty ?? 0.0,
-      "received_qty": finalReceivedQty ?? receivedQty ?? 0.0,
+      // "received_qty": finalReceivedQty ?? receivedQty ?? 0.0,
+      "received_qty":
+      (double.tryParse(acceptedQtyController.text) ?? 0.0) +
+          (double.tryParse(rejectedQtyController.text) ?? 0.0),
 
       "purchase_order": purchaseOrder,
       "purchase_order_item": purchaseOrderItem,
+      if (hasBatchNo && batchNoController.text.isNotEmpty)
+        "batch_no": batchNoController.text.trim(),
+
       if ((double.tryParse(rejectedQtyController.text) ?? 0.0) > 0)
         "rejected_warehouse": rejectedWarehouseController.text,
       if (itemPackDetails != null && itemPackDetails!.isNotEmpty)
@@ -272,5 +283,6 @@ class PurchaseItem {
     wastageQtyController.dispose();
     excessQtyController.dispose();
     rejectedWarehouseController.dispose();
-  }
+    batchNoController.dispose();
+    }
 }

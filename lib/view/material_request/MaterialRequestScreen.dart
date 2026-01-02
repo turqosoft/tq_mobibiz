@@ -61,19 +61,6 @@ if (widget.materialRequest!.containsKey('items')) {
     }
   }
 
-
-  //     // Extracting items if available
-  //     if (widget.materialRequest!.containsKey('items')) {
-  //       _selectedItems = (widget.materialRequest!['items'] as List)
-  //           .map((item) => MaterialRequestItem(
-  //                 itemCode: item['item_code'],
-  //                 qty: item['qty'],
-  //               ))
-  //           .toList();
-  //     }
-  //   }
-  // }
-
   void _fetchWarehouseSuggestions(String query) async {
     if (query.isEmpty) {
       _warehouseSuggestions.clear();
@@ -312,19 +299,6 @@ _showQuantityDialog(
   },
 );
 
-  // _showQuantityDialog(
-  //   itemCode: item.itemCode,
-  //   itemName: itemName ?? 'Unknown', // Ensure itemName is passed
-  //   initialQuantity: item.qty,
-  //   onConfirm: (quantity) {
-  //     setState(() {
-  //       _selectedItems[index] = MaterialRequestItem(
-  //         itemCode: item.itemCode,
-  //         qty: quantity,
-  //       );
-  //     });
-  //   },
-  // );
 }
   void _showDeleteConfirmationDialog(int index) {
     showDialog(
@@ -387,13 +361,6 @@ final materialRequest = MaterialRequest(
     qty: item.qty,
   )).toList(),
 );
-
-    // final materialRequest = MaterialRequest(
-    //   materialRequestType: _selectedMaterialRequestType!,
-    //   setWarehouse: _setWarehouseController.text,
-    //   scheduleDate: DateFormat('yyyy-MM-dd').format(_scheduleDate!),
-    //   items: _selectedItems,
-    // );
 
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 

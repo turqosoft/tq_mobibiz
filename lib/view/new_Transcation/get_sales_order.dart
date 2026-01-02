@@ -7,6 +7,8 @@ import 'package:sales_ordering_app/provider/provider.dart';
 import 'package:sales_ordering_app/utils/app_colors.dart';
 import 'package:sales_ordering_app/view/new_Transcation/sales_order.dart';
 
+import '../../model/get_sales_order_response.dart';
+
 class SalesOrderPage extends StatefulWidget {
   @override
   _SalesOrderPageState createState() => _SalesOrderPageState();
@@ -38,6 +40,92 @@ class _SalesOrderPageState extends State<SalesOrderPage>
     super.dispose();
   }
 
+  void _showWarehouseDialog(BuildContext context) {
+    final provider =
+    Provider.of<SalesOrderProvider>(context, listen: false);
+
+    String? selectedWarehouse = provider.setWarehouse;
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text('Set Warehouse'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Autocomplete<String>(
+              initialValue: TextEditingValue(
+                text: selectedWarehouse ?? '',
+              ),
+              optionsBuilder: (TextEditingValue textEditingValue) async {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<String>.empty();
+                }
+                return await provider.fetchWarehouse(
+                  textEditingValue.text,
+                );
+              },
+              displayStringForOption: (option) => option,
+              onSelected: (String selection) {
+                selectedWarehouse = selection;
+              },
+              fieldViewBuilder:
+                  (context, controller, focusNode, onEditingComplete) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    hintText: 'Search Warehouse',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                );
+              },
+              optionsViewBuilder:
+                  (context, onSelected, Iterable<String> options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4,
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: options.length,
+                      itemBuilder: (context, index) {
+                        final option = options.elementAt(index);
+                        return ListTile(
+                          title: Text(option),
+                          onTap: () => onSelected(option),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (selectedWarehouse != null &&
+                    selectedWarehouse!.isNotEmpty) {
+                  provider.setWarehousee(selectedWarehouse!);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -52,8 +140,27 @@ class _SalesOrderPageState extends State<SalesOrderPage>
         backgroundColor: AppColors.primaryColor,
         title: const Text('Sales Order', style: TextStyle(color: Colors.white)),
 
+        // actions: _tabController.index == 0
+        //     ? [
+        //   IconButton(
+        //     icon: const Icon(Icons.save, color: Colors.white),
+        //     onPressed: () async {
+        //       final state = _salesOrderKey.currentState;
+        //       if (state != null) {
+        //         await state.handleSave(context);
+        //       }
+        //     },
+        //   ),
+        // ]
+        //     : null,
+
         actions: _tabController.index == 0
             ? [
+          IconButton(
+            icon: const Icon(Icons.warehouse, color: Colors.white),
+            tooltip: 'Set Warehouse',
+            onPressed: () => _showWarehouseDialog(context),
+          ),
           IconButton(
             icon: const Icon(Icons.save, color: Colors.white),
             onPressed: () async {
@@ -65,6 +172,7 @@ class _SalesOrderPageState extends State<SalesOrderPage>
           ),
         ]
             : null,
+
 
         bottom: TabBar(
           controller: _tabController,
@@ -115,10 +223,37 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
   int pageLength = 10;
   bool isLoadingMore = false;
 
+
   @override
   void initState() {
     super.initState();
-    _getSalesOrderList();
+
+    _fromDateController = TextEditingController();
+    _toDateController = TextEditingController();
+
+    _setTodayAsDefaultDate(); // this already fetches data
+  }
+
+  void _setTodayAsDefaultDate() {
+    final today = DateTime.now();
+
+    // UI format
+    final displayDate = DateFormat('dd-MM-yyyy').format(today);
+
+    // API format
+    final apiDate = DateFormat('yyyy-MM-dd').format(today);
+
+    _fromDateController.text = displayDate;
+    _toDateController.text = displayDate;
+
+    _fromDate = apiDate;
+    _toDate = apiDate;
+
+    // Fetch today's Sales Orders by default
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchSalesOrders();
+    });
+
   }
 
   @override
@@ -136,26 +271,24 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
     }
   }
 
-  Future<void> _getSearchSalesList(
-      String? salesId, String? customerId, String? customerName) async {
+  Future<void> _fetchSalesOrders() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-    try {
-      await provider.getSearchSalesOrder(
-          context, salesId!, customerId!, customerName!);
-    } catch (e) {
-      print('Error fetching item details: $e');
-    }
-  }
 
-  Future<void> _getSalesDateFilterList(String startDate, String endDate) async {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-    try {
-      await provider.getSalesOrderDateFilter(context, startDate, endDate);
-    } catch (e) {
-      print('Error fetching item details: $e');
-    }
+    await provider.getSalesOrdersWithFilters(
+      context,
+      startDate: _fromDate.isNotEmpty ? _fromDate : null,
+      endDate: _toDate.isNotEmpty ? _toDate : null,
+      salesId: _searchController.text.isNotEmpty
+          ? _searchController.text
+          : null,
+      customerId: _searchCustomerController.text.isNotEmpty
+          ? _searchCustomerController.text
+          : null,
+      customerName: _searchCustomerNameController.text.isNotEmpty
+          ? _searchCustomerNameController.text
+          : null,
+    );
   }
-
 
   Future<void> _loadMoreItems({bool next = true}) async {
     if (!isLoadingMore) {
@@ -178,50 +311,53 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
     }
   }
 
-  Future<void> _selectDate(BuildContext context,
-      TextEditingController controller, bool isFromDate) async {
+  Future<void> _selectDate(
+      BuildContext context,
+      TextEditingController controller,
+      bool isFromDate,
+      ) async {
     DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(3000),
     );
+
     if (picked != null) {
+      final displayDate = DateFormat('dd-MM-yyyy').format(picked);
+      final apiDate = DateFormat('yyyy-MM-dd').format(picked);
+
       setState(() {
-        // Display date in dd-MM-yyyy format
-        String displayDate = DateFormat('dd-MM-yyyy').format(picked);
         controller.text = displayDate;
 
-        // Keep the date in yyyy-MM-dd format for API calls
-        String apiDate = DateFormat('yyyy-MM-dd').format(picked);
         if (isFromDate) {
-          _fromDate = apiDate; // Pass this to API
+          _fromDate = apiDate;
         } else {
-          _toDate = apiDate; // Pass this to API
-          _getSalesDateFilterList(_fromDate, _toDate);
+          _toDate = apiDate;
         }
       });
+
+      _fetchSalesOrders(); // 🔥 always unified
     }
+
   }
+
   void _resetFilters() {
     setState(() {
-      // Clear date controllers
       _fromDateController.clear();
       _toDateController.clear();
       _fromDate = "";
       _toDate = "";
 
-      // Clear search controllers
       _searchController.clear();
       _searchCustomerController.clear();
       _searchCustomerNameController.clear();
-
-      // Reset search query variables
-      _searchQuery = "";
-      _searchCustomerQuery = "";
-      _searchCustomerName = "";
     });
+
+    // 🔥 Fetch ALL sales orders
+    _getSalesOrderList();
   }
+
   void _showSearchPopup(BuildContext context) {
     showDialog(
       context: context,
@@ -290,10 +426,11 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
                   borderRadius: BorderRadius.circular(8)),
               child: TextButton(
                 onPressed: () {
-                  _getSearchSalesList(
-                      _searchController.text,
-                      _searchCustomerController.text,
-                      _searchCustomerNameController.text);
+                  // _getSearchSalesList(
+                  //     _searchController.text,
+                  //     _searchCustomerController.text,
+                  //     _searchCustomerNameController.text);
+                  _fetchSalesOrders();
                   Navigator.of(context).pop();
                 },
                 child: Text(
@@ -428,7 +565,7 @@ Widget build(BuildContext context) {
                                     context: safeContext,
                                     builder: (_) {
                                       String _formatDate(String? date) {
-                                        if (date == null) return 'N/A';
+                                        if (date == null) return '-';
                                         try {
                                           final parsed = DateTime.parse(date);
                                           return DateFormat('dd/MM/yyyy').format(parsed);
@@ -437,200 +574,216 @@ Widget build(BuildContext context) {
                                         }
                                       }
 
+                                      double _toDouble(dynamic value) {
+                                        if (value == null) return 0.0;
+                                        if (value is num) return value.toDouble();
+                                        return double.tryParse(value.toString()) ?? 0.0;
+                                      }
+
                                       return AlertDialog(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
-                                        scrollable: true,
-                                        content: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        backgroundColor: Colors.white,
+                                        elevation: 6,
+
+                                        // ---------- HEADER ----------
+                                        titlePadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                                        title: Row(
                                           children: [
-                                            // 🧾 Header (Order name + Customer)
-                                            Text(
-                                              order.name ?? 'Sales Order',
-                                              style: const TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              order.customer ?? order.customerName ?? 'Unknown Customer',
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                color: Colors.black54,
-                                              ),
-                                            ),
-
-                                            const SizedBox(height: 12),
-                                            const Divider(thickness: 1),
-
-                                            // ⚠️ Draft note
-                                            if (order.status != "Draft")
-                                              const Padding(
-                                                padding: EdgeInsets.symmetric(vertical: 8.0),
-                                                child: Text(
-                                                  "Only Draft orders can be edited",
-                                                  style: TextStyle(
-                                                    color: Colors.red,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                            const Icon(Icons.receipt_long, size: 20),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                order.name ?? 'Sales Order',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
                                                 ),
-                                              ),
-
-                                            const SizedBox(height: 6),
-
-                                            // 📅 Order Info
-                                            Container(
-                                              padding: const EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey.shade100,
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              child: Column(
-                                                children: [
-                                                  _buildInfoRow("Order Date", _formatDate(order.transactionDate)),
-                                                  _buildInfoRow("Delivery Date", _formatDate(order.deliveryDate)),
-                                                  _buildInfoRow("Status", order.status ?? 'N/A'),
-                                                  _buildInfoRow(
-                                                    "Total",
-                                                    (order.netTotal != null && order.netTotal != 0)
-                                                        ? order.netTotal!.toStringAsFixed(2)
-                                                        : (order.total?.toStringAsFixed(2) ?? '0.00'),
-                                                  ),
-                                                  _buildInfoRow(
-                                                    "Grand Total",
-                                                    (order.roundedTotal != null && order.roundedTotal != 0)
-                                                        ? order.roundedTotal!.toStringAsFixed(2)
-                                                        : (order.grandTotal?.toStringAsFixed(2) ?? '0.00'),
-                                                  ),
-
-                                                ],
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-
-                                            const SizedBox(height: 18),
-
-                                            const Text(
-                                              "Items",
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _formatDate(order.transactionDate),
                                               style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 17,
-                                                color: Colors.black87,
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                                fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                            const SizedBox(height: 8),
-                                            if (items.isEmpty)
-                                              const Text("No items available."),
-                                            ...items.asMap().entries.map((entry) {
-                                              final index = entry.key + 1;
-                                              final item = entry.value;
+                                          ],
+                                        ),
 
-                                              return Padding(
-                                                padding: const EdgeInsets.symmetric(vertical: 6.0),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    // 🟦 Index + Item Name
-                                                    Row(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                        // ---------- CONTENT ----------
+                                        contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                                        content: ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            maxHeight: MediaQuery.of(safeContext).size.height * 0.75,
+                                            maxWidth: MediaQuery.of(safeContext).size.width * 0.90,
+                                          ),
+                                          child: SingleChildScrollView(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                _dialogRow("Customer", order.customer ?? order.customerName),
+
+                                                const Divider(height: 16),
+
+                                                _sectionHeader("Financials"),
+                                                _financialGrid(order),
+
+                                                const Divider(height: 16),
+
+                                                // _sectionHeader("Items (${items.length})"),
+                                                // const SizedBox(height: 4),
+                                                //
+                                                // if (items.isEmpty)
+                                                //   const Text("No items available."),
+                                                //
+                                                // ...items.asMap().entries.map((entry) {
+                                                //   final index = entry.key;
+                                                //   final item = entry.value;
+                                                //
+                                                //   return ExpansionTile(
+                                                //     tilePadding: EdgeInsets.zero,
+                                                //     childrenPadding:
+                                                //     const EdgeInsets.symmetric(vertical: 6),
+                                                //     title: Row(
+                                                //       children: [
+                                                //         SizedBox(
+                                                //           width: 24,
+                                                //           child: Text(
+                                                //             "${index + 1}.",
+                                                //             style: const TextStyle(
+                                                //               fontWeight: FontWeight.w600,
+                                                //               fontSize: 13,
+                                                //             ),
+                                                //           ),
+                                                //         ),
+                                                //         Expanded(
+                                                //           child: Text(
+                                                //             "${item.itemCode ?? ''} ${item.itemName ?? ''}",
+                                                //             style: const TextStyle(
+                                                //               fontWeight: FontWeight.w600,
+                                                //               fontSize: 13,
+                                                //             ),
+                                                //           ),
+                                                //         ),
+                                                //       ],
+                                                //     ),
+                                                //     subtitle: Padding(
+                                                //       padding: const EdgeInsets.only(left: 24),
+                                                //       child: Text(
+                                                //         "Qty ${item.qty?.toStringAsFixed(2)} • ₹${item.amount?.toStringAsFixed(2)}",
+                                                //         style: const TextStyle(fontSize: 12),
+                                                //       ),
+                                                //     ),
+                                                //     children: [
+                                                //       _itemRow("Qty", item.qty?.toString()),
+                                                //       _itemRow("Rate", item.rate?.toStringAsFixed(2)),
+                                                //       _itemRow("Amount", item.amount?.toStringAsFixed(2)),
+                                                //     ],
+                                                //   );
+                                                // }).toList(),
+                                                _sectionHeader("Items (${items.length})"),
+                                                const SizedBox(height: 4),
+
+                                                if (items.isEmpty)
+                                                  const Text("No items available."),
+
+                                                ...items.asMap().entries.map((entry) {
+                                                  final index = entry.key;
+                                                  final item = entry.value;
+
+                                                  final qty = item.qty ?? 0;
+                                                  final netRate = item.netRate ?? item.rate ?? 0;
+
+                                                  return ExpansionTile(
+                                                    tilePadding: EdgeInsets.zero,
+                                                    childrenPadding: const EdgeInsets.symmetric(vertical: 6),
+
+                                                    title: Row(
                                                       children: [
-                                                        // 🔹 Index Badge
-                                                        Container(
-                                                          width: 26,
-                                                          height: 26,
-                                                          margin: const EdgeInsets.only(right: 10, top: 2),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.blueAccent.withOpacity(0.1),
-                                                            borderRadius: BorderRadius.circular(8),
-                                                            border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
-                                                          ),
-                                                          alignment: Alignment.center,
+                                                        SizedBox(
+                                                          width: 24,
                                                           child: Text(
-                                                            "$index",
+                                                            "${index + 1}.",
                                                             style: const TextStyle(
-                                                              fontWeight: FontWeight.bold,
-                                                              color: Colors.blueAccent,
+                                                              fontWeight: FontWeight.w600,
+                                                              fontSize: 13,
                                                             ),
                                                           ),
                                                         ),
-
-                                                        // 🧾 Item name and details
                                                         Expanded(
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            children: [
-                                                              // Item name
-                                                              Text(
-                                                                "${item.itemCode ?? ''} ${item.itemName ?? ''}",
-                                                                style: const TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight: FontWeight.w600,
-                                                                  color: Colors.black,
-                                                                ),
-                                                              ),
-
-                                                              const SizedBox(height: 4),
-
-                                                              // 📦 Details (Qty, Rate, Amt)
-                                                              Wrap(
-                                                                spacing: 16,
-                                                                runSpacing: 4,
-                                                                children: [
-                                                                  Text(
-                                                                    "Qty: ${item.qty?.toStringAsFixed(2) ?? '0'}",
-                                                                    style: TextStyle(color: Colors.grey.shade800),
-                                                                  ),
-                                                                  Text(
-                                                                    "Rate: ${item.rate?.toStringAsFixed(2) ?? '0'}",
-                                                                    style: TextStyle(color: Colors.grey.shade800),
-                                                                  ),
-                                                                  Text(
-                                                                    "Amt: ${item.amount?.toStringAsFixed(2) ?? '0'}",
-                                                                    style: const TextStyle(
-                                                                      fontWeight: FontWeight.w600,
-                                                                      color: Colors.black87,
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ],
+                                                          child: Text(
+                                                            "${item.itemCode ?? ''} ${item.itemName ?? ''}",
+                                                            style: const TextStyle(
+                                                              fontWeight: FontWeight.w600,
+                                                              fontSize: 13,
+                                                            ),
                                                           ),
                                                         ),
                                                       ],
                                                     ),
 
-                                                    // Divider between items (optional)
-                                                    if (index != items.length)
-                                                      Padding(
-                                                        padding: const EdgeInsets.only(left: 36, top: 8),
-                                                        child: Divider(
-                                                          height: 1,
-                                                          color: Colors.grey.shade300,
-                                                        ),
+                                                    // ---------- SUBTITLE ----------
+                                                    subtitle: Padding(
+                                                      padding: const EdgeInsets.only(left: 24),
+                                                      child: Text(
+                                                        "Qty ${qty.toStringAsFixed(2)} • Net Rt ₹${netRate.toStringAsFixed(2)}",
+                                                        style: const TextStyle(fontSize: 12),
                                                       ),
-                                                  ],
-                                                ),
-                                              );
-                                            }),
+                                                    ),
 
+                                                    // ---------- DETAILS ----------
+                                                    children: [
+                                                      _itemRow("Code", item.itemCode),
+                                                      _itemRow("Qty", qty.toStringAsFixed(2)),
+                                                      _itemRow("Unit", item.uom),
+                                                      _itemRow(
+                                                        "Price List Rate",
+                                                        item.priceListRate?.toStringAsFixed(2),
+                                                      ),
 
-                                          ],
+                                                      /// ✅ Discount % (only if > 0)
+                                                      if ((item.discountPercentage ?? 0) > 0)
+                                                        _itemRow(
+                                                          "Discount %",
+                                                          "${item.discountPercentage!.toStringAsFixed(2)} %",
+                                                        ),
+
+                                                      _itemRow(
+                                                        "Rate",
+                                                        item.rate?.toStringAsFixed(2),
+                                                      ),
+
+                                                      /// ✅ Additional Discount Amount
+                                                      if ((item.distributedDiscountAmount ?? 0) > 0)
+                                                        _itemRow(
+                                                          "Addl.Disc.Amt",
+                                                          item.distributedDiscountAmount!.toStringAsFixed(2),
+                                                        ),
+
+                                                      _itemRow(
+                                                        "Net Rate",
+                                                        "₹ ${netRate.toStringAsFixed(2)}",
+                                                      ),
+                                                    ],
+                                                  );
+                                                }).toList(),
+
+                                              ],
+                                            ),
+                                          ),
                                         ),
+
+                                        // ---------- ACTIONS ----------
                                         actionsAlignment: MainAxisAlignment.center,
                                         actions: [
                                           TextButton.icon(
                                             onPressed: () => Navigator.pop(safeContext),
-                                            icon: const Icon(Icons.close, color: Colors.blueAccent),
-                                            label: const Text(
-                                              "Close",
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.blueAccent,
-                                              ),
-                                            ),
+                                            icon: const Icon(Icons.close),
+                                            label: const Text("Close"),
                                           ),
                                         ],
                                       );
@@ -695,8 +848,172 @@ Widget build(BuildContext context) {
     ),
   );
 }
+  // Widget _financialGrid(order) {
+  //   Widget cell(String label, String value) {
+  //     return SizedBox(
+  //       width: 140,
+  //       child: Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           Text(label,
+  //               style: const TextStyle(fontSize: 12, color: Colors.grey)),
+  //           const SizedBox(height: 2),
+  //           Text(value,
+  //               style: const TextStyle(
+  //                   fontWeight: FontWeight.w600, fontSize: 13)),
+  //         ],
+  //       ),
+  //     );
+  //   }
+  //
+  //   final total = (order.roundedTotal != null && order.roundedTotal != 0)
+  //       ? order.roundedTotal
+  //       : order.grandTotal;
+  //
+  //   return Wrap(
+  //     spacing: 16,
+  //     runSpacing: 12,
+  //     children: [
+  //       cell(
+  //         "Net Total",
+  //         order.netTotal?.toStringAsFixed(2) ?? "0.00",
+  //       ),
+  //       cell(
+  //         "Grand Total",
+  //         total?.toStringAsFixed(2) ?? "0.00",
+  //       ),
+  //     ],
+  //   );
+  // }
+  Widget _financialGrid(SalesOrderDetails order) {
+    const TextStyle labelStyle =
+    TextStyle(fontSize: 12, color: Colors.grey);
+    const TextStyle valueStyle =
+    TextStyle(fontWeight: FontWeight.w600, fontSize: 13);
+
+    Widget cell(String label, String value) {
+      return SizedBox(
+        width: 140,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: labelStyle),
+            const SizedBox(height: 2),
+            Text(value, style: valueStyle),
+          ],
+        ),
+      );
+    }
+
+    List<Widget> cells = [
+      cell(
+        "Net Total",
+        (order.netTotal ?? order.total ?? 0).toStringAsFixed(2),
+      ),
+      cell(
+        "Taxes",
+        (order.totalTaxesAndCharges ?? 0).toStringAsFixed(2),
+      ),
+      cell(
+        "Total",
+        order.displayTotal.toStringAsFixed(2),
+      ),
+    ];
+
+    /// ✅ Discount Amount (only if available)
+    if ((order.discountAmount ?? 0) > 0) {
+      cells.add(
+        cell(
+          "Discount Amount",
+          order.discountAmount!.toStringAsFixed(2),
+        ),
+      );
+    }
+
+    /// ✅ Additional Discount % (only if available)
+    if ((order.additionalDiscountPercentage ?? 0) > 0) {
+      cells.add(
+        cell(
+          "Additional Discount %",
+          "${order.additionalDiscountPercentage!.toStringAsFixed(2)} %",
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 16,
+      runSpacing: 12,
+      children: cells,
+    );
+  }
+
+  Widget _dialogRow(String label, String? value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              value ?? "-",
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _itemRow(String label, String? value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value ?? "-",
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
 
 }
+
 Widget _buildInfoRow(String label, String? value) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -718,7 +1035,6 @@ Widget _buildInfoRow(String label, String? value) {
     ),
   );
 }
-
 class SalesOrderCard extends StatelessWidget {
   final dynamic data;
 
@@ -736,7 +1052,7 @@ class SalesOrderCard extends StatelessWidget {
         // Add a container with height constraints
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         constraints:
-            BoxConstraints(minHeight: 100), // Set a min height if needed
+        BoxConstraints(minHeight: 100), // Set a min height if needed
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.start,
@@ -749,6 +1065,12 @@ class SalesOrderCard extends StatelessWidget {
             _buildRow('Delivery Date', _formatDate(data.deliveryDate),
                 Icons.date_range),
             _buildRow('Status', data.status, Icons.info_outline),
+            _buildRow(
+              'Total',
+              '₹ ${data.displayTotal.toStringAsFixed(2)}',
+              Icons.currency_rupee,
+            ),
+
           ],
         ),
       ),
@@ -795,5 +1117,6 @@ class SalesOrderCard extends StatelessWidget {
     );
   }
 }
+
 
 

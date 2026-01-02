@@ -216,19 +216,6 @@ TextButton(
         ],
       ),
 
-      // Show selected date range
-      // if (_selectedFromDate != null || _selectedToDate != null)
-      //   Padding(
-      //     padding: const EdgeInsets.only(top: 8.0),
-      //     child: Text(
-      //       'Filter Applied: ${_selectedFromDate ?? 'Not Set'} to ${_selectedToDate ?? 'Not Set'}',
-      //       style: TextStyle(
-      //         fontSize: 16,
-      //         fontWeight: FontWeight.bold,
-      //         color: Colors.deepPurple,
-      //       ),
-      //     ),
-      //   ),
     ],
   ),
 ),

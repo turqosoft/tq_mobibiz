@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,10 +31,16 @@ import 'package:sales_ordering_app/view/supplier_pricing/SupplierPricing.dart';
 import 'package:sales_ordering_app/model/customer_list_model.dart' as customer;
 
 // import '../../model/customer_list_model.dart';
+import '../../main.dart';
+import '../ToDo/todos_screen.dart';
 import '../Work Order/Work_Order_list.dart';
+import '../member_registration/memberRegistrationScreen.dart';
 import '../pos_invoice/POSInvoiceCreateScreen.dart';
 import '../pos_invoice/PosInvoice.dart';
 import '../pos_invoice/PosOpeningEntry.dart';
+import '../sales_manager/SalesManagerScreen.dart';
+import '../sales_manager/expense_tracker/ExpenseTrackerScreen.dart';
+import '../sales_quotation/SalesQuotation.dart';
 
 
 // import 'package:geolocator/geolocator.dart';
@@ -47,24 +55,110 @@ class _HomeScreenState extends State<HomeScreen> {
   final SharedPrefService _sharedPrefService = SharedPrefService();
   bool isLoading = false;
   List<GridItem> gridItems = [];
+  Timer? _pollingTimer;
+  String? _lastPickListName;
+  bool _isInitialLoad = true;
 
   // @override
   // void initState() {
   //   super.initState();
-  //   _homeDetails();
-  //   _printStoredLoginDetails();
-  //   _employeeDetails();
+  //   _startPolling();
+  //
+  //
+  //   WidgetsBinding.instance.addPostFrameCallback((_) async {
+  //     _homeDetails();
+  //     _printStoredLoginDetails();
+  //     _employeeDetails();
+  //
+  //     // ✅ Check if user is employee after login
+  //     final provider =
+  //     Provider.of<SalesOrderProvider>(context, listen: false);
+  //     await provider.checkIfUserIsEmployee(context);
+  //     await provider.fetchPickList(context);
+  //     int newCount = await provider.fetchPickList(context);
+  //
+  //     if (newCount > 0) {
+  //       _showNotification(
+  //         "Pending Picklists",
+  //         "$newCount pending picklists available",
+  //       );
+  //     }
+  //   });
   // }
-  @override
-void initState() {
-  super.initState();
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _homeDetails();
-    _printStoredLoginDetails();
-    _employeeDetails();
-  });
-}
+  @override
+  void initState() {
+    super.initState();
+    _startPolling();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _homeDetails();
+      _printStoredLoginDetails();
+      _employeeDetails();
+
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+      await provider.checkIfUserIsEmployee(context);
+
+      // 🔹 Fetch picklist for initial load
+      int newCount = await provider.fetchPickList(context);
+
+      // 🔹 Show "Pending Picklists" ONLY on first load
+      if (_isInitialLoad && newCount > 0) {
+        _showNotification(
+          "Pending Picklists",
+          "$newCount pending picklists available",
+        );
+      }
+
+      // 🔹 Initial load completed
+      _isInitialLoad = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPolling() {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+    _pollingTimer = Timer.periodic(const Duration(seconds: 20), (timer) async {
+      int newCount = await provider.fetchPickList(context);
+
+      // if (newCount > 0) {
+      if (!_isInitialLoad && newCount > 0) {
+
+        _showNotification(
+          "New Picklists Added",
+          "$newCount pending picklists available",
+        );
+      }
+    });
+  }
+
+  Future<void> _showNotification(String title, String body) async {
+    const AndroidNotificationDetails androidDetails =
+    AndroidNotificationDetails(
+      "picklist_channel",
+      "Pick List Alerts",
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails notificationDetails =
+    NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      title,
+      body,
+      notificationDetails,
+      payload: "open_picklist", // <-- ADD PAYLOAD
+    );
+  }
 
   Future<void> _printStoredLoginDetails() async {
     await _sharedPrefService.printLoginDetails();
@@ -122,30 +216,50 @@ void initState() {
       case 'Job Card': return Icons.work;
       case 'Purchase Receipt': return Icons.receipt_sharp;
       case 'Sales Invoice': return Icons.receipt_long_sharp;
-      // case 'Create POS Invoice': return Icons.inbox;
       case 'POS Invoice': return Icons.computer_rounded;
+      case 'Sales Quotation': return Icons.quora;
+      case 'Member Registration': return Icons.new_label_outlined;
+      case 'Sales Manager': return Icons.person_sharp;
+      case 'ToDos': return Icons.format_list_numbered;
+
 
       default: return Icons.help_outline;
     }
   }
 
-  // void _navigateToScreen(String? menuItem, BuildContext context) {
+  // void _navigateToScreen(String? menuItem, BuildContext context) async {
   //   if (menuItem == null) return;
+  //
   //   switch (menuItem) {
-  //     case 'Checkin': _showPopupDialog(context); break;
+  //     case 'Checkin':
+  //     // Initialize check-in status from server before showing dialog
+  //       await Provider.of<SalesOrderProvider>(context, listen: false)
+  //           .initializeCheckinStatus();
+  //
+  //       // Now show the dialog with accurate status
+  //       _showPopupDialog(context);
+  //       break;
   void _navigateToScreen(String? menuItem, BuildContext context) async {
     if (menuItem == null) return;
 
     switch (menuItem) {
       case 'Checkin':
-      // Initialize check-in status from server before showing dialog
-        await Provider.of<SalesOrderProvider>(context, listen: false)
-            .initializeCheckinStatus();
+        final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+        // ✅ Check if user is an employee
+        if (!provider.isEmployee) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Only employees can use the Checkin module.")),
+          );
+          return; // stop navigation
+        }
+
+        // Initialize check-in status from server before showing dialog
+        await provider.initializeCheckinStatus();
 
         // Now show the dialog with accurate status
         _showPopupDialog(context);
         break;
-
       case 'Attendance': Navigator.push(context, MaterialPageRoute(builder: (_) => AttendanceCalendar())); break;
       case 'Sales Order': Navigator.push(context, MaterialPageRoute(builder: (_) => SalesOrderPage())); break;
       case 'Receipts': Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentReciptScreen())); break;
@@ -163,6 +277,11 @@ void initState() {
       case 'Job Card': Navigator.push(context, MaterialPageRoute(builder: (_) => JobCardListScreen())); break;
       case 'Purchase Receipt': Navigator.push(context, MaterialPageRoute(builder: (_) => PurchaseReceiptScreen())); break;
       case 'Sales Invoice': Navigator.push(context, MaterialPageRoute(builder: (_) => SalesInvoicePage())); break;
+      case 'Sales Quotation': Navigator.push(context, MaterialPageRoute(builder: (_) => SalesQuotationPage())); break;
+      case 'Member Registration': Navigator.push(context, MaterialPageRoute(builder: (_) => MemberRegistrationScreen())); break;
+      case 'Sales Manager': Navigator.push(context, MaterialPageRoute(builder: (_) => SalesManagerScreen())); break;
+      case 'ToDos': Navigator.push(context, MaterialPageRoute(builder: (_) => ToDosScreen())); break;
+
       case 'POS Invoice':
         final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
@@ -197,6 +316,8 @@ void initState() {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<SalesOrderProvider>(context);
+    final isEmployee = provider.isEmployee;
     return Scaffold(
       backgroundColor: Color.fromARGB(255, 206, 251, 246),
       appBar: AppBar(
@@ -217,17 +338,62 @@ void initState() {
                 ),
                 itemCount: gridItems.length,
                 itemBuilder: (context, index) {
+                  final item = gridItems[index];
+                  final isCheckin = item.title == 'Checkin';
+                  // return GestureDetector(
+                  //   onTap: () => gridItems[index].navigateTo?.call(context),
+                  //   child: Container(
+                  //     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8.0)),
+                  //     child: Column(
+                  //       mainAxisAlignment: MainAxisAlignment.center,
+                  //       children: [
+                  //         Icon(gridItems[index].icon, size: 40, color: Colors.black),
+                  //         SizedBox(height: 10),
+                  //         Text(gridItems[index].title, style: TextStyle(fontSize: 16)),
+                  //       ],
+                  //     ),
+                  //   ),
+                  // );
                   return GestureDetector(
-                    onTap: () => gridItems[index].navigateTo?.call(context),
-                    child: Container(
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8.0)),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(gridItems[index].icon, size: 40, color: Colors.black),
-                          SizedBox(height: 10),
-                          Text(gridItems[index].title, style: TextStyle(fontSize: 16)),
-                        ],
+                    onTap: () {
+                      // ✅ If Checkin and not employee, show message instead of navigation
+                      if (isCheckin && !isEmployee) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  "Only employees can use the Checkin module.")),
+                        );
+                        return;
+                      }
+                      item.navigateTo?.call(context);
+                    },
+                    child: Opacity(
+                      opacity: (isCheckin && !isEmployee) ? 0.5 : 1.0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(item.icon,
+                                size: 40,
+                                color: (isCheckin && !isEmployee)
+                                    ? Colors.grey
+                                    : Colors.black),
+                            const SizedBox(height: 10),
+                            Text(
+                              item.title,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: (isCheckin && !isEmployee)
+                                    ? Colors.grey
+                                    : Colors.black,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -245,539 +411,6 @@ class GridItem {
   GridItem({required this.icon, required this.title, this.navigateTo});
 }
 
-
-// class HomeScreen extends StatefulWidget {
-//   @override
-//   State<HomeScreen> createState() => _HomeScreenState();
-// }
-
-// class _HomeScreenState extends State<HomeScreen> {
-//   final SharedPrefService _sharedPrefService = SharedPrefService();
-//   bool isLoading = false;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _homeDetails();
-//     _printStoredLoginDetails();
-//     _employeeDetails();
-//   }
-
-//   Future<void> _printStoredLoginDetails() async {
-//     await _sharedPrefService.printLoginDetails();
-//   }
-
-//   Future<void> _homeDetails() async {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-
-//     try {
-//       Future.microtask(() async {
-//         await provider.homeDetails(context);
-//       });
-//     } catch (e) {
-//       print('Error fetching customer details: $e');
-//     }
-//   }
-
-//   Future<void> _employeeDetails() async {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     String? emailId = await _sharedPrefService.getEmailId();
-//     print("Email:::$emailId");
-//     try {
-//       Future.microtask(() async {
-//         await provider.employeeDetails(emailId!, context);
-//       });
-//     } catch (e) {
-//       print('Error fetching customer details: $e');
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: Color.fromARGB(255, 206, 251, 246),
-//       appBar: AppBar(
-//         backgroundColor: AppColors.primaryColor,
-//         title: const Text(
-//           'Home',
-//           style: TextStyle(
-//             fontSize: 24,
-//             color: Colors.white,
-//             fontWeight: FontWeight.bold,
-//           ),
-//         ),
-//         iconTheme: const IconThemeData(
-//           color: Colors.white,
-//         ),
-//       ),
-//       drawer: DrawerWidget(),
-//       body: Container(
-//         decoration: const BoxDecoration(
-//           gradient: LinearGradient(
-//             begin: Alignment.topLeft,
-//             end: Alignment.bottomRight,
-//             colors: [
-//               Color.fromARGB(255, 241, 243, 243),
-//               // Colors.white,
-//               AppColors.primaryColor
-//             ],
-//           ),
-//         ),
-//         child: Padding(
-//           padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 15),
-//           child: Column(
-//             children: [
-//               // Container(
-//               //   margin: EdgeInsets.only(bottom: 20),
-//               //   child: Row(
-//               //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//               //     children: [
-//               //       Text(
-//               //         'Dashboard',
-//               //         style: TextStyle(
-//               //           fontSize: 24,
-//               //           fontWeight: FontWeight.bold,
-//               //         ),
-//               //       ),
-//               //       CircleAvatar(
-//               //         radius: 20,
-//               //         backgroundColor: Colors.grey[300],
-//               //         child: Icon(Icons.person, color: Colors.white),
-//               //       ),
-//               //     ],
-//               //   ),
-//               // ),
-//               // Text(
-//               //   'Last Update: 7 Aug 2023',
-//               //   style: TextStyle(
-//               //     fontSize: 14,
-//               //     color: Colors.grey,
-//               //   ),
-//               // ),
-//               const SizedBox(height: 20),
-//               Expanded(
-//                 child: GridView.builder(
-//                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-//                     crossAxisCount: 2,
-//                     crossAxisSpacing: 16.0,
-//                     mainAxisSpacing: 10.0,
-//                   ),
-//                   itemCount: gridItems.length,
-//                   itemBuilder: (context, index) {
-//                     return GestureDetector(
-//                       onTap: () {
-//                         if (gridItems[index].navigateTo != null) {
-//                           gridItems[index].navigateTo!(context);
-//                         }
-//                       },
-//                       child: Container(
-//                         decoration: BoxDecoration(
-//                           color: Colors.white,
-//                           borderRadius: BorderRadius.circular(8.0),
-//                         ),
-//                         child: Column(
-//                           mainAxisAlignment: MainAxisAlignment.center,
-//                           children: [
-//                             Icon(
-//                               gridItems[index].icon,
-//                               size: 40,
-//                               color: Colors.black,
-//                             ),
-//                             const SizedBox(height: 10),
-//                             Text(
-//                               gridItems[index].title,
-//                               style: TextStyle(fontSize: 16),
-//                             ),
-//                           ],
-//                         ),
-//                       ),
-//                     );
-//                   },
-//                 ),
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-// // Data
-// class GridItem {
-//   final IconData icon;
-//   final String title;
-//   final void Function(BuildContext)? navigateTo;
-
-//   GridItem({
-//     required this.icon,
-//     required this.title,
-//     this.navigateTo,
-//   });
-// }
-// bool showSalesReturn = true; 
-
-// List<GridItem> gridItems = [
-//   GridItem(
-//     icon: Icons.person,
-//     title: 'Checkin',
-//     navigateTo: (context) => _showPopupDialog(context),
-//   ),
-//   GridItem(
-//     icon: Icons.calendar_month,
-//     title: 'Attendance',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//         builder: (context) =>
-//             // DashboardScreen
-//             AttendanceCalendar(),
-//       ),
-//     ),
-//   ),
-
-//   GridItem(
-//     icon: Icons.add_box_rounded,
-//     title: 'Sales Order',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//           builder: (context) => SalesOrderPage
-//               //  SalesOrderScreen
-//               ()),
-//     ),
-//   ),
-//   GridItem(
-//     icon: Icons.inventory,
-//     title: 'Receipts',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//           builder: (context) => PaymentReciptScreen
-//               //   ReceiptScreen
-//               ()),
-//     ),
-//   ),
-
-//   GridItem(
-//     icon: Icons.price_change_outlined,
-//     title: 'Supplier Pricing',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//           builder: (context) => SupplierPricingScreen
-//               //   ReceiptScreen
-//               ()),
-//     ),
-//   ),
-
-// if (showSalesReturn)
-//      GridItem(
-//     icon: Icons.assignment_return_outlined,
-//     title: 'Sales Return',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => SalesReturnScreen()),
-//     ),
-//   ),
-
-//   GridItem(
-//     icon: Icons.library_books,
-//     title: 'Products',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//         builder: (context) => ItemListScreen(),
-//       ),
-//     ),
-//   ),
-
-//   GridItem(
-//     icon: Icons.find_in_page,
-//     title: 'Purchase Request',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//         builder: (context) => PurchaseRequestListScreen(),
-//       ),
-//     ),
-//   ),
-
-//     GridItem(
-//     icon: Icons.whatshot_sharp,
-//     title: 'Pick List',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//         builder: (context) => PickListPage(),
-//       ),
-//     ),
-//   ),
-
-
-//   GridItem(
-//     icon: Icons.group,
-//     title: 'Customers',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => const CustomersListScreen()),
-//     ),
-//   ),
-//   GridItem(
-//     icon: Icons.card_travel,
-//     title: 'Stock',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => CurrentStockList()),
-//     ),
-//   ),
-//   GridItem(
-//     icon: Icons.system_update_alt_outlined,
-//     title: 'Stock Updates',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => StockReconciliationScreen()),
-//     ),
-//   ),
-
-//    GridItem(
-//     icon: Icons.request_quote,
-//     title: 'Material Request',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => MaterialRequest()),
-//     ),
-//   ),
-//      GridItem(
-//     icon: Icons.accessibility_new,
-//     title: 'Material Demand',
-//     navigateTo: (context) => Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => MaterialDemandScreen()),
-//     ),
-//   ),
-
-
-
-//   // GridItem(
-//   //   icon: Icons.card_travel,
-//   //   title: 'Work Order',
-//   //   navigateTo: (context) => Navigator.push(
-//   //     context,
-//   //     MaterialPageRoute(builder: (context) => WorkOrderListScreen()),
-//   //   ),
-//   // ),
-//   GridItem(
-//   icon: Icons.card_travel,
-//   title: 'Work Order',
-//   navigateTo: (context) {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     provider.refreshWorkOrders(context); // Trigger refresh before navigating
-//     Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => WorkOrderListScreen()),
-//     );
-//   },
-// ),
-
-//   GridItem(
-//   icon: Icons.card_travel,
-//   title: 'Job Card',
-//   navigateTo: (context) {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     provider.refreshJobCards(context); // Trigger refresh before navigating
-//     Navigator.push(
-//       context,
-//       MaterialPageRoute(builder: (context) => JobCardListScreen()),
-//     );
-//   },
-// ),
-
-// ];
-
-// void _showPopupDialog(BuildContext context) {
-//   final DateTime now = DateTime.now();
-//   final String formattedDateTime =
-//       DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
-
-//   showDialog(
-//     context: context,
-//     builder: (BuildContext context) {
-//       return Consumer<SalesOrderProvider>(
-//         builder: (context, provider, child) {
-//           return CustomDialog(
-//             onCheckIn: () async {
-//               Future.microtask(() async {
-//                 final scaffoldMessenger = ScaffoldMessenger.of(context);
-//                 if (provider.errorMessage != null) {
-//                   scaffoldMessenger.showSnackBar(
-//                     SnackBar(content: Text(provider.errorMessage!)),
-//                   );
-//                 } else {
-//                   final message = provider.isCheckedIn
-//                       ? 'Check-in successful!'
-//                       : 'Check-out successful!';
-//                   _showMessagePopup(context, message);
-//                 }
-//               });
-//             },
-//             isCheckedIn: provider.isCheckedIn,
-//             formattedDateTime: formattedDateTime,
-//           );
-//         },
-//       );
-//     },
-//   );
-// }
-
-// void _showMessagePopup(BuildContext context, String message) {
-//   showDialog(
-//     context: context,
-//     builder: (BuildContext context) {
-//       return AlertDialog(
-//         content: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             SizedBox(
-//               height: 150,
-//               width: 150,
-//               child: Lottie.asset('assets/images/thubup.json'),
-//             ),
-//             Text(
-//               message,
-//               style: TextStyle(
-//                 fontWeight: FontWeight.bold,
-//                 color: AppColors.primaryColor,
-//                 fontSize: 20,
-//               ),
-//             ),
-//           ],
-//         ),
-//         actions: [
-//           TextButton(
-//             child: Text(
-//               'Close',
-//               style: TextStyle(
-//                 fontWeight: FontWeight.bold,
-//               ),
-//             ),
-//             onPressed: () {
-//               Navigator.of(context).pop();
-//             },
-//           ),
-//         ],
-//       );
-//     },
-//   );
-// }
-
-// class CustomDialog extends StatefulWidget {
-//   final Function onCheckIn;
-//   final bool isCheckedIn;
-//   final String formattedDateTime;
-
-//   const CustomDialog({
-//     Key? key,
-//     required this.onCheckIn,
-//     required this.isCheckedIn,
-//     required this.formattedDateTime,
-//   }) : super(key: key);
-
-//   @override
-//   State<CustomDialog> createState() => _CustomDialogState();
-// }
-
-// class _CustomDialogState extends State<CustomDialog> {
-//   double latitude = 0.0;
-//   double longitude = 0.0;
-//   static const platform = MethodChannel('com.example/location_channel');
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _getLocation();
-//   }
-
-//   Future<void> _getLocation() async {
-//     try {
-//       final result = await platform.invokeMethod('getLocation');
-//       final locationData = jsonDecode(result);
-//       setState(() {
-//         latitude = locationData['latitude'];
-//         longitude = locationData['longitude'];
-//       });
-//     } on PlatformException catch (e) {
-//       print("Failed to get location: '${e.message}'.");
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return AlertDialog(
-//       content: Column(
-//         mainAxisSize: MainAxisSize.min,
-//         children: [
-//           Text(
-//             'Check-In/Check-Out',
-//             style: TextStyle(
-//               fontWeight: FontWeight.bold,
-//               color: AppColors.primaryColor,
-//               fontSize: 20,
-//             ),
-//           ),
-//           SizedBox(height: 20),
-//           Text(
-//             'Do you want to check ${widget.isCheckedIn ? 'out' : 'in'}?',
-//             style: TextStyle(
-//               fontSize: 16,
-//             ),
-//           ),
-//           SizedBox(height: 20),
-//           Text(
-//             'Current Time: ${widget.formattedDateTime}',
-//             style: TextStyle(
-//               fontSize: 16,
-//               color: Colors.grey,
-//             ),
-//           ),
-//           SizedBox(height: 20),
-//           Text(
-//             'Latitude: $latitude, Longitude: $longitude',
-//             style: TextStyle(
-//               fontSize: 16,
-//               color: Colors.grey,
-//             ),
-//           ),
-//         ],
-//       ),
-//       actions: [
-//         TextButton(
-//           onPressed: () {
-//             Navigator.of(context).pop();
-//           },
-//           child: Text(
-//             'Cancel',
-//             style: TextStyle(
-//               fontWeight: FontWeight.bold,
-//             ),
-//           ),
-//         ),
-//         TextButton(
-//           onPressed: () {
-//             widget.onCheckIn();
-//             Navigator.of(context).pop();
-//           },
-//           child: Text(
-//             'Confirm',
-//             style: TextStyle(
-//               fontWeight: FontWeight.bold,
-//             ),
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-// }
 
 void _showPopupDialog(BuildContext context) {
   final DateTime now = DateTime.now();
@@ -818,44 +451,6 @@ void _showPopupDialog(BuildContext context) {
   );
 }
 
-// void _showMessagePopup(BuildContext context, String message) {
-//   showDialog(
-//     context: context,
-//     builder: (BuildContext context) {
-//       return AlertDialog(
-//         content: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             SizedBox(
-//                 height: 150,
-//                 width: 150,
-//                 child: Lottie.asset('assets/images/thubup.json')),
-//             Text(
-//               message,
-//               style: TextStyle(
-//                   fontWeight: FontWeight.bold,
-//                   color: AppColors.primaryColor,
-//                   fontSize: 20),
-//             ),
-//           ],
-//         ),
-//         actions: [
-//           TextButton(
-//             child: Text(
-//               'Close',
-//               style: TextStyle(
-//                 fontWeight: FontWeight.bold,
-//               ),
-//             ),
-//             onPressed: () {
-//               Navigator.of(context).pop();
-//             },
-//           ),
-//         ],
-//       );
-//     },
-//   );
-// }
 void _showMessagePopup(BuildContext context, String message) {
   showDialog(
     context: context,
@@ -933,15 +528,29 @@ class _CustomDialogState extends State<CustomDialog> {
   customer.Data? _selectedCustomer;
   List<customer.Data> _nearbyCustomers = [];
 
-
+  //
   // @override
   // void initState() {
   //   super.initState();
   //   _getCurrentLocation();
   //   _initData();
-  //   Future.microtask(() {
-  //     Provider.of<SalesOrderProvider>(context, listen: false)
-  //         .fetchCustomers(context);
+  //   Future.microtask(() async {
+  //     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //     await provider.fetchCustomers(context);
+  //     await provider.initializeCheckinStatus();
+  //
+  //     // ✅ Auto-select last checked-in customer if available
+  //     if (provider.isCheckedIn && provider.lastCheckedInCustomer != null) {
+  //       final customers = provider.customerr;
+  //       try {
+  //         final foundCustomer = customers.firstWhere(
+  //                 (c) => c.name == provider.lastCheckedInCustomer);
+  //         setState(() => _selectedCustomer = foundCustomer);
+  //       } catch (_) {
+  //         setState(() => _selectedCustomer = null);
+  //       }
+  //     }
+  //     setState(() => _isFetchingData = false);
   //   });
   // }
   @override
@@ -950,63 +559,34 @@ class _CustomDialogState extends State<CustomDialog> {
     _getCurrentLocation();
     _initData();
 
-    // Future.microtask(() async {
-    //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-    //   await provider.fetchCustomers(context);
-    //   await provider.initializeCheckinStatus();
-    //
-    //   // ✅ Auto select customer if we're in checkout
-    //   if (widget.isCheckedIn && provider.lastCheckedInCustomer != null) {
-    //     final customers = provider.customerr;
-    //
-    //     customer.Data? foundCustomer;
-    //     try {
-    //       foundCustomer = customers.firstWhere(
-    //             (c) => c.name == provider.lastCheckedInCustomer,
-    //       );
-    //     } catch (e) {
-    //       foundCustomer = null;
-    //     }
-    //
-    //     if (foundCustomer != null) {
-    //       setState(() {
-    //         _selectedCustomer = foundCustomer;
-    //       });
-    //     }
-    //   }
-    // });
     Future.microtask(() async {
       final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
       await provider.fetchCustomers(context);
       await provider.initializeCheckinStatus();
 
-      // ✅ Only auto-select if there's a valid customer name
-      if (widget.isCheckedIn && provider.lastCheckedInCustomer != null && provider.lastCheckedInCustomer!.trim().isNotEmpty) {
+      // ✅ Auto-select last checked-in customer if available
+      if (provider.isCheckedIn && provider.lastCheckedInCustomer != null) {
         final customers = provider.customerr;
-
-        customer.Data? foundCustomer;
         try {
-          foundCustomer = customers.firstWhere(
+          final foundCustomer = customers.firstWhere(
                 (c) => c.name == provider.lastCheckedInCustomer,
           );
-        } catch (e) {
-          foundCustomer = null;
+          setState(() => _selectedCustomer = foundCustomer);
+        } catch (_) {
+          setState(() => _selectedCustomer = null);
         }
-
-        if (foundCustomer != null) {
-          setState(() {
-            _selectedCustomer = foundCustomer;
-          });
-        }
-      } else {
-        // ✅ If no customer found or empty, leave blank
-        setState(() {
-          _selectedCustomer = null;
-        });
       }
-    });
 
+      // ✅ Auto-fill last remarks if available
+      if (provider.isCheckedIn && provider.lastRemarks != null) {
+        _remarkController.text = provider.lastRemarks!;
+      }
+
+      setState(() => _isFetchingData = false);
+    });
   }
+
 
   List<customer.Data> _filterNearbyCustomers(
       List<customer.Data> allCustomers, double userLat, double userLon,
@@ -1022,26 +602,10 @@ class _CustomDialogState extends State<CustomDialog> {
     }).toList();
   }
 
-
-  // Future<void> _initData() async {
-  //   // Start fetching data initially
-  //   setState(() {
-  //     _isFetchingData = true;
-  //     _loadingText = "Fetching data...";
-  //   });
-  //
-  //   await _getCurrentLocation();
-  //
-  //   // Once done
-  //   setState(() {
-  //     _isFetchingData = false;
-  //     _loadingText = "";
-  //   });
-  // }
   Future<void> _initData() async {
     setState(() {
       _isFetchingData = true;
-      _loadingText = "Fetching location and customers...";
+      _loadingText = "Fetching location...";
     });
 
     await _getCurrentLocation();
@@ -1198,75 +762,7 @@ class _CustomDialogState extends State<CustomDialog> {
       };
     }
   }
-  // void _showSearchableDialog(BuildContext context, List<customer.Data> customers) {
-  // void _showSearchableDialog(BuildContext context) {
-  //   final customers = _nearbyCustomers; // 👈 use filtered list
-  //
-  //   final searchController = TextEditingController();
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return StatefulBuilder(
-  //         builder: (context, setDialogState) {
-  //           final keyword = searchController.text.toLowerCase();
-  //           final filteredCustomers = customers.where((c) {
-  //             final name = (c.customerName ?? c.name ?? "").toLowerCase();
-  //             return name.contains(keyword);
-  //           }).toList();
-  //
-  //           return AlertDialog(
-  //             title: const Text("Select Customer"),
-  //             content: SizedBox(
-  //               width: double.maxFinite,
-  //               height: MediaQuery.of(context).size.height * 0.6, // ✅ 60% of screen height
-  //               child: Column(
-  //                 children: [
-  //                   TextField(
-  //                     controller: searchController,
-  //                     decoration: const InputDecoration(
-  //                       hintText: "Search customer...",
-  //                       prefixIcon: Icon(Icons.search),
-  //                       border: OutlineInputBorder(),
-  //                     ),
-  //                     onChanged: (value) {
-  //                       setDialogState(() {});
-  //                     },
-  //                   ),
-  //                   const SizedBox(height: 10),
-  //                   Expanded(
-  //                     child: filteredCustomers.isEmpty
-  //                         ? const Center(child: Text("No customers found"))
-  //                         : ListView.builder(
-  //                       itemCount: filteredCustomers.length,
-  //                       itemBuilder: (context, index) {
-  //                         final c = filteredCustomers[index];
-  //                         return ListTile(
-  //                           title: Text(c.customerName ?? c.name ?? ""),
-  //                           onTap: () {
-  //                             setState(() {
-  //                               _selectedCustomer = c;
-  //                             });
-  //                             Navigator.pop(context);
-  //                           },
-  //                         );
-  //                       },
-  //                     ),
-  //                   ),
-  //                 ],
-  //               ),
-  //             ),
-  //             actions: [
-  //               TextButton(
-  //                 onPressed: () => Navigator.pop(context),
-  //                 child: const Text("Cancel"),
-  //               ),
-  //             ],
-  //           );
-  //         },
-  //       );
-  //     },
-  //   );
-  // }
+
   void _showSearchableDialog(BuildContext context) {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
@@ -1378,524 +874,304 @@ class _CustomDialogState extends State<CustomDialog> {
     );
   }
 
-  // @override
-  // Widget build(BuildContext context) {
-  //   final DateTime now = DateTime.now();
-  //   final String formattedTime = DateFormat('h:mm a').format(now);
-  //   final String formattedDate = DateFormat('EEEE, d MMMM').format(now);
-  //
-  //   return AlertDialog(
-  //     title: const Center(
-  //       child: Text(
-  //         'CheckIn / CheckOut',
-  //         textAlign: TextAlign.center,
-  //         style: TextStyle(
-  //             fontWeight: FontWeight.bold,
-  //             color: Color.fromARGB(255, 3, 28, 48)),
-  //       ),
-  //     ),
-  //     content: Stack(
-  //       children: [
-  //         // 👇 Your details
-  //         Column(
-  //           mainAxisSize: MainAxisSize.min,
-  //           crossAxisAlignment: CrossAxisAlignment.start,
-  //           children: <Widget>[
-  //             Center(
-  //               child: SizedBox(
-  //                 height: 150,
-  //                 width: 150,
-  //                 child: Lottie.asset('assets/images/checkin.json'),
-  //               ),
-  //             ),
-  //             Row(
-  //               children: [
-  //                 const Text(
-  //                   "Status : ",
-  //                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-  //                 ),
-  //                 Text(
-  //                   !widget.isCheckedIn ? 'Check Out' : 'Check In',
-  //                   style: const TextStyle(fontSize: 18),
-  //                 ),
-  //               ],
-  //             ),
-  //             const SizedBox(height: 10),
-  //             Row(
-  //               children: [
-  //                 const Text(
-  //                   "Time : ",
-  //                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-  //                 ),
-  //                 Text(
-  //                   formattedTime,
-  //                   style: const TextStyle(fontSize: 18),
-  //                 ),
-  //               ],
-  //             ),
-  //             const SizedBox(height: 10),
-  //             Row(
-  //               children: [
-  //                 const Text(
-  //                   "Date : ",
-  //                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-  //                 ),
-  //                 Flexible(
-  //                   child: Text(
-  //                     formattedDate,
-  //                     style: const TextStyle(fontSize: 18),
-  //                     overflow: TextOverflow.ellipsis,
-  //                     softWrap: true,
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //             const SizedBox(height: 10),
-  //             if (city.isNotEmpty)
-  //               Row(
-  //                 children: [
-  //                   const Text("City : ",
-  //                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-  //                   Flexible(child: Text(city, style: const TextStyle(fontSize: 18))),
-  //                 ],
-  //               ),
-  //             if (state.isNotEmpty) ...[
-  //               const SizedBox(height: 10),
-  //               Row(
-  //                 children: [
-  //                   const Text("State : ",
-  //                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-  //                   Flexible(child: Text(state, style: const TextStyle(fontSize: 18))),
-  //                 ],
-  //               ),
-  //             ],
-  //             if (area.isNotEmpty) ...[
-  //               const SizedBox(height: 10),
-  //               Row(
-  //                 children: [
-  //                   const Text("Area : ",
-  //                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-  //                   Flexible(child: Text(area, style: const TextStyle(fontSize: 18))),
-  //                 ],
-  //               ),
-  //             ],
-  //           ],
-  //         ),
-  //
-  //         // 👇 Overlay only when loading
-  //         if (_isLoading)
-  //           Positioned.fill(
-  //             child: Container(
-  //               color: Colors.transparent, // semi-transparent background
-  //               child: const Center(
-  //                 child: CircularProgressIndicator(),
-  //               ),
-  //             ),
-  //           ),
-  //       ],
-  //     ),
-  //
-  //
-  //     actions: <Widget>[
-  //       Consumer<SalesOrderProvider>(
-  //         builder: (context, provider, child) {
-  //           return GestureDetector(
-  //             onTap: _isLoading
-  //                 ? null // 🔒 disable while loading
-  //                 : () async {
-  //               setState(() {
-  //                 _isLoading = true;
-  //                 _loadingText = widget.isCheckedIn
-  //                     ? "Checking out..."   // 👈 dynamic text
-  //                     : "Checking in...";
-  //               });
-  //
-  //               bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-  //               if (!serviceEnabled) {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(content: Text('Please enable location services')),
-  //                 );
-  //                 setState(() {
-  //                   _isLoading = false;
-  //                   _loadingText = "";
-  //                 });
-  //                 return;
-  //               }
-  //
-  //               LocationPermission permission = await Geolocator.checkPermission();
-  //               if (permission == LocationPermission.denied ||
-  //                   permission == LocationPermission.deniedForever) {
-  //                 permission = await Geolocator.requestPermission();
-  //                 if (permission == LocationPermission.denied ||
-  //                     permission == LocationPermission.deniedForever) {
-  //                   ScaffoldMessenger.of(context).showSnackBar(
-  //                     const SnackBar(content: Text('Location permission required')),
-  //                   );
-  //                   setState(() {
-  //                     _isLoading = false;
-  //                     _loadingText = "";
-  //                   });
-  //                   return;
-  //                 }
-  //               }
-  //
-  //               await _getCurrentLocation();
-  //
-  //               if (latitude == 0.0 || longitude == 0.0 || city.isEmpty || state.isEmpty || area.isEmpty) {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(content: Text('Fetching location... Please try again')),
-  //                 );
-  //                 setState(() {
-  //                   _isLoading = false;
-  //                   _loadingText = "";
-  //                 });
-  //                 return;
-  //               }
-  //
-  //               await Provider.of<SalesOrderProvider>(context, listen: false)
-  //                   .checkinOrCheckout(
-  //                 widget.formattedDateTime,
-  //                 longitude.toString(),
-  //                 latitude.toString(),
-  //                 city,
-  //                 state,
-  //                 area,
-  //                 context,
-  //               );
-  //
-  //               setState(() {
-  //                 _isLoading = false;
-  //                 _loadingText = "";
-  //               });
-  //               Navigator.of(context).pop();
-  //               await widget.onCheckIn();
-  //             },
-  //               child: Center(
-  //               child: Container(
-  //               decoration: BoxDecoration(
-  //               color: (_isFetchingData || _isLoading)
-  //               ? Colors.grey // 🔒 disabled look
-  //               : Theme.of(context).primaryColor,
-  //           borderRadius: BorderRadius.circular(6),
-  //           ),
-  //           child: Padding(
-  //           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-  //           child: Text(
-  //           _isFetchingData
-  //           ? "Fetching data..."   // 👈 initial state
-  //               : _isLoading
-  //           ? _loadingText     // 👈 "Checking in..." / "Checking out..."
-  //               : (widget.isCheckedIn ? "Check Out" : "Check In"),
-  //           style: const TextStyle(
-  //           color: Colors.white,
-  //           fontWeight: FontWeight.bold,
-  //           ),
-  //           ),
-  //           ),
-  //           ),
-  //               ),
-  //
-  //           );
-  //         },
-  //       ),
-  //     ],
-  //
-  //   );
-  // }
+  final TextEditingController _remarkController = TextEditingController();
+  @override
+  void dispose() {
+    _remarkController.dispose();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context) {
     final DateTime now = DateTime.now();
     final String formattedTime = DateFormat('h:mm a').format(now);
     final String formattedDate = DateFormat('EEEE, d MMMM').format(now);
 
-    return AlertDialog(
-      title: const Center(
-        child: Text(
-          'CheckIn / CheckOut',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color.fromARGB(255, 3, 28, 48),
-          ),
-        ),
-      ),
-      content: Stack(
-        children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Center(
-                child: SizedBox(
-                  height: 150,
-                  width: 150,
-                  child: Lottie.asset('assets/images/checkin.json'),
-                ),
-              ),
-
-              Consumer<SalesOrderProvider>(
-                builder: (context, provider, child) {
-                  final customers = provider.customerr;
-
-                  if (provider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (provider.errorMessage != null) {
-                    return Text("Error: ${provider.errorMessage}",
-                        style: const TextStyle(color: Colors.red));
-                  }
-
-                  if (customers.isEmpty) {
-                    return const Text("No customers found");
-                  }
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Select Customer : ",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        // onTap: () => _showSearchableDialog(context, customers),
-                        onTap: () => _showSearchableDialog(context),
-
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _selectedCustomer != null
-                                      ? (_selectedCustomer!.customerName ??
-                                      _selectedCustomer!.name ??
-                                      "")
-                                      : "Choose a customer",
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: _selectedCustomer != null
-                                        ? Colors.black
-                                        : Colors.grey[600],
-                                  ),
-                                ),
-                              ),
-                              const Icon(Icons.arrow_drop_down),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  );
-                },
-              ),
-
-
-              Row(
-                children: [
-                  const Text(
-                    "Status : ",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  Text(
-                    !widget.isCheckedIn ? 'Check Out' : 'Check In',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Text(
-                    "Time : ",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  Text(
-                    formattedTime,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Text(
-                    "Date : ",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  Flexible(
-                    child: Text(
-                      formattedDate,
-                      style: const TextStyle(fontSize: 18),
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: true,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (city.isNotEmpty)
-                Row(
-                  children: [
-                    const Text("City : ",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    Flexible(child: Text(city, style: const TextStyle(fontSize: 18))),
-                  ],
-                ),
-              if (state.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Text("State : ",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    Flexible(child: Text(state, style: const TextStyle(fontSize: 18))),
-                  ],
-                ),
-              ],
-              if (area.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Text("Area : ",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    Flexible(child: Text(area, style: const TextStyle(fontSize: 18))),
-                  ],
-                ),
-              ],
-            ],
-          ),
-
-          if (_isLoading)
-            Positioned.fill(
-              child: Container(
-                color: Colors.transparent,
-                child: const Center(child: CircularProgressIndicator()),
+    return Consumer<SalesOrderProvider>(
+      builder: (context, provider, child) {
+        final isCheckedIn = provider.isCheckedIn; // ✅ always read latest status
+        return AlertDialog(
+          title: const Center(
+            child: Text(
+              'Check In / Check Out',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color.fromARGB(255, 3, 28, 48),
               ),
             ),
-        ],
-      ),
+          ),
 
-      actions: <Widget>[
-        Consumer<SalesOrderProvider>(
-          builder: (context, provider, child) {
-            return GestureDetector(
+          // ✅ Make content scrollable and keyboard-safe
+          content: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Stack(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Center(
+                      child: SizedBox(
+                        height: 150,
+                        width: 150,
+                        child: Lottie.asset('assets/images/checkin.json'),
+                      ),
+                    ),
+                    if (provider.isLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (provider.errorMessage != null)
+                      Text(
+                        "Error: ${provider.errorMessage!}",
+                        style: const TextStyle(color: Colors.red),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Select Customer:",
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          const SizedBox(height: 6),
+                          InkWell(
+                            onTap: () => _showSearchableDialog(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _selectedCustomer != null
+                                          ? (_selectedCustomer!.customerName ??
+                                          _selectedCustomer!.name ??
+                                          "")
+                                          : "Choose a customer",
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: _selectedCustomer != null
+                                            ? Colors.black
+                                            : Colors.grey[600],
+                                      ),
+                                    ),
+                                  ),
+                                  const Icon(Icons.arrow_drop_down),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Remarks:",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _remarkController,
+                      decoration: const InputDecoration(
+                        hintText: "Enter a note or remark",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                        contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      ),
+                      maxLines: 1,
+                    ),
+
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text(
+                          "Status: ",
+                          style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                        Text(
+                          isCheckedIn ? "Checked In" : "Checked Out",
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Text("Time: ",
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 18)),
+                        Text(formattedTime, style: const TextStyle(fontSize: 18)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Text("Date: ",
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 18)),
+                        Flexible(
+                          child: Text(
+                            formattedDate,
+                            style: const TextStyle(fontSize: 18),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (city.isNotEmpty)
+                      Row(
+                        children: [
+                          const Text("City: ",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          Flexible(
+                              child: Text(city,
+                                  style: const TextStyle(fontSize: 18))),
+                        ],
+                      ),
+                    if (state.isNotEmpty)
+                      Row(
+                        children: [
+                          const Text("State: ",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          Flexible(
+                              child: Text(state,
+                                  style: const TextStyle(fontSize: 18))),
+                        ],
+                      ),
+                    if (area.isNotEmpty)
+                      Row(
+                        children: [
+                          const Text("Area: ",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          Flexible(
+                              child: Text(area,
+                                  style: const TextStyle(fontSize: 18))),
+                        ],
+                      ),
+                  ],
+                ),
+                if (_isLoading)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.transparent,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          actions: [
+            GestureDetector(
               onTap: _isLoading
                   ? null
                   : () async {
-                // if (_selectedCustomer == null) {
-                //   ScaffoldMessenger.of(context).showSnackBar(
-                //     const SnackBar(content: Text('Please select a customer before continuing')),
-                //   );
-                //   return;
-                // }
-
-                setState(() {
-                  _isLoading = true;
-                  _loadingText = widget.isCheckedIn ? "Checking out..." : "Checking in...";
-                });
-
-                bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-                if (!serviceEnabled) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enable location services')),
-                  );
-                  setState(() {
-                    _isLoading = false;
-                    _loadingText = "";
-                  });
-                  return;
-                }
-
-                LocationPermission permission = await Geolocator.checkPermission();
-                if (permission == LocationPermission.denied ||
-                    permission == LocationPermission.deniedForever) {
-                  permission = await Geolocator.requestPermission();
-                  if (permission == LocationPermission.denied ||
-                      permission == LocationPermission.deniedForever) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Location permission required')),
-                    );
-                    setState(() {
-                      _isLoading = false;
-                      _loadingText = "";
-                    });
-                    return;
-                  }
-                }
-
-                await _getCurrentLocation();
-
-                if (latitude == 0.0 ||
-                    longitude == 0.0 ||
-                    city.isEmpty ||
-                    state.isEmpty ||
-                    area.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Fetching location... Please try again')),
-                  );
-                  setState(() {
-                    _isLoading = false;
-                    _loadingText = "";
-                  });
-                  return;
-                }
-
-                await Provider.of<SalesOrderProvider>(context, listen: false)
-                    .checkinOrCheckout(
-                  widget.formattedDateTime,
-                  longitude.toString(),
-                  latitude.toString(),
-                  city,
-                  state,
-                  area,
-                  _selectedCustomer?.name ?? "",
-                  context,
-
-                );
-
-                setState(() {
-                  _isLoading = false;
-                  _loadingText = "";
-                });
-                Navigator.of(context).pop();
-                await widget.onCheckIn();
+                await _handleCheckInOut(context, provider, isCheckedIn);
               },
               child: Center(
                 child: Container(
                   decoration: BoxDecoration(
                     color: (_isFetchingData || _isLoading)
                         ? Colors.grey
-                        : Theme.of(context).primaryColor,
-                    borderRadius: BorderRadius.circular(6),
+                        // : (isCheckedIn ? Colors.red : Colors.green),
+                              : Theme.of(context).primaryColor,
+
+        borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-                    child: Text(
-                      _isFetchingData
-                          ? "Fetching data..."
-                          : _isLoading
-                          ? _loadingText
-                          : (widget.isCheckedIn ? "Check Out" : "Check In"),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                  child: Text(
+                    _isFetchingData
+                        ? "Fetching data..."
+                        : _isLoading
+                        ? _loadingText
+                        : (isCheckedIn ? "Check Out" : "Check In"),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ),
-            );
-          },
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
+  Future<void> _handleCheckInOut(
+      BuildContext context, SalesOrderProvider provider, bool isCheckedIn) async {
+    setState(() {
+      _isLoading = true;
+      _loadingText = isCheckedIn ? "Checking out..." : "Checking in...";
+    });
+
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showSnack('Please enable location services');
+      _stopLoading();
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showSnack('Location permission required');
+        _stopLoading();
+        return;
+      }
+    }
+
+    await _getCurrentLocation();
+    if (latitude == 0.0 || longitude == 0.0) {
+      _showSnack('Fetching location... Please try again');
+      _stopLoading();
+      return;
+    }
+
+    await provider.checkinOrCheckout(
+      widget.formattedDateTime,
+      longitude.toString(),
+      latitude.toString(),
+      city,
+      state,
+      area,
+      _selectedCustomer?.name ?? "",
+      _remarkController.text.trim(),
+      context,
+    );
+
+    _stopLoading();
+    Navigator.of(context).pop();
+    await widget.onCheckIn();
+  }
+
+  void _stopLoading() {
+    setState(() {
+      _isLoading = false;
+      _loadingText = "";
+    });
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 }
