@@ -5473,5 +5473,18 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     _selectedSalesOrderTotal = newTotal.toStringAsFixed(2);
     notifyListeners();
   }
+  int _unreadCount = 0;
+
+  int get unreadCount => _unreadCount;
+
+  void setUnreadCount(int count) {
+    _unreadCount = count;
+    notifyListeners();
+  }
+
+  void markAllAsRead() {
+    _unreadCount = 0;
+    notifyListeners();
+  }
 }
 

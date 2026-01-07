@@ -501,78 +501,6 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                                  Column(
                                    mainAxisSize: MainAxisSize.min,
                                    children: [
-                                     // IconButton(
-                                     //   iconSize: 24,
-                                     //   padding: EdgeInsets.zero,
-                                     //   constraints: const BoxConstraints(),
-                                     //   icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                                     //   tooltip: "Download Accounts Receivable",
-                                     //   onPressed: () async {
-                                     //     // 1️⃣ Pick date
-                                     //     final pickedDate = await showDatePicker(
-                                     //       context: context,
-                                     //       initialDate: DateTime.now(),
-                                     //       firstDate: DateTime(2000),
-                                     //       lastDate: DateTime.now(),
-                                     //     );
-                                     //
-                                     //     if (pickedDate == null) return;
-                                     //
-                                     //     final postingDate =
-                                     //         "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
-                                     //
-                                     //     // 2️⃣ Pick aging range
-                                     //     final range = await showRangeInputDialog(context);
-                                     //     if (range == null) return;
-                                     //
-                                     //     showLoadingDialog(context);
-                                     //
-                                     //     try {
-                                     //       final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-                                     //       final api = provider.apiService!;
-                                     //       final company = await _sharedPrefService.getCompany();
-                                     //       final party = customer.name!;
-                                     //
-                                     //       // 3️⃣ Fetch report
-                                     //       final report = await api.fetchAccountsReceivable(
-                                     //         context,
-                                     //         company!,
-                                     //         postingDate,
-                                     //         party,
-                                     //         range,
-                                     //       );
-                                     //
-                                     //       if (report == null) return;
-                                     //
-                                     //       // 4️⃣ Build human-readable labels
-                                     //       final rangeLabel = buildRangeLabel(range);
-                                     //
-                                     //       final letterheadContent =
-                                     //       await api.fetchLetterHeadContent(context);
-                                     //
-                                     //       final html = buildAccountsReceivableHtml(
-                                     //         report,
-                                     //         party,
-                                     //         postingDate,
-                                     //         rangeLabel,
-                                     //         letterheadContent,
-                                     //         provider.domain,
-                                     //       );
-                                     //
-                                     //       final pdfBytes = await api.generatePdfFromHtml(context, html);
-                                     //
-                                     //       if (pdfBytes != null) {
-                                     //         await saveAndOpenPdf(
-                                     //           pdfBytes,
-                                     //           "Accounts_Receivable_${party}_$postingDate.pdf",
-                                     //         );
-                                     //       }
-                                     //     } finally {
-                                     //       Navigator.pop(context);
-                                     //     }
-                                     //   },
-                                     //
-                                     // ),
                                      IconButton(
                                        iconSize: 24,
                                        padding: EdgeInsets.zero,
@@ -585,8 +513,12 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
 
                                          // final postingDate =
                                          //     "${result.postingDate.year}-${result.postingDate.month.toString().padLeft(2, '0')}-${result.postingDate.day.toString().padLeft(2, '0')}";
-                                         final postingDate = formatDateForApi(result.postingDate);
+                                         // final postingDate = formatDateForApi(result.postingDate);
+                                         final postingDateTime =
+                                         DateTime.now().subtract(Duration(days: result.daysBefore));
 
+// Format for API
+                                         final postingDate = formatDateForApi(postingDateTime);
                                          showLoadingDialog(context);
 
                                          try {
@@ -778,121 +710,172 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
     return labels.join(", ");
   }
 
-  // Future<String?> showRangeInputDialog(BuildContext context) async {
-  //   final controller = TextEditingController(text: "30,60,90,120");
+  // Future<ReceivableFilterResult?> showReceivableFilterDialog(
+  //     BuildContext context,
+  //     ) async {
+  //   DateTime selectedDate = DateTime.now();
+  //   final rangeController = TextEditingController(text: "30,60,90,120");
   //
-  //   return showDialog<String>(
+  //   return showDialog<ReceivableFilterResult>(
   //     context: context,
-  //     builder: (_) => AlertDialog(
-  //       title: const Text("Aging Ranges"),
-  //       content: TextField(
-  //         controller: controller,
-  //         keyboardType: TextInputType.number,
-  //         decoration: const InputDecoration(
-  //           hintText: "Example: 30,60 or 30,60,90",
-  //         ),
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context),
-  //           child: const Text("Cancel"),
-  //         ),
-  //         ElevatedButton(
-  //           onPressed: () {
-  //             final value = controller.text.trim();
-  //             if (value.isEmpty) return;
-  //             Navigator.pop(context, value);
-  //           },
-  //           child: const Text("Continue"),
-  //         ),
-  //       ],
-  //     ),
+  //     barrierDismissible: false,
+  //     builder: (context) {
+  //       return StatefulBuilder(
+  //         builder: (context, setState) {
+  //           return AlertDialog(
+  //             title: const Text("Accounts Receivable Filter"),
+  //             content: Column(
+  //               mainAxisSize: MainAxisSize.min,
+  //               children: [
+  //                 // Date Picker Field
+  //                 InkWell(
+  //                   onTap: () async {
+  //                     final picked = await showDatePicker(
+  //                       context: context,
+  //                       initialDate: selectedDate,
+  //                       firstDate: DateTime(2000),
+  //                       lastDate: DateTime.now(),
+  //                     );
+  //
+  //                     if (picked != null) {
+  //                       setState(() => selectedDate = picked);
+  //                     }
+  //                   },
+  //                   child: InputDecorator(
+  //                     decoration: const InputDecoration(
+  //                       labelText: "Posting Date",
+  //                       border: OutlineInputBorder(),
+  //                       suffixIcon: Icon(Icons.calendar_today),
+  //                     ),
+  //                     // child: Text(
+  //                     //   "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
+  //                     // ),
+  //                     child: Text(
+  //                       formatDateForDisplay(selectedDate),
+  //                     ),
+  //
+  //                   ),
+  //                 ),
+  //
+  //                 const SizedBox(height: 16),
+  //
+  //                 // Aging Range Field
+  //                 TextField(
+  //                   controller: rangeController,
+  //                   keyboardType: TextInputType.number,
+  //                   decoration: const InputDecoration(
+  //                     labelText: "Aging Ranges",
+  //                     hintText: "Example: 30,60,90",
+  //                     border: OutlineInputBorder(),
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.pop(context),
+  //                 child: const Text("Cancel"),
+  //               ),
+  //               ElevatedButton(
+  //                 onPressed: () {
+  //                   final range = rangeController.text.trim();
+  //                   if (range.isEmpty) return;
+  //
+  //                   Navigator.pop(
+  //                     context,
+  //                     ReceivableFilterResult(
+  //                       postingDate: selectedDate,
+  //                       range: range,
+  //                     ),
+  //                   );
+  //                 },
+  //                 child: const Text("Continue"),
+  //               ),
+  //             ],
+  //           );
+  //         },
+  //       );
+  //     },
   //   );
   // }
   Future<ReceivableFilterResult?> showReceivableFilterDialog(
       BuildContext context,
       ) async {
-    DateTime selectedDate = DateTime.now();
+    final daysController = TextEditingController(text: "0");
     final rangeController = TextEditingController(text: "30,60,90,120");
 
     return showDialog<ReceivableFilterResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text("Accounts Receivable Filter"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Date Picker Field
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime.now(),
-                      );
-
-                      if (picked != null) {
-                        setState(() => selectedDate = picked);
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: "Posting Date",
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.calendar_today),
-                      ),
-                      // child: Text(
-                      //   "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
-                      // ),
-                      child: Text(
-                        formatDateForDisplay(selectedDate),
-                      ),
-
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Aging Range Field
-                  TextField(
-                    controller: rangeController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Aging Ranges",
-                      hintText: "Example: 30,60,90",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
+        return AlertDialog(
+          title: const Text("Accounts Receivable Filter"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Days Before Field
+              // TextField(
+              //   controller: daysController,
+              //   keyboardType: TextInputType.number,
+              //   decoration: const InputDecoration(
+              //     labelText: "Posting Date Offset (Days)",
+              //     // hintText: "0 = Today, 30 = 30 days before",
+              //     border: OutlineInputBorder(),
+              //   ),
+              // ),
+              TextField(
+                controller: daysController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Posting Date Offset (Days)",
+                  // hintText: "0 = Today, 30 = 30 days before",
+                  border: OutlineInputBorder(),
+                ),
+                onTap: () {
+                  daysController.selection = TextSelection(
+                    baseOffset: 0,
+                    extentOffset: daysController.text.length,
+                  );
+                },
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final range = rangeController.text.trim();
-                    if (range.isEmpty) return;
 
-                    Navigator.pop(
-                      context,
-                      ReceivableFilterResult(
-                        postingDate: selectedDate,
-                        range: range,
-                      ),
-                    );
-                  },
-                  child: const Text("Continue"),
+
+              const SizedBox(height: 16),
+
+              // Aging Range Field
+              TextField(
+                controller: rangeController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Aging Ranges",
+                  hintText: "Example: 30,60,90",
+                  border: OutlineInputBorder(),
                 ),
-              ],
-            );
-          },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final days = int.tryParse(daysController.text.trim()) ?? 0;
+                final range = rangeController.text.trim();
+                if (range.isEmpty) return;
+
+                Navigator.pop(
+                  context,
+                  ReceivableFilterResult(
+                    daysBefore: days,
+                    range: range,
+                  ),
+                );
+              },
+              child: const Text("Continue"),
+            ),
+          ],
         );
       },
     );
@@ -900,15 +883,25 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
 
 
 }
+// class ReceivableFilterResult {
+//   final DateTime postingDate;
+//   final String range;
+//
+//   ReceivableFilterResult({
+//     required this.postingDate,
+//     required this.range,
+//   });
+// }
 class ReceivableFilterResult {
-  final DateTime postingDate;
+  final int daysBefore;
   final String range;
 
   ReceivableFilterResult({
-    required this.postingDate,
+    required this.daysBefore,
     required this.range,
   });
 }
+
 
 class BuildCustomerDetail extends StatelessWidget {
   final String label;

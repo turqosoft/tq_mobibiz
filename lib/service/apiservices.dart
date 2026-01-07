@@ -7582,30 +7582,116 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     }
   }
 
-  //sales Order
+  // sales Order
+  // Future<SalesOrderResponse?> salesOrder(
+  //     String customerName,
+  //     String deliveryDate,
+  //     List item,
+  //     BuildContext context, {
+  //       Map<String, dynamic>? customerDetails,
+  //       String? setWarehouse, // 🆕
+  //     }) async {
+  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //   const url = '/resource/Sales Order';
+  //   var request = {
+  //     "customer": customerName,
+  //     "delivery_date": deliveryDate,
+  //     "items": item,
+  //     if (setWarehouse != null) "set_warehouse": setWarehouse, // 🆕
+  //     if (customerDetails != null) ...customerDetails,
+  //   };
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     debugPrint('Requesting data from URL: ${baseUrl + url}');
+  //     final response = await _dio.post(
+  //       url,
+  //       data: request,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     debugPrint('Response status: ${response.statusCode}');
+  //     debugPrint('Response data: ${response.data}');
+  //     debugPrint('Request data: $request');
+  //
+  //     if (response.statusCode == 200) {
+  //       provider.clearItem();
+  //       return SalesOrderResponse.fromJson(response.data);
+  //     } else {
+  //       // 🔹 Extract ERP error
+  //       final data = response.data;
+  //       if (data is Map && data.containsKey('exception')) {
+  //         final rawMessage = data['exception'] as String;
+  //         final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
+  //         throw Exception(formattedMessage);
+  //       }
+  //       throw Exception('Failed to create sales order');
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       final data = e.response?.data;
+  //       debugPrint('Response data: $data');
+  //       if (data is Map && data.containsKey('exception')) {
+  //         final rawMessage = data['exception'] as String;
+  //         final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
+  //         throw Exception(formattedMessage);
+  //       }
+  //     }
+  //     throw Exception('Failed to create sales order');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception(e.toString());
+  //   }
+  // }
   Future<SalesOrderResponse?> salesOrder(
       String customerName,
       String deliveryDate,
-      List item,
+      List items,
       BuildContext context, {
         Map<String, dynamic>? customerDetails,
-        String? setWarehouse, // 🆕
+        String? setWarehouse,
       }) async {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
     const url = '/resource/Sales Order';
-    var request = {
+
+    // 🔹 Fetch branch + default warehouse of logged-in user
+    final userBranchData = await fetchUserBranch(context);
+
+    if (userBranchData == null || userBranchData['branch']!.isEmpty) {
+      throw Exception('Branch is mandatory but not configured for user.');
+    }
+
+    final String branch = userBranchData['branch']!;
+    final String defaultWarehouse = userBranchData['default_warehouse'] ?? '';
+
+    // 🔹 Final request payload
+    final request = {
       "customer": customerName,
       "delivery_date": deliveryDate,
-      "items": item,
-      if (setWarehouse != null) "set_warehouse": setWarehouse, // 🆕
+      "branch": branch, // ✅ REQUIRED
+      "items": items,
+
+      // Priority: manually selected warehouse > user default
+      if (setWarehouse != null && setWarehouse.isNotEmpty)
+        "set_warehouse": setWarehouse
+      else if (defaultWarehouse.isNotEmpty)
+        "set_warehouse": defaultWarehouse,
+
       if (customerDetails != null) ...customerDetails,
     };
 
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      debugPrint('Requesting data from URL: ${baseUrl + url}');
       final response = await _dio.post(
         url,
         data: request,
@@ -7618,38 +7704,18 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
         ),
       );
 
-      debugPrint('Response status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
-      debugPrint('Request data: $request');
-
       if (response.statusCode == 200) {
-        provider.clearItem();
         return SalesOrderResponse.fromJson(response.data);
       } else {
-        // 🔹 Extract ERP error
         final data = response.data;
         if (data is Map && data.containsKey('exception')) {
-          final rawMessage = data['exception'] as String;
-          final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
-          throw Exception(formattedMessage);
+          final raw = data['exception'];
+          throw Exception(raw.replaceAll(RegExp(r'<[^>]*>'), ''));
         }
-        throw Exception('Failed to create sales order');
+        throw Exception('Failed to create Sales Order');
       }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        final data = e.response?.data;
-        debugPrint('Response data: $data');
-        if (data is Map && data.containsKey('exception')) {
-          final rawMessage = data['exception'] as String;
-          final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
-          throw Exception(formattedMessage);
-        }
-      }
-      throw Exception('Failed to create sales order');
     } catch (e) {
-      debugPrint('Exception: $e');
-      throw Exception(e.toString());
+      rethrow;
     }
   }
 

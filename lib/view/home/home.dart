@@ -195,6 +195,42 @@ class _HomeScreenState extends State<HomeScreen> {
       print('Error fetching employee details: $e');
     }
   }
+  void _showNotificationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return AlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Notifications',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: _buildNotificationContent(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                // Optional: mark all as read
+                Navigator.pop(context);
+              },
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   IconData _getIconForMenu(String? menuItem) {
     switch (menuItem) {
@@ -320,11 +356,33 @@ class _HomeScreenState extends State<HomeScreen> {
     final isEmployee = provider.isEmployee;
     return Scaffold(
       backgroundColor: Color.fromARGB(255, 206, 251, 246),
+      // appBar: AppBar(
+      //   backgroundColor: AppColors.primaryColor,
+      //   title: Text('Home', style: TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold)),
+      //   iconTheme: IconThemeData(color: Colors.white),
+      // ),
       appBar: AppBar(
         backgroundColor: AppColors.primaryColor,
-        title: Text('Home', style: TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold)),
-        iconTheme: IconThemeData(color: Colors.white),
+        title: const Text(
+          'Home',
+          style: TextStyle(
+            fontSize: 24,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none),
+            onPressed: () {
+              _showNotificationDialog(context);
+            },
+          ),
+        ],
       ),
+
+
       drawer: DrawerWidget(),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
@@ -402,6 +460,15 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
     );
   }
+  Widget _buildNotificationContent() {
+    return const Center(
+      child: Text(
+        'No notifications available',
+        style: TextStyle(color: Colors.black54),
+      ),
+    );
+  }
+
 }
 
 class GridItem {

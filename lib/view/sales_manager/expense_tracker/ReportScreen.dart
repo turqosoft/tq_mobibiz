@@ -83,76 +83,153 @@ class _ReportScreenState extends State<ReportScreen> {
     DateTime tempFrom = provider.fromDate;
     DateTime tempTo = provider.toDate;
 
+    // await showModalBottomSheet(
+    //   context: context,
+    //   shape: const RoundedRectangleBorder(
+    //     borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    //   ),
+    //   builder: (_) {
+    //     return Padding(
+    //       padding: const EdgeInsets.all(16),
+    //       child: Column(
+    //         mainAxisSize: MainAxisSize.min,
+    //         crossAxisAlignment: CrossAxisAlignment.start,
+    //         children: [
+    //           const Text(
+    //             "Filter by Date",
+    //             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    //           ),
+    //           const SizedBox(height: 16),
+    //
+    //           ListTile(
+    //             title: const Text("From Date"),
+    //             subtitle: Text(_formatDate(
+    //                 DateFormat('yyyy-MM-dd').format(tempFrom))),
+    //             trailing: const Icon(Icons.calendar_today),
+    //             onTap: () async {
+    //               final picked = await showDatePicker(
+    //                 context: context,
+    //                 initialDate: tempFrom,
+    //                 firstDate: DateTime(2020),
+    //                 lastDate: DateTime.now(),
+    //               );
+    //               if (picked != null) tempFrom = picked;
+    //             },
+    //           ),
+    //
+    //           ListTile(
+    //             title: const Text("To Date"),
+    //             subtitle: Text(_formatDate(
+    //                 DateFormat('yyyy-MM-dd').format(tempTo))),
+    //             trailing: const Icon(Icons.calendar_today),
+    //             onTap: () async {
+    //               final picked = await showDatePicker(
+    //                 context: context,
+    //                 initialDate: tempTo,
+    //                 firstDate: tempFrom,
+    //                 lastDate: DateTime.now(),
+    //               );
+    //               if (picked != null) tempTo = picked;
+    //             },
+    //           ),
+    //
+    //           const SizedBox(height: 12),
+    //
+    //           SizedBox(
+    //             width: double.infinity,
+    //             child: ElevatedButton(
+    //               onPressed: () {
+    //                 provider.fetchEEMList(
+    //                   from: tempFrom,
+    //                   to: tempTo,
+    //                 );
+    //                 Navigator.pop(context);
+    //               },
+    //               child: const Text("Apply Filter"),
+    //             ),
+    //           ),
+    //         ],
+    //       ),
+    //     );
+    //   },
+    // );
     await showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // important for small screens
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Filter by Date",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              ListTile(
-                title: const Text("From Date"),
-                subtitle: Text(_formatDate(
-                    DateFormat('yyyy-MM-dd').format(tempFrom))),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: tempFrom,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) tempFrom = picked;
-                },
-              ),
-
-              ListTile(
-                title: const Text("To Date"),
-                subtitle: Text(_formatDate(
-                    DateFormat('yyyy-MM-dd').format(tempTo))),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: tempTo,
-                    firstDate: tempFrom,
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) tempTo = picked;
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    provider.fetchEEMList(
-                      from: tempFrom,
-                      to: tempTo,
-                    );
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Apply Filter"),
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Filter by Date",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+
+                ListTile(
+                  title: const Text("From Date"),
+                  subtitle: Text(
+                    _formatDate(DateFormat('yyyy-MM-dd').format(tempFrom)),
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: tempFrom,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) tempFrom = picked;
+                  },
+                ),
+
+                ListTile(
+                  title: const Text("To Date"),
+                  subtitle: Text(
+                    _formatDate(DateFormat('yyyy-MM-dd').format(tempTo)),
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: tempTo,
+                      firstDate: tempFrom,
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) tempTo = picked;
+                  },
+                ),
+
+                const SizedBox(height: 12),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      provider.fetchEEMList(
+                        from: tempFrom,
+                        to: tempTo,
+                      );
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Apply Filter"),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
+
   }
 
   @override
