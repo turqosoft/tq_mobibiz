@@ -21,7 +21,7 @@ class PrivacyPolicyPage extends StatelessWidget {
               // ),
               // SizedBox(height: 16),
               Text(
-                'Turqosoft Pvt Ltd',
+                'Turqosoft Solutions Pvt Ltd',
                 style: TextStyle(fontSize: 16),
               ),
              

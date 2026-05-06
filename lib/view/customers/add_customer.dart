@@ -165,6 +165,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     }
 
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+    final salesPerson = await provider.getSalesPersonWithCache();
     final isDuplicate = await provider.customerAlreadyExists(
       nameController.text.trim(),
       context,
@@ -203,6 +204,13 @@ ${countryController.text}
       "mobile_no": mobileController.text,
       "latitude": latitude ?? 0.0,
       "longitude": longitude ?? 0.0,
+      // ✅ SALES TEAM CHILD TABLE
+      "sales_team": [
+        {
+          "sales_person": salesPerson,
+          "allocated_percentage": 100
+        }
+      ]
     };
 
     _showLoading();

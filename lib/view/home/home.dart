@@ -32,15 +32,23 @@ import 'package:sales_ordering_app/model/customer_list_model.dart' as customer;
 
 // import '../../model/customer_list_model.dart';
 import '../../main.dart';
+import '../Appointments/appointments_screen.dart';
+import '../PickItems/pickScreen.dart';
 import '../ToDo/todos_screen.dart';
 import '../Work Order/Work_Order_list.dart';
+import '../estimatePreparation/create_estimate_screen.dart';
+import '../estimatePreparation/estimate_tab_screen.dart';
+import '../maintenance_visit/maintenanceVistScreen.dart';
+import '../maintenance_visit/maintenance_visit_list_screen.dart';
 import '../member_registration/memberRegistrationScreen.dart';
 import '../pos_invoice/POSInvoiceCreateScreen.dart';
 import '../pos_invoice/PosInvoice.dart';
 import '../pos_invoice/PosOpeningEntry.dart';
+import '../projects/project_list_screen.dart';
 import '../sales_manager/SalesManagerScreen.dart';
 import '../sales_manager/expense_tracker/ExpenseTrackerScreen.dart';
 import '../sales_quotation/SalesQuotation.dart';
+import '../task/task_screen.dart';
 
 
 // import 'package:geolocator/geolocator.dart';
@@ -58,41 +66,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _pollingTimer;
   String? _lastPickListName;
   bool _isInitialLoad = true;
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   _startPolling();
-  //
-  //
-  //   WidgetsBinding.instance.addPostFrameCallback((_) async {
-  //     _homeDetails();
-  //     _printStoredLoginDetails();
-  //     _employeeDetails();
-  //
-  //     // ✅ Check if user is employee after login
-  //     final provider =
-  //     Provider.of<SalesOrderProvider>(context, listen: false);
-  //     await provider.checkIfUserIsEmployee(context);
-  //     await provider.fetchPickList(context);
-  //     int newCount = await provider.fetchPickList(context);
-  //
-  //     if (newCount > 0) {
-  //       _showNotification(
-  //         "Pending Picklists",
-  //         "$newCount pending picklists available",
-  //       );
-  //     }
-  //   });
-  // }
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
-    _startPolling();
+    // _startPolling();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _homeDetails();
+      await _loadUserInfo();
       _printStoredLoginDetails();
       _employeeDetails();
 
@@ -101,15 +84,15 @@ class _HomeScreenState extends State<HomeScreen> {
       await provider.checkIfUserIsEmployee(context);
 
       // 🔹 Fetch picklist for initial load
-      int newCount = await provider.fetchPickList(context);
+      // int newCount = await provider.fetchPickList(context);
 
       // 🔹 Show "Pending Picklists" ONLY on first load
-      if (_isInitialLoad && newCount > 0) {
-        _showNotification(
-          "Pending Picklists",
-          "$newCount pending picklists available",
-        );
-      }
+      // if (_isInitialLoad && newCount > 0) {
+      //   _showNotification(
+      //     "Pending Picklists",
+      //     "$newCount pending picklists available",
+      //   );
+      // }
 
       // 🔹 Initial load completed
       _isInitialLoad = false;
@@ -121,44 +104,56 @@ class _HomeScreenState extends State<HomeScreen> {
     _pollingTimer?.cancel();
     super.dispose();
   }
+  String _fullName = '';
+  String _company = '';
 
-  void _startPolling() {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  Future<void> _loadUserInfo() async {
+    final fullName = await _sharedPrefService.getFullName();
+    final company = await _sharedPrefService.getCompany();
 
-    _pollingTimer = Timer.periodic(const Duration(seconds: 20), (timer) async {
-      int newCount = await provider.fetchPickList(context);
-
-      // if (newCount > 0) {
-      if (!_isInitialLoad && newCount > 0) {
-
-        _showNotification(
-          "New Picklists Added",
-          "$newCount pending picklists available",
-        );
-      }
+    setState(() {
+      _fullName = fullName ?? '';
+      _company = company ?? '';
     });
   }
 
-  Future<void> _showNotification(String title, String body) async {
-    const AndroidNotificationDetails androidDetails =
-    AndroidNotificationDetails(
-      "picklist_channel",
-      "Pick List Alerts",
-      importance: Importance.high,
-      priority: Priority.high,
-    );
+  // void _startPolling() {
+  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //   _pollingTimer = Timer.periodic(const Duration(seconds: 20), (timer) async {
+  //     int newCount = await provider.fetchPickList(context);
+  //
+  //     // if (newCount > 0) {
+  //     if (!_isInitialLoad && newCount > 0) {
+  //
+  //       _showNotification(
+  //         "New Picklists Added",
+  //         "$newCount pending picklists available",
+  //       );
+  //     }
+  //   });
+  // }
 
-    const NotificationDetails notificationDetails =
-    NotificationDetails(android: androidDetails);
-
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      title,
-      body,
-      notificationDetails,
-      payload: "open_picklist", // <-- ADD PAYLOAD
-    );
-  }
+  // Future<void> _showNotification(String title, String body) async {
+  //   const AndroidNotificationDetails androidDetails =
+  //   AndroidNotificationDetails(
+  //     "picklist_channel",
+  //     "Pick List Alerts",
+  //     importance: Importance.high,
+  //     priority: Priority.high,
+  //   );
+  //
+  //   const NotificationDetails notificationDetails =
+  //   NotificationDetails(android: androidDetails);
+  //
+  //   await flutterLocalNotificationsPlugin.show(
+  //     0,
+  //     title,
+  //     body,
+  //     notificationDetails,
+  //     payload: "open_picklist", // <-- ADD PAYLOAD
+  //   );
+  // }
 
   Future<void> _printStoredLoginDetails() async {
     await _sharedPrefService.printLoginDetails();
@@ -167,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _homeDetails() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
     setState(() => isLoading = true);
-    
+
     try {
       final homeData = await provider.homeDetails(context);
       if (homeData != null && homeData.message != null) {
@@ -185,6 +180,58 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => isLoading = false);
     }
   }
+  // GridItem _appointmentsTile() {
+  //   return GridItem(
+  //     icon: Icons.takeout_dining,
+  //     title: 'Pick',
+  //     navigateTo: (context) =>
+  //         Navigator.push(
+  //           context,
+  //           MaterialPageRoute(builder: (_) => PickItemsPage()),
+  //         ),
+  //   );
+  // }
+  //
+  // Future<void> _homeDetails() async {
+  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //   setState(() => isLoading = true);
+  //
+  //   try {
+  //     final homeData = await provider.homeDetails(context);
+  //
+  //     final List<GridItem> items = [];
+  //
+  //     if (homeData != null && homeData.message != null) {
+  //       items.addAll(
+  //         homeData.message!.map(
+  //               (msg) => GridItem(
+  //             icon: _getIconForMenu(msg.tqMenuItem),
+  //             title: msg.tqMenuItem ?? "Unknown",
+  //             navigateTo: (context) =>
+  //                 _navigateToScreen(msg.tqMenuItem, context),
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //
+  //     // ✅ Ensure Appointments tile is ALWAYS present
+  //     final alreadyExists = items.any(
+  //           (item) => item.title == 'Appointments',
+  //     );
+  //
+  //     if (!alreadyExists) {
+  //       items.insert(0, _appointmentsTile()); // top position
+  //     }
+  //
+  //     setState(() {
+  //       gridItems = items;
+  //     });
+  //   } catch (e) {
+  //     debugPrint('Error fetching home tiles: $e');
+  //   } finally {
+  //     setState(() => isLoading = false);
+  //   }
+  // }
 
   Future<void> _employeeDetails() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
@@ -257,7 +304,12 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'Member Registration': return Icons.new_label_outlined;
       case 'Sales Manager': return Icons.person_sharp;
       case 'ToDos': return Icons.format_list_numbered;
-
+      case 'Tasks': return Icons.task;
+      case 'Projects': return Icons.work;
+      case 'Estimate': return Icons.co_present_outlined;
+      case 'Maintenance Visit': return Icons.workspace_premium;
+      case 'Patient Appointment': return Icons.local_hospital_sharp;
+      case 'Pick': return Icons.takeout_dining;
 
       default: return Icons.help_outline;
     }
@@ -304,7 +356,64 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'Products': Navigator.push(context, MaterialPageRoute(builder: (_) => ItemListScreen())); break;
       case 'Purchase Request': Navigator.push(context, MaterialPageRoute(builder: (_) => PurchaseRequestListScreen())); break;
       case 'Pick List': Navigator.push(context, MaterialPageRoute(builder: (_) => PickListPage())); break;
-      case 'Customers': Navigator.push(context, MaterialPageRoute(builder: (_) => CustomersListScreen())); break;
+      // case 'Customers': Navigator.push(context, MaterialPageRoute(builder: (_) => CustomersListScreen())); break;
+      case 'Customers':
+      // ✅ Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Loading customers...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        try {
+          // ✅ Preload customer data
+          final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+          await provider.customerList(context);
+
+          // ✅ Close loading dialog
+          if (context.mounted) {
+            Navigator.pop(context);
+          }
+
+          // ✅ Navigate to customer screen
+          if (context.mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => CustomersListScreen()),
+            );
+          }
+        } catch (e) {
+          // ✅ Close loading dialog on error
+          if (context.mounted) {
+            Navigator.pop(context);
+          }
+
+          // ✅ Show error message
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to load customers: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+        break;
+
       case 'Stock': Navigator.push(context, MaterialPageRoute(builder: (_) => CurrentStockList())); break;
       case 'Stock Updates': Navigator.push(context, MaterialPageRoute(builder: (_) => StockReconciliationScreen())); break;
       case 'Material Request': Navigator.push(context, MaterialPageRoute(builder: (_) => MaterialRequest())); break;
@@ -317,7 +426,12 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'Member Registration': Navigator.push(context, MaterialPageRoute(builder: (_) => MemberRegistrationScreen())); break;
       case 'Sales Manager': Navigator.push(context, MaterialPageRoute(builder: (_) => SalesManagerScreen())); break;
       case 'ToDos': Navigator.push(context, MaterialPageRoute(builder: (_) => ToDosScreen())); break;
-
+      case 'Tasks': Navigator.push(context, MaterialPageRoute(builder: (_) => TaskScreen())); break;
+      case 'Projects': Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectListScreen())); break;
+      case 'Maintenance Visit': Navigator.push(context, MaterialPageRoute(builder: (_) => MaintenanceVisitListScreen())); break;
+      case 'Estimate': Navigator.push(context, MaterialPageRoute(builder: (_) => EstimateTabScreen())); break;
+      case 'Patient Appointment': Navigator.push(context, MaterialPageRoute(builder: (_) => AppointmentsScreen())); break;
+      case 'Pick': Navigator.push(context, MaterialPageRoute(builder: (_) => PickItemsPage())); break;
       case 'POS Invoice':
         final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
@@ -350,104 +464,144 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget _buildPrompt() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Text(
+        "What do you want to do today?",
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<SalesOrderProvider>(context);
+    final provider = context.watch<SalesOrderProvider>();
     final isEmployee = provider.isEmployee;
+
     return Scaffold(
-      backgroundColor: Color.fromARGB(255, 206, 251, 246),
-      // appBar: AppBar(
-      //   backgroundColor: AppColors.primaryColor,
-      //   title: Text('Home', style: TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold)),
-      //   iconTheme: IconThemeData(color: Colors.white),
-      // ),
-      appBar: AppBar(
-        backgroundColor: AppColors.primaryColor,
-        title: const Text(
-          'Home',
-          style: TextStyle(
-            fontSize: 24,
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+        key: _scaffoldKey,
+        backgroundColor: const Color.fromARGB(255, 206, 251, 246),
+        appBar: AppBar(
+          automaticallyImplyLeading: false, // ❗ remove hamburger
+          backgroundColor: AppColors.primaryColor,
+          elevation: 0,
+          toolbarHeight: 120, // 🔑 makes it look like image
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row (App name + icons)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'MobiBizz',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      // IconButton(
+                      //   icon: const Icon(Icons.settings, color: Colors.white),
+                      //   onPressed: () {
+                      //     // settings navigation if needed
+                      //   },
+                      // ),
+                      IconButton(
+                        icon: const Icon(Icons.notifications_none, color: Colors.white),
+                        onPressed: () => _showNotificationDialog(context),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          _scaffoldKey.currentState?.openDrawer(); // ✅ OPEN DRAWER
+                        },
+                        child: const CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.white,
+                          child: Icon(Icons.person, size: 18, color: Colors.black),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // Greeting
+              Text(
+                'HELLO, ${_fullName.toUpperCase()}!',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+              if (_company.isNotEmpty)
+                Text(
+                  _company,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,
+                  ),
+                ),
+            ],
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none),
-            onPressed: () {
-              _showNotificationDialog(context);
-            },
-          ),
-        ],
-      ),
 
-
-      drawer: DrawerWidget(),
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
+        drawer: DrawerWidget(),
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+        _buildPrompt(),
+        Expanded(
               child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16.0,
-                  mainAxisSpacing: 10.0,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 itemCount: gridItems.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1,
+                ),
                 itemBuilder: (context, index) {
                   final item = gridItems[index];
                   final isCheckin = item.title == 'Checkin';
-                  // return GestureDetector(
-                  //   onTap: () => gridItems[index].navigateTo?.call(context),
-                  //   child: Container(
-                  //     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8.0)),
-                  //     child: Column(
-                  //       mainAxisAlignment: MainAxisAlignment.center,
-                  //       children: [
-                  //         Icon(gridItems[index].icon, size: 40, color: Colors.black),
-                  //         SizedBox(height: 10),
-                  //         Text(gridItems[index].title, style: TextStyle(fontSize: 16)),
-                  //       ],
-                  //     ),
-                  //   ),
-                  // );
+                  final disabled = isCheckin && !isEmployee;
+
                   return GestureDetector(
-                    onTap: () {
-                      // ✅ If Checkin and not employee, show message instead of navigation
-                      if (isCheckin && !isEmployee) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text(
-                                  "Only employees can use the Checkin module.")),
-                        );
-                        return;
-                      }
-                      item.navigateTo?.call(context);
-                    },
+                    onTap: disabled ? null : () => item.navigateTo?.call(context),
                     child: Opacity(
-                      opacity: (isCheckin && !isEmployee) ? 0.5 : 1.0,
+                      opacity: disabled ? 0.5 : 1,
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(8.0),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(item.icon,
-                                size: 40,
-                                color: (isCheckin && !isEmployee)
-                                    ? Colors.grey
-                                    : Colors.black),
-                            const SizedBox(height: 10),
+                            Icon(
+                              item.icon,
+                              size: 26,
+                              color: disabled ? Colors.grey : Colors.black,
+                            ),
+                            const SizedBox(height: 6),
                             Text(
                               item.title,
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 16,
-                                color: (isCheckin && !isEmployee)
-                                    ? Colors.grey
-                                    : Colors.black,
+                                fontSize: 12,
+                                color: disabled ? Colors.grey : Colors.black,
                               ),
                             ),
                           ],
@@ -457,8 +611,77 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
+              // child: GridView.builder(
+              //   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              //     crossAxisCount: 2,
+              //     crossAxisSpacing: 16.0,
+              //     mainAxisSpacing: 10.0,
+              //   ),
+              //   itemCount: gridItems.length,
+              //   itemBuilder: (context, index) {
+              //     final item = gridItems[index];
+              //     final isCheckin = item.title == 'Checkin';
+              //     // return GestureDetector(
+              //     //   onTap: () => gridItems[index].navigateTo?.call(context),
+              //     //   child: Container(
+              //     //     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8.0)),
+              //     //     child: Column(
+              //     //       mainAxisAlignment: MainAxisAlignment.center,
+              //     //       children: [
+              //     //         Icon(gridItems[index].icon, size: 40, color: Colors.black),
+              //     //         SizedBox(height: 10),
+              //     //         Text(gridItems[index].title, style: TextStyle(fontSize: 16)),
+              //     //       ],
+              //     //     ),
+              //     //   ),
+              //     // );
+              //     return GestureDetector(
+              //       onTap: () {
+              //         // ✅ If Checkin and not employee, show message instead of navigation
+              //         if (isCheckin && !isEmployee) {
+              //           ScaffoldMessenger.of(context).showSnackBar(
+              //             const SnackBar(
+              //                 content: Text(
+              //                     "Only employees can use the Checkin module.")),
+              //           );
+              //           return;
+              //         }
+              //         item.navigateTo?.call(context);
+              //       },
+              //       child: Opacity(
+              //         opacity: (isCheckin && !isEmployee) ? 0.5 : 1.0,
+              //         child: Container(
+              //           decoration: BoxDecoration(
+              //             color: Colors.white,
+              //             borderRadius: BorderRadius.circular(8.0),
+              //           ),
+              //           child: Column(
+              //             mainAxisAlignment: MainAxisAlignment.center,
+              //             children: [
+              //               Icon(item.icon,
+              //                   size: 40,
+              //                   color: (isCheckin && !isEmployee)
+              //                       ? Colors.grey
+              //                       : Colors.black),
+              //               const SizedBox(height: 10),
+              //               Text(
+              //                 item.title,
+              //                 style: TextStyle(
+              //                   fontSize: 16,
+              //                   color: (isCheckin && !isEmployee)
+              //                       ? Colors.grey
+              //                       : Colors.black,
+              //                 ),
+              //               ),
+              //             ],
+              //           ),
+              //         ),
+              //       ),
+              //     );
+              //   },
+              // ),
             ),
-    );
+    ]));
   }
   Widget _buildNotificationContent() {
     return const Center(
@@ -502,8 +725,8 @@ void _showPopupDialog(BuildContext context) {
                   );
                 } else {
                   final message = provider.isCheckedIn
-                      ? 'Check-in successful!'
-                      : 'Check-out successful!';
+                      ? 'Check-out successful!'
+                      : 'Check-in successful!';
 
                   _showMessagePopup(context, message);
                 }
@@ -595,31 +818,6 @@ class _CustomDialogState extends State<CustomDialog> {
   customer.Data? _selectedCustomer;
   List<customer.Data> _nearbyCustomers = [];
 
-  //
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   _getCurrentLocation();
-  //   _initData();
-  //   Future.microtask(() async {
-  //     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //     await provider.fetchCustomers(context);
-  //     await provider.initializeCheckinStatus();
-  //
-  //     // ✅ Auto-select last checked-in customer if available
-  //     if (provider.isCheckedIn && provider.lastCheckedInCustomer != null) {
-  //       final customers = provider.customerr;
-  //       try {
-  //         final foundCustomer = customers.firstWhere(
-  //                 (c) => c.name == provider.lastCheckedInCustomer);
-  //         setState(() => _selectedCustomer = foundCustomer);
-  //       } catch (_) {
-  //         setState(() => _selectedCustomer = null);
-  //       }
-  //     }
-  //     setState(() => _isFetchingData = false);
-  //   });
-  // }
   @override
   void initState() {
     super.initState();
@@ -694,94 +892,191 @@ class _CustomDialogState extends State<CustomDialog> {
     });
   }
 
+  // Future<void> _getCurrentLocation() async {
+  //   setState(() => _isLoading = true); // Show loader
+  //
+  //   try {
+  //     bool serviceEnabled;
+  //     LocationPermission permission;
+  //
+  //     // Check if location services are enabled
+  //     serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  //     if (!serviceEnabled) {
+  //       setState(() {
+  //         _currentLocation = "Location services are disabled.";
+  //         _isLoading = false;
+  //       });
+  //       return;
+  //     }
+  //
+  //     // Request permission if not granted
+  //     permission = await Geolocator.checkPermission();
+  //     if (permission == LocationPermission.denied) {
+  //       permission = await Geolocator.requestPermission();
+  //       if (permission == LocationPermission.denied) {
+  //         setState(() {
+  //           _currentLocation = "Location permissions are denied.";
+  //           _isLoading = false;
+  //         });
+  //         return;
+  //       }
+  //     }
+  //
+  //     if (permission == LocationPermission.deniedForever) {
+  //       setState(() {
+  //         _currentLocation = "Location permissions are permanently denied.";
+  //         _isLoading = false;
+  //       });
+  //       return;
+  //     }
+  //
+  //     // Retry logic for getting valid coordinates
+  //     Position position;
+  //     int retries = 0;
+  //     do {
+  //       position = await Geolocator.getCurrentPosition(
+  //         desiredAccuracy: LocationAccuracy.high,
+  //       );
+  //       retries++;
+  //       if (position.latitude == 0.0 && position.longitude == 0.0) {
+  //         await Future.delayed(const Duration(seconds: 1));
+  //       }
+  //     } while (
+  //     (position.latitude == 0.0 && position.longitude == 0.0) &&
+  //         retries < 5);
+  //
+  //     latitude = position.latitude;
+  //     longitude = position.longitude;
+  //
+  //     setState(() {
+  //       _currentLocation = 'Lat: $latitude, Lon: $longitude';
+  //     });
+  //
+  //     // Fetch place name if cache is empty or moved significantly
+  //     if (_cachedPlace == null ||
+  //         _lastLatitude == null ||
+  //         _lastLongitude == null ||
+  //         Geolocator.distanceBetween(
+  //           _lastLatitude!,
+  //           _lastLongitude!,
+  //           latitude,
+  //           longitude,
+  //         ) > 50) {
+  //       _cachedPlace = await _getPlaceName(latitude, longitude);
+  //       _lastLatitude = latitude;
+  //       _lastLongitude = longitude;
+  //     }
+  //
+  //     setState(() {
+  //       city = _cachedPlace!['city'] ?? '';
+  //       state = _cachedPlace!['state'] ?? '';
+  //       area = _cachedPlace!['area'] ?? '';
+  //     });
+  //   } catch (e) {
+  //     debugPrint("Error fetching location: $e");
+  //     setState(() {
+  //       _currentLocation = "Error fetching location.";
+  //     });
+  //   } finally {
+  //     setState(() => _isLoading = false); // Hide loader
+  //   }
+  // }
   Future<void> _getCurrentLocation() async {
-    setState(() => _isLoading = true); // Show loader
-
     try {
-      bool serviceEnabled;
-      LocationPermission permission;
-
-      // Check if location services are enabled
-      serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() {
-          _currentLocation = "Location services are disabled.";
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Request permission if not granted
-      permission = await Geolocator.checkPermission();
+      // Check permissions first
+      LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() {
-            _currentLocation = "Location permissions are denied.";
-            _isLoading = false;
-          });
+          setState(() => _currentLocation = "Location permissions denied");
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          _currentLocation = "Location permissions are permanently denied.";
-          _isLoading = false;
-        });
+        setState(() => _currentLocation = "Location permissions permanently denied");
         return;
       }
 
-      // Retry logic for getting valid coordinates
-      Position position;
-      int retries = 0;
-      do {
-        position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-        retries++;
-        if (position.latitude == 0.0 && position.longitude == 0.0) {
-          await Future.delayed(const Duration(seconds: 1));
-        }
-      } while (
-      (position.latitude == 0.0 && position.longitude == 0.0) &&
-          retries < 5);
+      // ✅ Get last known position first (instant)
+      Position? lastPosition = await Geolocator.getLastKnownPosition();
+      if (lastPosition != null &&
+          lastPosition.latitude != 0.0 &&
+          lastPosition.longitude != 0.0) {
+        latitude = lastPosition.latitude;
+        longitude = lastPosition.longitude;
+        setState(() {
+          _currentLocation = 'Lat: $latitude, Lon: $longitude';
+        });
 
-      latitude = position.latitude;
-      longitude = position.longitude;
-
-      setState(() {
-        _currentLocation = 'Lat: $latitude, Lon: $longitude';
-      });
-
-      // Fetch place name if cache is empty or moved significantly
-      if (_cachedPlace == null ||
-          _lastLatitude == null ||
-          _lastLongitude == null ||
-          Geolocator.distanceBetween(
-            _lastLatitude!,
-            _lastLongitude!,
-            latitude,
-            longitude,
-          ) > 50) {
-        _cachedPlace = await _getPlaceName(latitude, longitude);
-        _lastLatitude = latitude;
-        _lastLongitude = longitude;
+        // Fetch place name in background
+        _fetchPlaceNameInBackground(latitude, longitude);
       }
 
-      setState(() {
-        city = _cachedPlace!['city'] ?? '';
-        state = _cachedPlace!['state'] ?? '';
-        area = _cachedPlace!['area'] ?? '';
-      });
+      // ✅ Get current position with timeout
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium, // Changed from high to medium for speed
+        timeLimit: const Duration(seconds: 5), // Add timeout
+      );
+
+      // Update if we got better coordinates
+      if (position.latitude != 0.0 && position.longitude != 0.0) {
+        latitude = position.latitude;
+        longitude = position.longitude;
+
+        setState(() {
+          _currentLocation = 'Lat: $latitude, Lon: $longitude';
+        });
+
+        // Only fetch place name if moved significantly
+        if (_shouldFetchPlaceName(latitude, longitude)) {
+          await _fetchPlaceNameInBackground(latitude, longitude);
+        }
+      }
     } catch (e) {
       debugPrint("Error fetching location: $e");
-      setState(() {
-        _currentLocation = "Error fetching location.";
-      });
-    } finally {
-      setState(() => _isLoading = false); // Hide loader
+      setState(() => _currentLocation = "Error fetching location");
     }
+  }
+  Future<void> _fetchPlaceNameInBackground(double lat, double lon) async {
+    try {
+      final place = await _getPlaceName(lat, lon).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => {
+          'city': city.isEmpty ? 'Unknown' : city,
+          'state': state.isEmpty ? 'Unknown' : state,
+          'area': area.isEmpty ? 'Unknown' : area,
+        },
+      );
+
+      _cachedPlace = place;
+      _lastLatitude = lat;
+      _lastLongitude = lon;
+
+      if (mounted) {
+        setState(() {
+          city = place['city'] ?? '';
+          state = place['state'] ?? '';
+          area = place['area'] ?? '';
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching place name: $e");
+    }
+  }
+  bool _shouldFetchPlaceName(double lat, double lon) {
+    if (_cachedPlace == null || _lastLatitude == null || _lastLongitude == null) {
+      return true;
+    }
+
+    final distance = Geolocator.distanceBetween(
+      _lastLatitude!,
+      _lastLongitude!,
+      lat,
+      lon,
+    );
+
+    return distance > 50; // Only fetch if moved more than 50 meters
   }
 
   Future<Map<String, String>> _getPlaceName(
@@ -830,116 +1125,116 @@ class _CustomDialogState extends State<CustomDialog> {
     }
   }
 
-  void _showSearchableDialog(BuildContext context) {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-
-    List<customer.Data> customers = _nearbyCustomers; // 👈 start with nearby only
-    final searchController = TextEditingController();
-    bool showingAll = false; // 👈 track current view mode
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final keyword = searchController.text.toLowerCase();
-
-            // ✅ Apply search filtering
-            final filteredCustomers = customers.where((c) {
-              final name = (c.customerName ?? c.name ?? "").toLowerCase();
-              return name.contains(keyword);
-            }).toList();
-
-            return AlertDialog(
-              title: const Text("Select Customer"),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: MediaQuery.of(context).size.height * 0.6, // 60% of screen height
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: searchController,
-                      decoration: const InputDecoration(
-                        hintText: "Search customer...",
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        setDialogState(() {}); // refresh list when searching
-                      },
-                    ),
-                    const SizedBox(height: 10),
-
-                    // 👇 Add a button to toggle between nearby and all customers
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        icon: Icon(
-                          showingAll ? Icons.location_on_outlined : Icons.list,
-                          color: Colors.blue,
-                        ),
-                        label: Text(
-                          showingAll ? "Show Nearby Only" : "Show All Customers",
-                          style: const TextStyle(color: Colors.blue),
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            if (showingAll) {
-                              // Switch back to nearby
-                              customers = _nearbyCustomers;
-                            } else {
-                              // Show all customers from provider
-                              customers = provider.customerr;
-                            }
-                            showingAll = !showingAll;
-                          });
-                        },
-                      ),
-                    ),
-
-                    Expanded(
-                      child: filteredCustomers.isEmpty
-                          ? const Center(child: Text("No customers found"))
-                          : ListView.builder(
-                        itemCount: filteredCustomers.length,
-                        itemBuilder: (context, index) {
-                          final c = filteredCustomers[index];
-                          return ListTile(
-                            title: Text(c.customerName ?? c.name ?? ""),
-                            subtitle: (c.latitude != null &&
-                                c.longitude != null &&
-                                c.latitude != 0 &&
-                                c.longitude != 0)
-                                ? Text(
-                              "(${c.latitude}, ${c.longitude})",
-                              style: const TextStyle(fontSize: 12),
-                            )
-                                : null,
-                            onTap: () {
-                              setState(() {
-                                _selectedCustomer = c;
-                              });
-                              Navigator.pop(context);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+  // void _showSearchableDialog(BuildContext context) {
+  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //   List<customer.Data> customers = _nearbyCustomers; // 👈 start with nearby only
+  //   final searchController = TextEditingController();
+  //   bool showingAll = false; // 👈 track current view mode
+  //
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return StatefulBuilder(
+  //         builder: (context, setDialogState) {
+  //           final keyword = searchController.text.toLowerCase();
+  //
+  //           // ✅ Apply search filtering
+  //           final filteredCustomers = customers.where((c) {
+  //             final name = (c.customerName ?? c.name ?? "").toLowerCase();
+  //             return name.contains(keyword);
+  //           }).toList();
+  //
+  //           return AlertDialog(
+  //             title: const Text("Select Customer"),
+  //             content: SizedBox(
+  //               width: double.maxFinite,
+  //               height: MediaQuery.of(context).size.height * 0.6, // 60% of screen height
+  //               child: Column(
+  //                 children: [
+  //                   TextField(
+  //                     controller: searchController,
+  //                     decoration: const InputDecoration(
+  //                       hintText: "Search customer...",
+  //                       prefixIcon: Icon(Icons.search),
+  //                       border: OutlineInputBorder(),
+  //                     ),
+  //                     onChanged: (value) {
+  //                       setDialogState(() {}); // refresh list when searching
+  //                     },
+  //                   ),
+  //                   const SizedBox(height: 10),
+  //
+  //                   // 👇 Add a button to toggle between nearby and all customers
+  //                   Align(
+  //                     alignment: Alignment.centerRight,
+  //                     child: TextButton.icon(
+  //                       icon: Icon(
+  //                         showingAll ? Icons.location_on_outlined : Icons.list,
+  //                         color: Colors.blue,
+  //                       ),
+  //                       label: Text(
+  //                         showingAll ? "Show Nearby Only" : "Show All Customers",
+  //                         style: const TextStyle(color: Colors.blue),
+  //                       ),
+  //                       onPressed: () {
+  //                         setDialogState(() {
+  //                           if (showingAll) {
+  //                             // Switch back to nearby
+  //                             customers = _nearbyCustomers;
+  //                           } else {
+  //                             // Show all customers from provider
+  //                             customers = provider.customerr;
+  //                           }
+  //                           showingAll = !showingAll;
+  //                         });
+  //                       },
+  //                     ),
+  //                   ),
+  //
+  //                   Expanded(
+  //                     child: filteredCustomers.isEmpty
+  //                         ? const Center(child: Text("No customers found"))
+  //                         : ListView.builder(
+  //                       itemCount: filteredCustomers.length,
+  //                       itemBuilder: (context, index) {
+  //                         final c = filteredCustomers[index];
+  //                         return ListTile(
+  //                           title: Text(c.customerName ?? c.name ?? ""),
+  //                           subtitle: (c.latitude != null &&
+  //                               c.longitude != null &&
+  //                               c.latitude != 0 &&
+  //                               c.longitude != 0)
+  //                               ? Text(
+  //                             "(${c.latitude}, ${c.longitude})",
+  //                             style: const TextStyle(fontSize: 12),
+  //                           )
+  //                               : null,
+  //                           onTap: () {
+  //                             setState(() {
+  //                               _selectedCustomer = c;
+  //                             });
+  //                             Navigator.pop(context);
+  //                           },
+  //                         );
+  //                       },
+  //                     ),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.pop(context),
+  //                 child: const Text("Cancel"),
+  //               ),
+  //             ],
+  //           );
+  //         },
+  //       );
+  //     },
+  //   );
+  // }
 
   final TextEditingController _remarkController = TextEditingController();
   @override
@@ -949,10 +1244,20 @@ class _CustomDialogState extends State<CustomDialog> {
   }
   @override
   Widget build(BuildContext context) {
-    final DateTime now = DateTime.now();
-    final String formattedTime = DateFormat('h:mm a').format(now);
-    final String formattedDate = DateFormat('EEEE, d MMMM').format(now);
+    // final DateTime now = DateTime.now();
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
+    // final String formattedTime = DateFormat('h:mm a').format(now);
+    // final String formattedDate = DateFormat('EEEE, d MMMM').format(now);
+    final lastDateTime = provider.lastCheckinDateTime;
+
+    final displayTime = lastDateTime != null
+        ? DateFormat('hh:mm a').format(lastDateTime)
+        : "N/A";
+
+    final displayDate = lastDateTime != null
+        ? DateFormat('dd/MM/yyyy').format(lastDateTime)
+        : "N/A";
     return Consumer<SalesOrderProvider>(
       builder: (context, provider, child) {
         final isCheckedIn = provider.isCheckedIn; // ✅ always read latest status
@@ -994,49 +1299,49 @@ class _CustomDialogState extends State<CustomDialog> {
                         style: const TextStyle(color: Colors.red),
                       )
                     else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Select Customer:",
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                          const SizedBox(height: 6),
-                          InkWell(
-                            onTap: () => _showSearchableDialog(context),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      _selectedCustomer != null
-                                          ? (_selectedCustomer!.customerName ??
-                                          _selectedCustomer!.name ??
-                                          "")
-                                          : "Choose a customer",
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: _selectedCustomer != null
-                                            ? Colors.black
-                                            : Colors.grey[600],
-                                      ),
-                                    ),
-                                  ),
-                                  const Icon(Icons.arrow_drop_down),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      // Column(
+                      //   crossAxisAlignment: CrossAxisAlignment.start,
+                      //   children: [
+                      //     const Text(
+                      //       "Select Customer:",
+                      //       style: TextStyle(
+                      //           fontWeight: FontWeight.bold, fontSize: 18),
+                      //     ),
+                      //     const SizedBox(height: 6),
+                      //     InkWell(
+                      //       onTap: () => _showSearchableDialog(context),
+                      //       child: Container(
+                      //         padding: const EdgeInsets.symmetric(
+                      //             horizontal: 10, vertical: 12),
+                      //         decoration: BoxDecoration(
+                      //           border: Border.all(color: Colors.grey),
+                      //           borderRadius: BorderRadius.circular(8),
+                      //         ),
+                      //         child: Row(
+                      //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      //           children: [
+                      //             Expanded(
+                      //               child: Text(
+                      //                 _selectedCustomer != null
+                      //                     ? (_selectedCustomer!.customerName ??
+                      //                     _selectedCustomer!.name ??
+                      //                     "")
+                      //                     : "Choose a customer",
+                      //                 overflow: TextOverflow.ellipsis,
+                      //                 style: TextStyle(
+                      //                   color: _selectedCustomer != null
+                      //                       ? Colors.black
+                      //                       : Colors.grey[600],
+                      //                 ),
+                      //               ),
+                      //             ),
+                      //             const Icon(Icons.arrow_drop_down),
+                      //           ],
+                      //         ),
+                      //       ),
+                      //     ),
+                      //   ],
+                      // ),
 
                     const SizedBox(height: 12),
                     const Text(
@@ -1072,23 +1377,46 @@ class _CustomDialogState extends State<CustomDialog> {
                       ],
                     ),
                     const SizedBox(height: 10),
+                    // Row(
+                    //   children: [
+                    //     const Text("Time: ",
+                    //         style: TextStyle(
+                    //             fontWeight: FontWeight.bold, fontSize: 18)),
+                    //     Text(formattedTime, style: const TextStyle(fontSize: 18)),
+                    //   ],
+                    // ),
+                    // const SizedBox(height: 10),
+                    // Row(
+                    //   children: [
+                    //     const Text("Date: ",
+                    //         style: TextStyle(
+                    //             fontWeight: FontWeight.bold, fontSize: 18)),
+                    //     Flexible(
+                    //       child: Text(
+                    //         formattedDate,
+                    //         style: const TextStyle(fontSize: 18),
+                    //         overflow: TextOverflow.ellipsis,
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
                     Row(
                       children: [
                         const Text("Time: ",
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 18)),
-                        Text(formattedTime, style: const TextStyle(fontSize: 18)),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        Text(displayTime, style: const TextStyle(fontSize: 18)),
                       ],
                     ),
+
                     const SizedBox(height: 10),
+
                     Row(
                       children: [
                         const Text("Date: ",
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 18)),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                         Flexible(
                           child: Text(
-                            formattedDate,
+                            displayDate,
                             style: const TextStyle(fontSize: 18),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1181,56 +1509,100 @@ class _CustomDialogState extends State<CustomDialog> {
     );
   }
 
+  // Future<void> _handleCheckInOut(
+  //     BuildContext context, SalesOrderProvider provider, bool isCheckedIn) async {
+  //   setState(() {
+  //     _isLoading = true;
+  //     _loadingText = isCheckedIn ? "Checking out..." : "Checking in...";
+  //   });
+  //
+  //   bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  //   if (!serviceEnabled) {
+  //     _showSnack('Please enable location services');
+  //     _stopLoading();
+  //     return;
+  //   }
+  //
+  //   LocationPermission permission = await Geolocator.checkPermission();
+  //   if (permission == LocationPermission.denied ||
+  //       permission == LocationPermission.deniedForever) {
+  //     permission = await Geolocator.requestPermission();
+  //     if (permission == LocationPermission.denied ||
+  //         permission == LocationPermission.deniedForever) {
+  //       _showSnack('Location permission required');
+  //       _stopLoading();
+  //       return;
+  //     }
+  //   }
+  //
+  //   await _getCurrentLocation();
+  //   if (latitude == 0.0 || longitude == 0.0) {
+  //     _showSnack('Fetching location... Please try again');
+  //     _stopLoading();
+  //     return;
+  //   }
+  //
+  //   await provider.checkinOrCheckout(
+  //     widget.formattedDateTime,
+  //     longitude.toString(),
+  //     latitude.toString(),
+  //     city,
+  //     state,
+  //     area,
+  //     _selectedCustomer?.name ?? "",
+  //     _remarkController.text.trim(),
+  //     context,
+  //   );
+  //
+  //   _stopLoading();
+  //   Navigator.of(context).pop();
+  //   await widget.onCheckIn();
+  // }
   Future<void> _handleCheckInOut(
-      BuildContext context, SalesOrderProvider provider, bool isCheckedIn) async {
+      BuildContext context,
+      SalesOrderProvider provider,
+      bool isCheckedIn,
+      ) async {
     setState(() {
       _isLoading = true;
       _loadingText = isCheckedIn ? "Checking out..." : "Checking in...";
     });
 
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _showSnack('Please enable location services');
-      _stopLoading();
-      return;
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        _showSnack('Location permission required');
-        _stopLoading();
-        return;
-      }
-    }
-
-    await _getCurrentLocation();
+    // ✅ Don't re-fetch location if we already have it
     if (latitude == 0.0 || longitude == 0.0) {
-      _showSnack('Fetching location... Please try again');
+      await _getCurrentLocation();
+    }
+
+    if (latitude == 0.0 || longitude == 0.0) {
+      _showSnack('Unable to get location. Please try again.');
       _stopLoading();
       return;
     }
+
+    // ✅ Use cached place name if available, or use "Unknown" temporarily
+    final checkInCity = city.isEmpty ? 'Fetching...' : city;
+    final checkInState = state.isEmpty ? 'Fetching...' : state;
+    final checkInArea = area.isEmpty ? 'Fetching...' : area;
 
     await provider.checkinOrCheckout(
       widget.formattedDateTime,
       longitude.toString(),
       latitude.toString(),
-      city,
-      state,
-      area,
+      checkInCity,
+      checkInState,
+      checkInArea,
       _selectedCustomer?.name ?? "",
       _remarkController.text.trim(),
       context,
     );
 
     _stopLoading();
-    Navigator.of(context).pop();
-    await widget.onCheckIn();
-  }
 
+    if (mounted) {
+      Navigator.of(context).pop();
+      await widget.onCheckIn();
+    }
+  }
   void _stopLoading() {
     setState(() {
       _isLoading = false;

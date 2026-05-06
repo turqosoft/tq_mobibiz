@@ -192,25 +192,22 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
     });
   }
 
-  // Future<void> attendanceDetails() async {
-  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //   String? employeeId = await _sharedPrefService.getEmployeeId();
-  //
-  //   try {
-  //     await provider.attendanceDetails(employeeId!, context);
-  //     final attendanceModel = provider.attendanceModel;
-  //     if (attendanceModel != null && attendanceModel.data != null) {
-  //       setState(() {
-  //         _attendance = {
-  //           for (var data in attendanceModel.data!)
-  //             DateTime.parse(data.attendanceDate!): data.status!
-  //         };
-  //       });
-  //     }
-  //   } catch (e) {
-  //     print('Error fetching attendance details: $e');
-  //   }
-  // }
+  final DateTime _firstDay = DateTime.utc(2023, 1, 1);
+  final DateTime _lastDay = DateTime.utc(2100, 12, 31); // safe future range
+  DateTime _getInitialFocusedDay() {
+    final now = DateTime.now();
+
+    if (now.isBefore(_firstDay)) {
+      return _firstDay;
+    }
+
+    if (now.isAfter(_lastDay)) {
+      return _lastDay;
+    }
+
+    return now;
+  }
+
 
   Future<void> attendanceDetails() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
@@ -262,6 +259,12 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
     });
   }
 
+  bool _isToday(DateTime day) {
+    final now = DateTime.now();
+    return day.year == now.year &&
+        day.month == now.month &&
+        day.day == now.day;
+  }
 
 
   @override
@@ -278,34 +281,10 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // TableCalendar(
-              //   firstDay: DateTime.utc(2023, 1, 1),
-              //   lastDay: DateTime.utc(2025, 12, 31),
-              //   focusedDay: DateTime.now(),
-              //   calendarBuilders: CalendarBuilders(
-              //     defaultBuilder: (context, day, focusedDay) {
-              //       return _buildAttendanceMarker(day);
-              //     },
-              //     todayBuilder: (context, day, focusedDay) {
-              //       return _buildAttendanceMarker(day);
-              //     },
-              //     selectedBuilder: (context, day, focusedDay) {
-              //       return _buildAttendanceMarker(day, isSelected: true);
-              //     },
-              //   ),
-              //   headerStyle: HeaderStyle(
-              //     formatButtonVisible: false,
-              //     titleCentered: true,
-              //   ),
-              //   daysOfWeekStyle: DaysOfWeekStyle(
-              //     weekdayStyle: TextStyle(color: Colors.transparent),
-              //     weekendStyle: TextStyle(color: Colors.transparent),
-              //   ),
-              // ),
               TableCalendar(
-                firstDay: DateTime.utc(2023, 1, 1),
-                lastDay: DateTime.utc(2025, 12, 31),
-                focusedDay: DateTime.now(),
+                firstDay: _firstDay,
+                lastDay: _lastDay,
+                focusedDay: _getInitialFocusedDay(),
                 calendarBuilders: CalendarBuilders(
                   defaultBuilder: (context, day, focusedDay) =>
                       _buildAttendanceMarker(day),
@@ -330,53 +309,68 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
   }
 
   // Widget _buildAttendanceMarker(DateTime day, {bool isSelected = false}) {
-  //   String? status = _attendance[DateTime(day.year, day.month, day.day)];
-  //   Color markerColor;
+  //   final normalizedDay = DateTime(day.year, day.month, day.day);
+  //   final String? status = _attendance[normalizedDay];
+  //
+  //   debugPrint(
+  //     'CALENDAR DAY => $normalizedDay | STATUS FOUND => $status',
+  //   );
+  //
+  //   Color backgroundColor = Colors.transparent;
+  //   Color textColor = Colors.black;
   //
   //   switch (status) {
   //     case 'Present':
-  //       markerColor = Colors.green;
+  //       backgroundColor = Colors.green;
+  //       textColor = Colors.white;
   //       break;
   //     case 'Absent':
-  //       markerColor = Colors.red;
+  //       backgroundColor = Colors.red;
+  //       textColor = Colors.white;
   //       break;
   //     case 'Work From Home':
-  //       markerColor = Colors.orange;
+  //       backgroundColor = Colors.orange;
+  //       textColor = Colors.white;
   //       break;
   //     case 'Half Day':
-  //       markerColor = Colors.yellow;
+  //       backgroundColor = Colors.yellow;
+  //       textColor = Colors.black;
   //       break;
-  //     default:
-  //       markerColor = Colors.transparent;
+  //     case 'On Leave':
+  //       backgroundColor = Colors.blue;
+  //       textColor = Colors.white;
+  //       break;
   //   }
   //
   //   return Container(
-  //     margin: const EdgeInsets.all(4.0),
+  //     margin: const EdgeInsets.all(6),
   //     decoration: BoxDecoration(
-  //       color: markerColor,
+  //       color: backgroundColor,
   //       shape: BoxShape.circle,
-  //       border: isSelected ? Border.all(color: Colors.blue, width: 2.0) : null,
+  //       border: isSelected
+  //           ? Border.all(color: AppColors.primaryColor, width: 2)
+  //           : null,
   //     ),
   //     alignment: Alignment.center,
   //     child: Text(
   //       '${day.day}',
   //       style: TextStyle(
-  //         color: status != null ? Colors.white : Colors.black,
-  //         fontWeight: FontWeight.bold,
+  //         color: textColor,
+  //         fontWeight: FontWeight.w600,
   //       ),
   //     ),
   //   );
   // }
+
   Widget _buildAttendanceMarker(DateTime day, {bool isSelected = false}) {
     final normalizedDay = DateTime(day.year, day.month, day.day);
     final String? status = _attendance[normalizedDay];
 
-    debugPrint(
-      'CALENDAR DAY => $normalizedDay | STATUS FOUND => $status',
-    );
+    bool isToday = _isToday(day);
 
     Color backgroundColor = Colors.transparent;
     Color textColor = Colors.black;
+    BoxBorder? border;
 
     switch (status) {
       case 'Present':
@@ -401,26 +395,39 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
         break;
     }
 
+    // TODAY INDICATOR (works even without attendance)
+    if (isToday) {
+      border = Border.all(
+        color: AppColors.primaryColor,
+        width: 2,
+      );
+    }
+
+    // SELECTED DAY OVERRIDE
+    if (isSelected) {
+      border = Border.all(
+        color: AppColors.primaryColor,
+        width: 3,
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: backgroundColor,
         shape: BoxShape.circle,
-        border: isSelected
-            ? Border.all(color: AppColors.primaryColor, width: 2)
-            : null,
+        border: border,
       ),
       alignment: Alignment.center,
       child: Text(
         '${day.day}',
         style: TextStyle(
           color: textColor,
-          fontWeight: FontWeight.w600,
+          fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
         ),
       ),
     );
   }
-
 
 
   Widget _buildLegend() {

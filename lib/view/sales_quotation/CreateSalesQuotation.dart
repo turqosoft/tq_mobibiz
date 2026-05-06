@@ -3,6 +3,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:sales_ordering_app/provider/provider.dart';
+import 'package:sales_ordering_app/utils/app_colors.dart';
 import '../../model/customer_list_model.dart';
 
 class CreateQuotationTab extends StatefulWidget {
@@ -33,9 +34,9 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
   bool _itemSelected = false;
   String? _currency;
   bool _isPrefilled = false;
-  String? _existingQuotationName;
+  String? existingQuotationName;
   bool _isEditMode = false;
-  String? quotationName;
+  // String? quotationName;
   double? _quotationTotal;
   bool _isFormDirty = false;
   bool get isFormDirty => _isFormDirty;
@@ -43,6 +44,10 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
   OverlayEntry? _overlayEntry;
   final GlobalKey _textFieldKey = GlobalKey();
   final FocusNode _itemSearchFocusNode = FocusNode();
+  bool get isEditMode => _isEditMode;
+  String? get quotationName => existingQuotationName;
+  bool isUpdating = false;
+
 
 
 
@@ -128,35 +133,37 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
 
 
   void clearForm() {
-    // Clear all text controllers
+    _formKey.currentState?.reset();
+
     _customerSearchController.clear();
     customerController.clear();
     itemController.clear();
     _searchController.clear();
     _itemSearchController.clear();
-    quotationName = null;
-    _quotationTotal = null;
-    _isPrefilled = false;
-    _isEditMode = false;
-    _existingQuotationName = null;
-    // Reset selection flags and names
-    _selectedItem = null;
-    _selectedCustomer = null;
-    _searchCustomerName = null;
-    _customerSelected = false;
-    _itemSelected = false;
-    _currency = null;
+
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-
-    provider.clearItemSearch();
     provider.clearItem();
-    // Reset dates
-    transactionDate = DateTime.now();
-    validTill = DateTime.now().add(const Duration(days: 1));
+    provider.clearItemSearch();
 
-    // Rebuild UI
-    setState(() {});
+    setState(() {
+      transactionDate = DateTime.now();
+      validTill = DateTime.now().add(const Duration(days: 1));
+
+      _selectedItem = null;
+      _selectedCustomer = null;
+      _searchCustomerName = null;
+      _customerSelected = false;
+      _itemSelected = false;
+      _currency = null;
+
+      _isPrefilled = false;
+      _isEditMode = false;
+      existingQuotationName = null;
+      _quotationTotal = null;
+      _isFormDirty = false;
+    });
   }
+
 
   Future<void> submitQuotation() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
@@ -195,11 +202,11 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         "item_name": item.name ?? "",
         "qty": item.quantity ?? 1,
         "price_list_rate": item.priceListRate ?? 0.0,
-        "rate": item.rate ?? item.priceListRate ?? 0.0,
+        "rate": item.rate,
         "discount_percentage": item.discountPercentage ?? 0.0,
       };
     }).toList();
-
+    debugPrint("📦 Quotation Items Sent To API: $quotationItems");
     final fetchedItemDetails = <Map<String, dynamic>>[];
     for (final item in itemsList) {
       final details = await provider.fetchItemDetail(
@@ -216,10 +223,11 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
 
     bool success = false;
 
-    if (_isEditMode && _existingQuotationName != null) {
+    if (_isEditMode && existingQuotationName != null) {
+      isUpdating = true;
       // ✅ UPDATE existing quotation
       success = await provider.updateQuotation(
-        quotationName: _existingQuotationName!,
+        quotationName: existingQuotationName!,
         partyName: _searchCustomerName!,
         transactionDate: DateFormat('yyyy-MM-dd').format(transactionDate!),
         validTill: DateFormat('yyyy-MM-dd').format(validTill!),
@@ -239,7 +247,17 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         customerDetails: provider.customerDetail!,
         itemDetails: fetchedItemDetails,
       );
-      success = res != null;
+      if (res?.data?.name != null) {
+        setState(() {
+          existingQuotationName = res!.data!.name;
+          _isEditMode = true;
+          _isFormDirty = false;
+        });
+        success = true;
+      } else {
+        success = false;
+      }
+      // success = res != null;
     }
 
     if (!mounted) return;
@@ -247,23 +265,18 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_isEditMode
+          content: Text(isUpdating
               ? 'Quotation updated successfully!'
               : 'Quotation created successfully!'),
+
         ),
       );
       FocusScope.of(context).unfocus();
 
-      _formKey.currentState?.reset();
-      provider.clearItem();
-      clearForm();
-
       setState(() {
-        _isEditMode = false;
-        _existingQuotationName = null;
-        _isPrefilled = false;
-        _isFormDirty = false;
+        _isFormDirty = false; // mark clean
       });
+
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${provider.errorMessage ?? 'Failed'}')),
@@ -279,6 +292,9 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     required double quantity,
     required double priceListRate,
     required double discountPercentage,
+    required String itemTaxTemplate,
+    required double lastPurchaseRate, // ✅ NEW
+
   }) {
     showDialog(
       context: context,
@@ -289,6 +305,9 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         quantity: quantity,
         priceListRate: priceListRate,
         discountPercentage: discountPercentage,
+        itemTaxTemplate: itemTaxTemplate,
+        lastPurchaseRate: lastPurchaseRate, // ✅ NEW
+
         onCancel: () {},
         onItemAdded: (addedRate, addedQty) {
           final double addedAmount = addedRate * addedQty;
@@ -301,111 +320,157 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
       ),
     );
   }
+  // void _showEditDialog(BuildContext context, int index,
+  //     SalesOrderProvider provider, final VoidCallback onCancel) {
+  //   final item = provider.itemsList[index];
+  //   final _rateController = TextEditingController(text: item.rate.toString());
+  //   final _quantityController = TextEditingController(text: item.quantity.toString());
+  //   final _priceListRateController = TextEditingController(text: item.priceListRate?.toString() ?? '');
+  //   final _discountPercentageController = TextEditingController(text: item.discountPercentage?.toString() ?? '');
+  //   late TextEditingController _itemTaxTemplateController;
+  //
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return AlertDialog(
+  //         title: Text('Edit Item'),
+  //         content: SingleChildScrollView(
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: [
+  //               Text('Item: ${item.name}'),
+  //
+  //               TextField(
+  //                 controller: _priceListRateController,
+  //                 keyboardType: TextInputType.number,
+  //                 decoration: InputDecoration(labelText: 'Price List Rate'),
+  //                 readOnly: true,
+  //               ),
+  //               TextField(
+  //                 // readOnly: true,
+  //                 controller: _discountPercentageController,
+  //                 keyboardType: TextInputType.number,
+  //                 decoration: InputDecoration(labelText: 'Discount Percentage'),
+  //               ),
+  //               TextField(
+  //                 controller: _rateController,
+  //                 keyboardType: TextInputType.number,
+  //                 decoration: InputDecoration(labelText: 'Rate'),
+  //               ),
+  //
+  //
+  //
+  //               TextField(
+  //                 controller: _quantityController,
+  //                 keyboardType: TextInputType.number,
+  //                 decoration: InputDecoration(labelText: 'Quantity'),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () {
+  //               final newRate = double.tryParse(_rateController.text) ?? 0.0;
+  //               final newQuantity = double.tryParse(_quantityController.text) ?? 0.0;
+  //               final newPriceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
+  //               final newDiscountPercentage = double.tryParse(_discountPercentageController.text) ?? 0.0;
+  //
+  //               if (newRate <= 0) {
+  //                 Fluttertoast.showToast(msg: "Please enter a valid rate");
+  //               } else if (newQuantity <= 0) {
+  //                 Fluttertoast.showToast(msg: "Please enter a valid quantity");
+  //               } else {
+  //                 final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //                 // 🧮 Compute difference
+  //                 final oldAmount = item.rate * item.quantity;
+  //                 final newAmount = newRate * newQuantity;
+  //                 final diff = newAmount - oldAmount;
+  //
+  //                 // ✅ Update the item
+  //                 provider.editItem(index, newRate, newQuantity, newPriceListRate, newDiscountPercentage);
+  //
+  //                 // ✅ Update total globally
+  //                 if (diff != 0) {
+  //                   if (diff > 0) {
+  //                     provider.addToTotal(diff);
+  //                   } else {
+  //                     provider.subtractFromTotal(diff.abs());
+  //                   }
+  //                 }
+  //                 // 🟡 Mark form dirty after editing
+  //                 setState(() {
+  //                   _isFormDirty = true;
+  //                 });
+  //                 Navigator.of(context).pop();
+  //               }
+  //             },
+  //             child: const Text('Save'),
+  //           ),
+  //
+  //           TextButton(
+  //             onPressed: () {
+  //               onCancel();
+  //               Navigator.of(context).pop();
+  //             },
+  //             child: Text('Cancel'),
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
   void _showEditDialog(BuildContext context, int index,
-      SalesOrderProvider provider, final VoidCallback onCancel) {
+      SalesOrderProvider provider, final VoidCallback onCancel) async {
+
     final item = provider.itemsList[index];
-    final _rateController = TextEditingController(text: item.rate.toString());
-    final _quantityController = TextEditingController(text: item.quantity.toString());
-    final _priceListRateController = TextEditingController(text: item.priceListRate?.toString() ?? '');
-    final _discountPercentageController = TextEditingController(text: item.discountPercentage?.toString() ?? '');
+
+    /// 🔥 Fetch full details (IMPORTANT)
+    final details = await provider.fetchItemDetail(
+      context: context,
+      itemCode: item.itemCode,
+      currency: _currency ?? '',
+      quantity: item.quantity,
+      customerName: _selectedCustomer ?? '',
+    );
+
+    final message = details?["message"];
+
+    final lastPurchaseRate =
+        message?["last_purchase_rate"] ?? item.lastPurchaseRate;
+
+    final itemTaxTemplate =
+        message?["item_tax_template"] ?? item.itemTaxTemplate;
 
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Edit Item'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Item: ${item.name}'),
-                TextField(
-                  controller: _priceListRateController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Price List Rate'),
-                  readOnly: true,
-                ),
-                TextField(
-                  readOnly: true,
-                  controller: _discountPercentageController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Discount Percentage'),
-                ),
-                TextField(
-                  controller: _rateController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Rate'),
-                ),
-
-
-
-                TextField(
-                  controller: _quantityController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Quantity'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                final newRate = double.tryParse(_rateController.text) ?? 0.0;
-                final newQuantity = double.tryParse(_quantityController.text) ?? 0.0;
-                final newPriceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
-                final newDiscountPercentage = double.tryParse(_discountPercentageController.text) ?? 0.0;
-
-                if (newRate <= 0) {
-                  Fluttertoast.showToast(msg: "Please enter a valid rate");
-                } else if (newQuantity <= 0) {
-                  Fluttertoast.showToast(msg: "Please enter a valid quantity");
-                } else {
-                  final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-
-                  // 🧮 Compute difference
-                  final oldAmount = item.rate * item.quantity;
-                  final newAmount = newRate * newQuantity;
-                  final diff = newAmount - oldAmount;
-
-                  // ✅ Update the item
-                  provider.editItem(index, newRate, newQuantity, newPriceListRate, newDiscountPercentage);
-
-                  // ✅ Update total globally
-                  if (diff != 0) {
-                    if (diff > 0) {
-                      provider.addToTotal(diff);
-                    } else {
-                      provider.subtractFromTotal(diff.abs());
-                    }
-                  }
-                  // 🟡 Mark form dirty after editing
-                  setState(() {
-                    _isFormDirty = true;
-                  });
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('Save'),
-            ),
-
-            TextButton(
-              onPressed: () {
-                onCancel();
-                Navigator.of(context).pop();
-              },
-              child: Text('Cancel'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AddItemDialog(
+        itemName: item.name,
+        itemCode: item.itemCode,
+        rate: item.rate,
+        quantity: item.quantity,
+        priceListRate: item.priceListRate ?? item.rate,
+        discountPercentage: item.discountPercentage ?? 0.0,
+        itemTaxTemplate: itemTaxTemplate,
+        lastPurchaseRate: lastPurchaseRate,
+        isEdit: true, // ✅ IMPORTANT
+        editIndex: index,
+        onCancel: onCancel,
+        onItemAdded: (rate, qty) {
+          setState(() {
+            _isFormDirty = true;
+          });
+        },
+      ),
     );
   }
 
   void prefillQuotationForm(Map<String, dynamic> data) {
     setState(() {
       _isEditMode = true; // ✅ mark as update mode
-      _existingQuotationName = data["name"]; // save quotation name for PUT
-      quotationName = data["name"];
+      existingQuotationName = data["name"]; // save quotation name for PUT
+      // quotationName = data["name"];
       final num? netTotal = data["net_total"];
       final num? total = data["total"];
       _quotationTotal = (netTotal ?? total ?? 0).toDouble();
@@ -426,13 +491,15 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
       provider.clearItem();
 
       if (data["items"] != null) {
-        final itemsList = (data["items"] as List)
-            .map((item) => {
+        final itemsList = (data["items"] as List).map((item) => {
           "item_code": item["item_code"],
           "item_name": item["item_name"],
           "qty": item["qty"],
           "price_list_rate": item["price_list_rate"],
+          "rate": item["rate"],
+          "discount_percentage": item["discount_percentage"] ?? 0.0,
         }).toList();
+
         provider.setItemsFromQuotation(itemsList);
       }
 
@@ -449,8 +516,6 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     final size = renderBox.size;
     final offset = renderBox.localToGlobal(Offset.zero);
 
-    // _overlayEntry = OverlayEntry(
-    //   builder: (context) => Positioned(
     _overlayEntry = OverlayEntry(
       builder: (context) => Stack(
         children: [
@@ -481,11 +546,112 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final item = items[index];
+                  // return ListTile(
+                  //   title: Text(item.itemName ?? '',
+                  //       style: const TextStyle(fontWeight: FontWeight.bold)),
+                  //   subtitle: Text(item.itemCode ?? '',
+                  //       style: const TextStyle(color: Colors.grey)),
+                  //   onTap: () async {
+                  //     _hideOverlay();
+                  //
+                  //     final quotationProvider =
+                  //     Provider.of<SalesOrderProvider>(context, listen: false);
+                  //
+                  //     if (quotationProvider.allowMultipleItems == 0) {
+                  //       bool alreadyExists = quotationProvider.itemsList.any(
+                  //             (i) => i.itemCode == item.itemCode,
+                  //       );
+                  //       if (alreadyExists) {
+                  //         Fluttertoast.showToast(
+                  //           msg: "This item is already added and duplicates are not allowed.",
+                  //           toastLength: Toast.LENGTH_SHORT,
+                  //           gravity: ToastGravity.BOTTOM,
+                  //         );
+                  //         return;
+                  //       }
+                  //     }
+                  //
+                  //     setState(() {
+                  //       _selectedItem = item.itemName;
+                  //       _itemSelected = true;
+                  //     });
+                  //
+                  //     try {
+                  //       final itemDetails = await quotationProvider.fetchItemDetail(
+                  //         context: context,
+                  //         itemCode: item.itemCode ?? '',
+                  //         currency: _currency ?? '',
+                  //         quantity: 1.0,
+                  //         customerName: _selectedCustomer ?? '',
+                  //       );
+                  //
+                  //       if (itemDetails != null && itemDetails['message'] != null) {
+                  //         final fetchedRate = itemDetails['message']['rate'] ?? 0.0;
+                  //         final fetchedPriceListRate = itemDetails['message']['price_list_rate'] ?? 0.0;
+                  //         final fetchedDiscountPercentage =
+                  //             itemDetails['message']['discount_percentage'] ?? 0.0;
+                  //         final message = itemDetails["message"];
+                  //         final lastPurchaseRate = itemDetails['message']['last_purchase_rate'] ?? 0.0; // ✅ NEW
+                  //
+                  //         _showAddItemDialog(
+                  //           itemName: item.itemName ?? "",
+                  //           itemCode: item.itemCode ?? "",
+                  //           rate: fetchedPriceListRate,
+                  //           quantity: 1,
+                  //           priceListRate: fetchedPriceListRate,
+                  //           discountPercentage: fetchedDiscountPercentage,
+                  //           itemTaxTemplate: message["item_tax_template"] ?? "",
+                  //           lastPurchaseRate: lastPurchaseRate, // ✅ NEW
+                  //
+                  //         );
+                  //       } else {
+                  //         Fluttertoast.showToast(msg: "Select Customer first");
+                  //       }
+                  //     } catch (e) {
+                  //       Fluttertoast.showToast(msg: "Error fetching item details: $e");
+                  //     }
+                  //
+                  //     // 👇 reset and refocus for next entry
+                  //     setState(() {
+                  //       _itemSearchController.clear();
+                  //       _itemSelected = false;
+                  //       _selectedItem = null;
+                  //     });
+                  //
+                  //     await Future.delayed(const Duration(milliseconds: 200));
+                  //     _itemSearchFocusNode.requestFocus();
+                  //   },
+                  //
+                  // );
                   return ListTile(
                     title: Text(item.itemName ?? '',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(item.itemCode ?? '',
                         style: const TextStyle(color: Colors.grey)),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (item.actualQty ?? 0) > 0
+                            ? Colors.green.shade50
+                            : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: (item.actualQty ?? 0) > 0
+                              ? Colors.green.shade300
+                              : Colors.red.shade300,
+                        ),
+                      ),
+                      child: Text(
+                        'Qty: ${(item.actualQty ?? 0).toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: (item.actualQty ?? 0) > 0
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
+                        ),
+                      ),
+                    ),
                     onTap: () async {
                       _hideOverlay();
 
@@ -521,17 +687,24 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                         );
 
                         if (itemDetails != null && itemDetails['message'] != null) {
-                          final fetchedRate = itemDetails['message']['price_list_rate'] ?? 0.0;
+                          final fetchedRate = itemDetails['message']['rate'] ?? 0.0;
+                          final fetchedPriceListRate =
+                              itemDetails['message']['price_list_rate'] ?? 0.0;
                           final fetchedDiscountPercentage =
                               itemDetails['message']['discount_percentage'] ?? 0.0;
+                          final message = itemDetails["message"];
+                          final lastPurchaseRate =
+                              itemDetails['message']['last_purchase_rate'] ?? 0.0;
 
                           _showAddItemDialog(
                             itemName: item.itemName ?? "",
                             itemCode: item.itemCode ?? "",
-                            rate: fetchedRate,
+                            rate: fetchedPriceListRate,
                             quantity: 1,
-                            priceListRate: fetchedRate,
+                            priceListRate: fetchedPriceListRate,
                             discountPercentage: fetchedDiscountPercentage,
+                            itemTaxTemplate: message["item_tax_template"] ?? "",
+                            lastPurchaseRate: lastPurchaseRate,
                           );
                         } else {
                           Fluttertoast.showToast(msg: "Select Customer first");
@@ -540,7 +713,6 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                         Fluttertoast.showToast(msg: "Error fetching item details: $e");
                       }
 
-                      // 👇 reset and refocus for next entry
                       setState(() {
                         _itemSearchController.clear();
                         _itemSelected = false;
@@ -550,7 +722,6 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                       await Future.delayed(const Duration(milliseconds: 200));
                       _itemSearchFocusNode.requestFocus();
                     },
-
                   );
                 },
               ),
@@ -568,7 +739,6 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     _overlayEntry = null;
   }
 
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -579,15 +749,14 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         provider.customerSearchModel?.data ?? []; // ✅ Get customer list safely
 
     return Scaffold(
-        body: Padding(
+      body: Padding(
         padding: const EdgeInsets.all(8),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-// 🧾 Quotation Header (shows Quotation Name and Live Total)
-//             if (_quotationName != null)
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 🧾 Quotation Header (shows Quotation Name and Live Total)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 1),
                 child: Row(
@@ -595,7 +764,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                   children: [
                     Expanded(
                       child: Text(
-                        quotationName ?? '',
+                        existingQuotationName ?? '',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 15,
@@ -622,521 +791,510 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                 ),
               ),
 
-
-            // 🔍 Customer Search
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: TextField(
-                focusNode: _customerSearchFocusNode,
-                controller: _customerSearchController,
-                readOnly: _isPrefilled, // ✅ disable editing when prefilled
-                decoration: InputDecoration(
-                  hintText: 'Search Customer',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: !_isPrefilled && _customerSearchController.text.isNotEmpty
-                      ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      setState(() {
-                        _customerSearchController.clear();
-                        _customerSelected = false;
-                        _selectedCustomer = null;
-                        _searchCustomerName = null;
-                      });
-                      provider.clearCustomerSearch();
-                    },
-                  )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-                onChanged: _isPrefilled
-                    ? null // ✅ disable search callback
-                    : (content) {
-                  if (content.isEmpty) {
-                    setState(() {
-                      _customerSelected = false;
-                      _selectedCustomer = null;
-                      _searchCustomerName = null;
-                    });
-                    provider.clearCustomerSearch();
-                  } else {
-                    setState(() => _customerSelected = false);
-                    _searchCustomer(content);
-                  }
-                },
-              ),
-            ),
-
-            // 👇 Compact search result list
-            if (!_customerSelected &&
-                customerList.isNotEmpty &&
-                _customerSearchFocusNode.hasFocus)
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                constraints: const BoxConstraints(maxHeight: 115),
-                child: ListView.builder(
-                  itemCount: customerList.length,
-                  shrinkWrap: true,
-                  itemBuilder: (context, index) {
-                    final Data customer = customerList[index];
-                    return InkWell(
-                      onTap: () async {
-                        setState(() {
-                          _selectedCustomer = customer.name;
-                          _searchCustomerName = customer.customerName;
-                          _customerSelected = true;
-                          _customerSearchController.text = customer.customerName ?? '';
-                        });
-
-                        FocusScope.of(context).unfocus(); // hide keyboard
-
-                        // ✅ Fetch customer details
-                        final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-                        await provider.fetchCustomerDetailss(customer.customerName ?? '', context);
-                        final customerData = provider.customerDetail;
-                        _currency = customerData?["customer_currency"] ?? "INR";
-                        // Optionally, show a confirmation/snackbar
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Customer details fetched successfully')),
-                        );
-                                            },
-
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 6.0, horizontal: 8),
-                        child: Text(
-                          customer.customerName ?? '',
-                          style: const TextStyle(fontSize: 14),
-                          overflow: TextOverflow.ellipsis,
+              // 🆕 SOLUTION: Wrap everything in Expanded to prevent overflow
+              Expanded(
+                child: SingleChildScrollView(
+                  // 🆕 Disable scroll when keyboard is open and search results shown
+                  physics: (!_customerSelected &&
+                      customerList.isNotEmpty &&
+                      _customerSearchFocusNode.hasFocus)
+                      ? const NeverScrollableScrollPhysics()
+                      : const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 🔍 Customer Search
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: TextField(
+                          focusNode: _customerSearchFocusNode,
+                          controller: _customerSearchController,
+                          readOnly: _isPrefilled, // ✅ disable editing when prefilled
+                          decoration: InputDecoration(
+                            hintText: 'Search Customer',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: !_isPrefilled && _customerSearchController.text.isNotEmpty
+                                ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() {
+                                  _customerSearchController.clear();
+                                  _customerSelected = false;
+                                  _selectedCustomer = null;
+                                  _searchCustomerName = null;
+                                });
+                                provider.clearCustomerSearch();
+                              },
+                            )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          onChanged: _isPrefilled
+                              ? null // ✅ disable search callback
+                              : (content) {
+                            if (content.isEmpty) {
+                              setState(() {
+                                _customerSelected = false;
+                                _selectedCustomer = null;
+                                _searchCustomerName = null;
+                              });
+                              provider.clearCustomerSearch();
+                            } else {
+                              setState(() => _customerSelected = false);
+                              _searchCustomer(content);
+                            }
+                          },
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
 
-            const SizedBox(height: 10),
-// 🗓️ Date and Valid Till Row
-            Row(
-              children: [
-                // Transaction Date
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _pickDate(context, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.white,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              "Date: ${DateFormat('dd-MM-yyyy').format(transactionDate!)}",
-                              style: const TextStyle(fontSize: 14),
-                              overflow: TextOverflow.ellipsis, // ⛔ no overflow
-                            ),
+                      // 👇 Compact search result list - 🆕 FIXED with flexible height
+                      if (!_customerSelected &&
+                          customerList.isNotEmpty &&
+                          _customerSearchFocusNode.hasFocus)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.calendar_today, size: 18),
-                        ],
-                      ),
-
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-
-                // Valid Till
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _pickDate(context, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.white,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              "Valid Till: ${DateFormat('dd-MM-yyyy').format(validTill!)}",
-                              style: const TextStyle(fontSize: 14),
-                              overflow: TextOverflow.ellipsis, // ⛔ no overflow
-                            ),
+                          // 🆕 Use flexible constraints based on available space
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.of(context).size.height * 0.25, // 25% of screen
+                            minHeight: 50,
                           ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.calendar_today, size: 18),
-                        ],
-                      ),
-
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // 🧭 Item Search TextField
-//             Container(
-//               decoration: BoxDecoration(
-//                 color: Colors.grey[100],
-//                 borderRadius: BorderRadius.circular(8),
-//               ),
-//               child: TextField(
-//                 controller: _itemSearchController,
-//                 decoration: InputDecoration(
-//                   hintText: 'Search Item',
-//                   prefixIcon: const Icon(Icons.search),
-//                   suffixIcon: _itemSearchController.text.isNotEmpty
-//                       ? IconButton(
-//                     icon: const Icon(Icons.clear),
-//                     onPressed: () {
-//                       setState(() {
-//                         _itemSearchController.clear();
-//                         _itemSelected = false;
-//                         _selectedItem = null;
-//                       });
-//                       Provider.of<SalesOrderProvider>(context, listen: false)
-//                           .clearItemSearch();
-//                     },
-//                   )
-//                       : null,
-//                   border: InputBorder.none,
-//                   contentPadding:
-//                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-//                 ),
-//                 onChanged: (content) {
-//                   if (content.isEmpty) {
-//                     setState(() {
-//                       _itemSelected = false;
-//                       _selectedItem = null;
-//                     });
-//                     Provider.of<SalesOrderProvider>(context, listen: false)
-//                         .clearItemSearch();
-//                   } else {
-//                     setState(() {
-//                       _itemSelected = false;
-//                     });
-//                     _searchItemList(_itemSearchController.text);
-//                   }
-//                 },
-//                 onSubmitted: (query) {
-//                   if (query.trim().isEmpty) {
-//                     setState(() {
-//                       _itemSelected = false;
-//                       _selectedItem = null;
-//                     });
-//                     Provider.of<SalesOrderProvider>(context, listen: false)
-//                         .clearItemSearch();
-//                     return;
-//                   }
-//
-//                   setState(() {
-//                     _itemSelected = false;
-//                   });
-//                   _searchItemList(query.trim());
-//                 },
-//               ),
-//             ),
-//             const SizedBox(height: 8),
-// // 🧭 Item Search Results List
-//             if (!_itemSelected && items.isNotEmpty)
-//               SizedBox(
-//                 height: 115,
-//                 child: ListView.builder(
-//                   itemCount: items.length,
-//                   itemBuilder: (context, index) {
-//                     final item = items[index];
-//                     return RadioListTile<String>(
-//                       title: Column(
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           Text(item.itemName ?? '',
-//                               style: const TextStyle(fontWeight: FontWeight.bold)),
-//                           const SizedBox(height: 4),
-//                           Text(item.itemCode ?? '', style: const TextStyle(color: Colors.grey)),
-//                         ],
-//                       ),
-//                       value: item.itemName ?? '',
-//                       groupValue: _selectedItem,
-//                       onChanged: (selected) async {
-//
-//                         if (selected != null) {
-//                           final quotationProvider =
-//                           Provider.of<SalesOrderProvider>(context, listen: false);
-//
-//                           // ✅ Prevent duplicates if not allowed
-//                           if (quotationProvider.allowMultipleItems == 0) {
-//                             bool alreadyExists = quotationProvider.itemsList.any(
-//                                   (i) => i.itemCode == item.itemCode,
-//                             );
-//
-//                             if (alreadyExists) {
-//                               Fluttertoast.showToast(
-//                                 msg: "This item is already added and duplicates are not allowed.",
-//                                 toastLength: Toast.LENGTH_SHORT,
-//                                 gravity: ToastGravity.BOTTOM,
-//                               );
-//                               return; // stop here
-//                             }
-//                           }
-//
-//                           setState(() {
-//                             _selectedItem = selected;
-//                             _itemSelected = true;
-//                             _itemSearchController.clear();
-//                           });
-//
-//                           try {
-//                             final itemDetails = await quotationProvider.fetchItemDetail(
-//                               context: context,
-//                               itemCode: item.itemCode ?? '',
-//                               currency: _currency ?? '',
-//                               quantity: 1.0,
-//                               customerName: _selectedCustomer ?? '',
-//                             );
-//
-//                             if (itemDetails != null && itemDetails['message'] != null) {
-//                               final fetchedRate = itemDetails['message']['price_list_rate'] ?? 0.0;
-//                               final fetchedDiscountPercentage =
-//                                   itemDetails['message']['discount_percentage'] ?? 0.0;
-//
-//                               _showAddItemDialog(
-//                                 itemName: item.itemName ?? "",
-//                                 itemCode: item.itemCode ?? "",
-//                                 rate: fetchedRate,
-//                                 quantity: 1,
-//                                 priceListRate: fetchedRate,
-//                                 discountPercentage: fetchedDiscountPercentage,
-//                               );
-//                             } else {
-//                               Fluttertoast.showToast(msg: "Select Customer first");
-//                             }
-//                           } catch (e) {
-//                             Fluttertoast.showToast(msg: "Error fetching item details: $e");
-//                           }
-//                         }
-//
-//
-//                       },
-//                     );
-//                   },
-//                 ),
-//               ),
-            CompositedTransformTarget(
-              link: _layerLink,
-              child: Container(
-                key: _textFieldKey,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: TextField(
-                  focusNode: _itemSearchFocusNode,
-                  controller: _itemSearchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search Item',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _itemSearchController.text.isNotEmpty
-                        ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        setState(() {
-                          _itemSearchController.clear();
-                          _itemSelected = false;
-                          _selectedItem = null;
-                        });
-                        _hideOverlay();
-                        Provider.of<SalesOrderProvider>(context, listen: false)
-                            .clearItemSearch();
-                      },
-                    )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                  onChanged: (query) async {
-                    if (query.isEmpty) {
-                      setState(() {
-                        _itemSelected = false;
-                        _selectedItem = null;
-                      });
-                      _hideOverlay();
-                      Provider.of<SalesOrderProvider>(context, listen: false)
-                          .clearItemSearch();
-                    } else {
-                      await _searchItemList(query);
-                      final provider =
-                      Provider.of<SalesOrderProvider>(context, listen: false);
-                      _showOverlay(context, provider.itemListModel?.data ?? []);
-                    }
-                  },
-                  onEditingComplete: () => _itemSearchFocusNode.unfocus(),
-                  // ❌ remove onTapOutside to prevent unwanted closing
-                ),
-              ),
-            ),
-
-
-            const SizedBox(height: 10),
-
-// ✅ Added Items List
-            Expanded(
-              child: Consumer<SalesOrderProvider>(
-                builder: (context, itemProvider, child) {
-                  final itemList = itemProvider.itemsList;
-
-                  if (itemProvider.isLoadingItem) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (itemList.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No items added yet',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    itemCount: itemList.length,
-                    itemBuilder: (context, index) {
-                      final item = itemList[index];
-
-                      return InkWell(
-                          onTap: () {
-                        _showEditDialog(context, index, itemProvider, () {
-                          setState(() {
-                            _selectedItem = null;
-                          });
-                          _itemSearchController.clear();
-                        });
-                      },
-                      child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                      child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                      Text(
-                      '${index + 1}. ',
-                      style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      ),
-                      ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${item.name} (${item.itemCode})',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Rate: ${item.rate}, Quantity: ${item.quantity}, '
-                                        'Amount: ${(item.rate * item.quantity).toStringAsFixed(2)}',
-                                    style: TextStyle(color: Colors.grey[700]),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 🗑 Delete Button
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    title: const Row(
-                                      children: [
-                                        Icon(Icons.warning_amber_rounded,
-                                            color: Colors.redAccent),
-                                        SizedBox(width: 8),
-                                        Text("Confirm Delete",
-                                            style: TextStyle(fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                    content: Text(
-                                      "Are you sure you want to delete '${item.name}'?",
-                                      style: const TextStyle(fontSize: 15),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: const Text("Cancel",
-                                            style: TextStyle(color: Colors.blueAccent)),
-                                      ),
-                                      ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.redAccent,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                        ),
-                                        onPressed: () => Navigator.pop(context, true),
-                                        icon: const Icon(Icons.delete_forever, size: 18),
-                                        label: const Text("Delete"),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (confirm == true) {
-                                  final double deletedAmount = item.rate * item.quantity;
-                                  itemProvider.deleteItem(index);
-                                  itemProvider.subtractFromTotal(deletedAmount);
+                          child: ListView.builder(
+                            itemCount: customerList.length,
+                            shrinkWrap: true,
+                            itemBuilder: (context, index) {
+                              final Data customer = customerList[index];
+                              return InkWell(
+                                onTap: () async {
                                   setState(() {
-                                    _isFormDirty = true; // 🟡 Mark dirty after deletion
+                                    _selectedCustomer = customer.name;
+                                    _searchCustomerName = customer.customerName;
+                                    _customerSelected = true;
+                                    _customerSearchController.text = customer.customerName ?? '';
                                   });
 
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        "'${item.name}' deleted successfully.",
-                                        style: const TextStyle(color: Colors.white),
-                                      ),
-                                      backgroundColor: Colors.redAccent,
-                                      duration: const Duration(seconds: 2),
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ));
-                    },
-                  );
-                },
-              ),
-            ),
+                                  FocusScope.of(context).unfocus(); // hide keyboard
 
-          ],
+                                  // ✅ Fetch customer details
+                                  final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+                                  await provider.fetchCustomerDetailss(customer.customerName ?? '', context);
+                                  final customerData = provider.customerDetail;
+                                  _currency = customerData?["customer_currency"] ?? "INR";
+                                  // Optionally, show a confirmation/snackbar
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Customer details fetched successfully')),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8),
+                                  child: Text(
+                                    customer.customerName ?? '',
+                                    style: const TextStyle(fontSize: 14),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                      const SizedBox(height: 10),
+                      // 🗓️ Date and Valid Till Row
+                      Row(
+                        children: [
+                          // Transaction Date
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _pickDate(context, true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade400),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.white,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        "Date: ${DateFormat('dd-MM-yyyy').format(transactionDate!)}",
+                                        style: const TextStyle(fontSize: 14),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.calendar_today, size: 18),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+
+                          // Valid Till
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _pickDate(context, false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade400),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.white,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        "Valid Till: ${DateFormat('dd-MM-yyyy').format(validTill!)}",
+                                        style: const TextStyle(fontSize: 14),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.calendar_today, size: 18),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      // 🧭 Item Search TextField
+
+                      CompositedTransformTarget(
+                        link: _layerLink,
+                        child: Container(
+                          key: _textFieldKey,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: TextField(
+                            focusNode: _itemSearchFocusNode,
+                            controller: _itemSearchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search Item',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _itemSearchController.text.isNotEmpty
+                                  ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  setState(() {
+                                    _itemSearchController.clear();
+                                    _itemSelected = false;
+                                    _selectedItem = null;
+                                  });
+                                  _hideOverlay();
+                                  Provider.of<SalesOrderProvider>(context, listen: false)
+                                      .clearItemSearch();
+                                },
+                              )
+                                  : null,
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            ),
+                            onChanged: (query) async {
+                              if (query.isEmpty) {
+                                setState(() {
+                                  _itemSelected = false;
+                                  _selectedItem = null;
+                                });
+                                _hideOverlay();
+                                Provider.of<SalesOrderProvider>(context, listen: false)
+                                    .clearItemSearch();
+                              } else {
+                                await _searchItemList(query);
+                                final provider =
+                                Provider.of<SalesOrderProvider>(context, listen: false);
+                                _showOverlay(context, provider.itemListModel?.data ?? []);
+                              }
+                            },
+                            onEditingComplete: () => _itemSearchFocusNode.unfocus(),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // ✅ Enhanced Items List (Fixed Overflow)
+                      // 🆕 Use ConstrainedBox instead of Expanded inside SingleChildScrollView
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: 200,
+                          maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        ),
+                        child: Consumer<SalesOrderProvider>(
+                          builder: (context, itemProvider, child) {
+                            final itemList = itemProvider.itemsList;
+
+                            if (itemProvider.isLoadingItem) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+
+                            if (itemList.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[300]),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No items added yet',
+                                      style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+
+                            return ListView.builder(
+                              itemCount: itemList.length,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(), // 🆕 Disable inner scroll
+                              itemBuilder: (context, index) {
+                                final item = itemList[index];
+                                final double? discount = item.discountPercentage;
+                                final double effectiveRate =
+                                discount! > 0 ? item.rate * (1 - discount / 100) : item.rate;
+
+                                final double amount = effectiveRate * item.quantity;
+
+                                return Card(
+                                  elevation: 1,
+                                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: Colors.grey[200]!, width: 1),
+                                  ),
+                                  child: InkWell(
+                                    onTap: () {
+                                      _showEditDialog(context, index, itemProvider, () {
+                                        setState(() {
+                                          _selectedItem = null;
+                                        });
+                                        _itemSearchController.clear();
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          // Serial Number Badge
+                                          Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue[50],
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              '${index + 1}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: AppColors.primaryColor,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+
+                                          // Item Details (Flexible)
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                // Item Name
+                                                Text(
+                                                  item.name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 14,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
+
+                                                // Item Code
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[100],
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    item.itemCode,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.grey[700],
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+
+                                                // Quantity and Rate
+                                                Text(
+                                                  '${item.quantity} × ₹${item.rate.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey[600],
+                                                  ),
+                                                ),
+                                                if (discount > 0)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 2),
+                                                    child: Text(
+                                                      'Discount: ${discount.toStringAsFixed(1)}%',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors.orange[700],
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+
+                                          const SizedBox(width: 8),
+
+                                          // Amount and Delete Button (Fixed width)
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              // Amount
+                                              if (item.discountPercentage! > 0)
+                                                Text(
+                                                  '₹${(item.rate * item.quantity).toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey[500],
+                                                    decoration: TextDecoration.lineThrough,
+                                                  ),
+                                                ),
+
+                                              Text(
+                                                '₹${amount.toStringAsFixed(2)}',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                  color: Colors.green[700],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+
+                                              // Delete Button
+                                              InkWell(
+                                                onTap: () async {
+                                                  final confirm = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (context) => AlertDialog(
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(16),
+                                                      ),
+                                                      title: const Row(
+                                                        children: [
+                                                          Icon(Icons.warning_amber_rounded,
+                                                              color: Colors.redAccent),
+                                                          SizedBox(width: 8),
+                                                          Text("Confirm Delete",
+                                                              style: TextStyle(fontWeight: FontWeight.bold)),
+                                                        ],
+                                                      ),
+                                                      content: Text(
+                                                        "Are you sure you want to delete '${item.name}'?",
+                                                        style: const TextStyle(fontSize: 15),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.pop(context, false),
+                                                          child: const Text("Cancel",
+                                                              style: TextStyle(color: Colors.blueAccent)),
+                                                        ),
+                                                        ElevatedButton.icon(
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: Colors.redAccent,
+                                                            shape: RoundedRectangleBorder(
+                                                              borderRadius: BorderRadius.circular(8),
+                                                            ),
+                                                          ),
+                                                          onPressed: () => Navigator.pop(context, true),
+                                                          icon: const Icon(Icons.delete_forever, size: 18),
+                                                          label: const Text("Delete"),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+
+                                                  if (confirm == true) {
+                                                    final double deletedAmount = item.rate * item.quantity;
+                                                    itemProvider.deleteItem(index);
+                                                    itemProvider.subtractFromTotal(deletedAmount);
+                                                    setState(() {
+                                                      _isFormDirty = true;
+                                                    });
+
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          "'${item.name}' deleted successfully.",
+                                                          style: const TextStyle(color: Colors.white),
+                                                        ),
+                                                        backgroundColor: Colors.redAccent,
+                                                        duration: const Duration(seconds: 2),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(4),
+                                                  child: Icon(
+                                                    Icons.delete_outline,
+                                                    size: 18,
+                                                    color: Colors.red[400],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 class AddItemDialog extends StatefulWidget {
@@ -1147,18 +1305,28 @@ class AddItemDialog extends StatefulWidget {
   final double quantity;
   final double priceListRate;
   final double discountPercentage;
+  final String itemTaxTemplate;
   final Function(double rate, double quantity)? onItemAdded; // ✅ NEW
+  final double lastPurchaseRate; // ✅ NEW
+  final bool isEdit;
+  final int? editIndex;
+
 
   const AddItemDialog({
     super.key,
     required this.itemName,
     required this.itemCode,
     required this.onCancel,
+    required this.itemTaxTemplate,
     this.rate = 0.0,
     this.quantity = 1.0,
     this.priceListRate = 0.0,
     this.discountPercentage = 0.0,
     this.onItemAdded, // ✅ NEW
+    this.lastPurchaseRate = 0.0, // ✅ NEW
+    this.isEdit = false,
+    this.editIndex,
+
 
   });
 
@@ -1172,6 +1340,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
   late TextEditingController _priceListRateController;
   late TextEditingController _discountPercentageController;
   late FocusNode _quantityFocusNode;
+  late TextEditingController _itemTaxTemplateController;
   double _totalAmount = 0.0;
   late TextEditingController _totalController;
   bool _isUpdatingFromTotal = false;
@@ -1190,7 +1359,8 @@ class _AddItemDialogState extends State<AddItemDialog> {
     _priceListRateController = TextEditingController(text: widget.priceListRate.toStringAsFixed(3));
     _discountPercentageController = TextEditingController(text: widget.discountPercentage.toStringAsFixed(2));
     _totalController = TextEditingController();
-
+    _itemTaxTemplateController =
+        TextEditingController(text: widget.itemTaxTemplate);
     _quantityFocusNode = FocusNode();
     _rateFocusNode = FocusNode();
     _totalFocusNode = FocusNode();
@@ -1244,15 +1414,18 @@ class _AddItemDialogState extends State<AddItemDialog> {
     });
   }
 
-
-
-
   void _calculateTotal() {
     if (_isUpdatingFromTotal) return;
 
     final rate = double.tryParse(_rateController.text) ?? 0;
     final quantity = double.tryParse(_quantityController.text) ?? 0;
-    final total = rate * quantity;
+    final discount =
+        double.tryParse(_discountPercentageController.text) ?? 0;
+
+    final discountedRate =
+    discount > 0 ? rate * (1 - discount / 100) : rate;
+
+    final total = discountedRate * quantity;
 
     setState(() {
       _totalAmount = total;
@@ -1265,14 +1438,21 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
     final total = double.tryParse(_totalController.text) ?? 0;
     final quantity = double.tryParse(_quantityController.text) ?? 0;
+    final discount =
+        double.tryParse(_discountPercentageController.text) ?? 0;
 
-    if (quantity > 0) {
-      final newRate = total / quantity;
-      _isUpdatingFromTotal = true;
-      _rateController.text = newRate.toStringAsFixed(3);
-      _priceListRateController.text = newRate.toStringAsFixed(3);
-      _isUpdatingFromTotal = false;
+    if (quantity <= 0) return;
+
+    double effectiveRate = total / quantity;
+
+    if (discount > 0) {
+      effectiveRate = effectiveRate / (1 - discount / 100);
     }
+
+    _isUpdatingFromTotal = true;
+    _rateController.text = effectiveRate.toStringAsFixed(3);
+    _priceListRateController.text = effectiveRate.toStringAsFixed(3);
+    _isUpdatingFromTotal = false;
   }
 
 
@@ -1283,7 +1463,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
     _quantityController.removeListener(_calculateTotal);
     _totalController.removeListener(_updateRateFromTotal);
     _priceListRateController.removeListener(() {});
-
+    _itemTaxTemplateController.dispose();
     _rateController.dispose();
     _quantityController.dispose();
     _priceListRateController.dispose();
@@ -1335,25 +1515,41 @@ class _AddItemDialogState extends State<AddItemDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
+              controller: _itemTaxTemplateController,
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: 'Item Tax Template',
+              ),
+            ),
+            TextField(
+              controller: TextEditingController(
+                text: widget.lastPurchaseRate.toStringAsFixed(3),
+              ),
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: 'Last Purchase Rate',
+              ),
+            ),
+            TextField(
               controller: _priceListRateController,
               focusNode: _priceListRateFocusNode,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(labelText: 'Price List Rate'),
             ),
-
+            TextField(
+              // readOnly: true,
+              controller: _discountPercentageController,
+              keyboardType: TextInputType.number,
+              focusNode: _discountFocusNode,
+              decoration: InputDecoration(labelText: 'Discount Percentage'),
+            ),
             TextField(
               controller: _rateController,
               focusNode: _rateFocusNode,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(labelText: 'Rate'),
             ),
-            TextField(
-              readOnly: true,
-              controller: _discountPercentageController,
-              keyboardType: TextInputType.number,
-              focusNode: _discountFocusNode,
-              decoration: InputDecoration(labelText: 'Discount Percentage'),
-            ),
+
 
             TextField(
               controller: _quantityController,
@@ -1389,15 +1585,44 @@ class _AddItemDialogState extends State<AddItemDialog> {
               Fluttertoast.showToast(msg: "Please enter a valid quantity");
             } else {
               final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-              provider.addItem(rate, quantity, widget.itemName, widget.itemCode, priceListRate, discountPercentage);
-
+              // provider.addItem(rate, quantity, widget.itemName, widget.itemCode, priceListRate, discountPercentage);
+              // if (widget.isEdit) {
+              //   provider.editItemByCode(
+              //     widget.itemCode,
+              //     rate,
+              //     quantity,
+              //     priceListRate,
+              //     discountPercentage,
+              //   );
+              // }
+              if (widget.isEdit && widget.editIndex != null) {
+                provider.editItem(
+                  widget.editIndex!,
+                  rate,
+                  quantity,
+                  priceListRate,
+                  discountPercentage,
+                );
+              } else {
+                provider.addItem(
+                  rate,
+                  quantity,
+                  widget.itemName,
+                  widget.itemCode,
+                  priceListRate,
+                  discountPercentage,
+                  widget.itemTaxTemplate,
+                  widget.lastPurchaseRate,
+                );
+              }
               // ✅ Notify parent to update global total
               widget.onItemAdded?.call(rate, quantity);
 
               Navigator.of(context).pop();
             }
           },
-          child: const Text('Add'),
+          // child: const Text('Add'),
+          child: Text(widget.isEdit ? 'Save' : 'Add'),
         ),
 
         TextButton(

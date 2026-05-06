@@ -117,6 +117,58 @@ class CommonTextField extends StatelessWidget {
 
 
 
+// class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
+//   final String title;
+//   final bool automaticallyImplyLeading;
+//   final Color backgroundColor;
+//   final Function? onBackTap;
+//   final bool isAction;
+//   final Function? onAction;
+//   final Widget? actions;
+//   final String? subtitle;
+//
+//   const CommonAppBar(
+//       {super.key,
+//       required this.title,
+//       this.automaticallyImplyLeading = true,
+//       this.backgroundColor = AppColors.primaryColor,
+//       this.onBackTap,
+//       this.isAction = false,
+//         this.subtitle,
+//       this.onAction,  this.actions});
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return AppBar(
+//       automaticallyImplyLeading: automaticallyImplyLeading,
+//       leading: automaticallyImplyLeading
+//           ? GestureDetector(
+//               onTap: () {
+//                 if (onBackTap != null) {
+//                   onBackTap!();
+//                 } else {
+//                   Navigator.pop(context);
+//                 }
+//               },
+//               child: const Icon(
+//                 Icons.arrow_back,
+//                 color: Colors.white,
+//               ),
+//             )
+//           : null,
+//       title: Text(
+//         title,
+//         style: const TextStyle(color: Colors.white),
+//       ),
+//       backgroundColor: backgroundColor,
+//       actions: [actions??SizedBox.shrink()],
+//
+//     );
+//   }
+//
+//   @override
+//   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+// }
 class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final bool automaticallyImplyLeading;
@@ -125,15 +177,19 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool isAction;
   final Function? onAction;
   final Widget? actions;
+  final String? subtitle;
 
-  const CommonAppBar(
-      {super.key,
-      required this.title,
-      this.automaticallyImplyLeading = true,
-      this.backgroundColor = AppColors.primaryColor,
-      this.onBackTap,
-      this.isAction = false,
-      this.onAction,  this.actions});
+  const CommonAppBar({
+    super.key,
+    required this.title,
+    this.automaticallyImplyLeading = true,
+    this.backgroundColor = AppColors.primaryColor,
+    this.onBackTap,
+    this.isAction = false,
+    this.subtitle,
+    this.onAction,
+    this.actions,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -141,33 +197,57 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: automaticallyImplyLeading,
       leading: automaticallyImplyLeading
           ? GestureDetector(
-              onTap: () {
-                if (onBackTap != null) {
-                  onBackTap!();
-                } else {
-                  Navigator.pop(context);
-                }
-              },
-              child: const Icon(
-                Icons.arrow_back,
-                color: Colors.white,
-              ),
-            )
+        onTap: () {
+          if (onBackTap != null) {
+            onBackTap!();
+          } else {
+            Navigator.pop(context);
+          }
+        },
+        child: const Icon(
+          Icons.arrow_back,
+          color: Colors.white,
+        ),
+      )
           : null,
-      title: Text(
+      title: subtitle != null && subtitle!.isNotEmpty
+          ? Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            subtitle!,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.80),
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      )
+          : Text(
         title,
         style: const TextStyle(color: Colors.white),
       ),
       backgroundColor: backgroundColor,
-      actions: [actions??SizedBox.shrink()],
-
+      actions: [actions ?? const SizedBox.shrink()],
     );
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => Size.fromHeight(
+    subtitle != null && subtitle!.isNotEmpty
+        ? kToolbarHeight + 14
+        : kToolbarHeight,
+  );
 }
-
 class CommonLabelText extends StatelessWidget {
   final String labelText;
   const CommonLabelText({super.key, required this.labelText});

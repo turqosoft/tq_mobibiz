@@ -110,6 +110,7 @@ class Data {
   String? taxId;
   String? gstin;
   String? territory;
+  String? normalizedCustomerName; // ✅ add this
   String? customerPrimaryContact;
   String? customerPrimaryAddress;
   String? primaryAddress;
@@ -121,12 +122,16 @@ class Data {
   double? totalUnpaid;
   String? latitude;
   String? longitude;
+  bool isLiked = false;
+  String? likedByRaw;
+  List<String> salesPersons = [];
   Data({
     this.name,
     this.customerName,
     this.taxId,
     this.gstin,
     this.territory,
+    this.normalizedCustomerName, // ✅ add this
     this.customerPrimaryContact,
     this.customerPrimaryAddress,
     this.primaryAddress,
@@ -138,11 +143,14 @@ class Data {
     this.totalUnpaid,
     this.latitude,
     this.longitude,
+    // this.salesPerson,
+
   });
 
   Data.fromJson(Map<String, dynamic> json) {
     name = json['name'] as String?;
     customerName = json['customer_name'] as String?;
+    normalizedCustomerName = json['normalized_customer_name'] as String?; // ✅ add this
     taxId = json['tax_id'] as String?;
     gstin = json['gstin'] as String?;
     territory = json['territory'] as String?;
@@ -157,12 +165,14 @@ class Data {
     totalUnpaid = (json['total_unpaid'] ?? 0).toDouble();
     latitude = json['latitude']?.toString();
     longitude = json['longitude']?.toString();
+    likedByRaw = json["_liked_by"];
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = {};
     data['name'] = name;
     data['customer_name'] = customerName;
+    data['normalized_customer_name'] = normalizedCustomerName; // ✅ add this
     data['tax_id'] = taxId;
     data['gstin'] = gstin;
     data['territory'] = territory;

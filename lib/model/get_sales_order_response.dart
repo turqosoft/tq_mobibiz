@@ -91,6 +91,7 @@ class SalesOrderDetails {
   double? totalTaxesAndCharges;
   double? discountAmount;
   double? additionalDiscountPercentage;
+  String? setWarehouse;
   List<SalesOrderItem>? items;
 
   SalesOrderDetails({
@@ -106,6 +107,7 @@ class SalesOrderDetails {
     this.total,
     this.totalTaxesAndCharges,
     this.discountAmount,
+    this.setWarehouse,
     this.additionalDiscountPercentage,
     this.items,
   });
@@ -116,6 +118,7 @@ class SalesOrderDetails {
     return SalesOrderDetails(
       name: json['name'],
       customer: json['customer'],
+      setWarehouse: json['set_warehouse'],
       customerName: json['customer_name'],
       deliveryDate: json['delivery_date'],
       transactionDate: json['transaction_date'],
@@ -173,29 +176,40 @@ class SalesOrderDetails {
 // }
 
 class SalesOrderItem {
+  String? rowName;
   String? itemCode;
   String? itemName;
   String? uom;
-
+  String? itemTaxDetails;
   double? qty;
   double? priceListRate;
   double? discountPercentage;
   double? rate;
+  double? discountAmount;
   double? distributedDiscountAmount;
   double? netRate;
   double? amount;
+  double? netAmount;
+  final String? quotationItem;
+  final String? prevdocDocname;
 
   SalesOrderItem({
+    this.rowName,
     this.itemCode,
     this.itemName,
     this.uom,
     this.qty,
+    this.itemTaxDetails,
     this.priceListRate,
+    this.discountAmount,
     this.discountPercentage,
     this.rate,
     this.distributedDiscountAmount,
     this.netRate,
     this.amount,
+    this.netAmount,
+    this.quotationItem,
+    this.prevdocDocname
   });
 
   factory SalesOrderItem.fromJson(Map<String, dynamic> json) {
@@ -203,17 +217,26 @@ class SalesOrderItem {
         v == null ? null : double.tryParse(v.toString());
 
     return SalesOrderItem(
+      rowName: json['name'],
       itemCode: json['item_code'],
       itemName: json['item_name'],
       uom: json['uom'],
       qty: _parse(json['qty']),
+      itemTaxDetails: json["item_tax_template"],
       priceListRate: _parse(json['price_list_rate']),
+      discountAmount: _parse(json['discount_amount']),
       discountPercentage: _parse(json['discount_percentage']),
       rate: _parse(json['rate']),
       distributedDiscountAmount:
       _parse(json['distributed_discount_amount']),
       netRate: _parse(json['net_rate']),
       amount: _parse(json['amount']),
+      netAmount: _parse(json['net_amount']),
+      quotationItem: json['quotation_item'],
+      prevdocDocname: json['prevdoc_docname'],
+
+
+
     );
   }
 }

@@ -43,10 +43,15 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
     super.dispose();
   }
 
-  void _submitQuotation() {
-    createQuotationTabKey.currentState?.submitQuotation();
+  Future<void> _submitQuotation() async {
+    await createQuotationTabKey.currentState?.submitQuotation();
+    await quotationListTabKey.currentState?.refreshQuotationList();
+
+    setState(() {});   // 👈 rebuild AFTER API finishes
   }
 
+  final GlobalKey<QuotationListTabState> quotationListTabKey =
+  GlobalKey<QuotationListTabState>();
   // 👇 Create a GlobalKey to access CreateQuotationTab’s state
   final GlobalKey<CreateQuotationTabState> createQuotationTabKey =
   GlobalKey<CreateQuotationTabState>();
@@ -90,14 +95,29 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
               );
             },
           ),
+          // if (_showSaveIcon) ...[
           if (_showSaveIcon) ...[
+            // 🆕 PLUS ICON (Only in Edit Mode)
+            if (createQuotationTabKey.currentState?.isEditMode == true)
+              IconButton(
+                icon: const Icon(Icons.add, color: Colors.white),
+                tooltip: "Create New Quotation",
+                onPressed: () {
+                  final state = createQuotationTabKey.currentState;
+                  state?.clearForm();        // 👈 reset form
+                  setState(() {});           // 👈 rebuild appbar
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.save, color: Colors.white),
               tooltip: "Save Quotation",
               onPressed: _submitQuotation,
             ),
             // 🆕 Submit icon (visible only if quotation name exists)
-            if (createQuotationTabKey.currentState?.quotationName != null)
+            // if (createQuotationTabKey.currentState?.existingQuotationName != null)
+            if (createQuotationTabKey.currentState?.isEditMode == true &&
+                createQuotationTabKey.currentState?.existingQuotationName != null)
+
               IconButton(
                 icon: const Icon(Icons.check_circle, color: Colors.white),
                 tooltip: "Submit Quotation",
@@ -115,7 +135,7 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
                     return;
                   }
 
-                  final quotationName = quotationState?.quotationName;
+                  final quotationName = quotationState?.existingQuotationName;
                   if (quotationName == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Save quotation before submitting')),
@@ -146,6 +166,8 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
                     final success = await provider.submitQuotation(quotationName, context);
                     if (success) {
                       quotationState?.clearForm();
+                      await quotationListTabKey.currentState?.refreshQuotationList();
+
                       setState(() {});
                     }
                   }
@@ -173,7 +195,8 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
         children: [
           // 👇 Pass the key to access submit method
           CreateQuotationTab(key: createQuotationTabKey),
-          const QuotationListTab(),
+
+          QuotationListTab(key: quotationListTabKey), // 🆕 Pass the key
         ],
       ),
     );

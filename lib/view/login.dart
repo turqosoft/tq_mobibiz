@@ -65,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 15.0),
             CommonTextField(
               controller: _userNameController,
-              hintText: "Email",
+              hintText: "User",
               style: style,
               obscureText: false,
             ),
@@ -100,63 +100,98 @@ class _LoginScreenState extends State<LoginScreen> {
               obscureText: false,
             ),
             const SizedBox(height: 35.0),
-            // CommonButton(
-            //   onTap: () {
-            //     print("Test 111");
-            //             Navigator.of(context).pushReplacement(
-            //     MaterialPageRoute(builder: (context) => HomeScreen()),
-            //     );
+            // Consumer<SalesOrderProvider>(
+            //   builder: (context, provider, child) {
+            //     return provider.isLoading
+            //         ? const CircularProgressIndicator()
+            //         : CommonButton(
+            //             onTap: () async {
+            //               // Api integration
+            //               String trimmedDomain = _domainController.text.trim();
+            //               _domainController.text = trimmedDomain;
+            //
+            //               provider.setDomain(trimmedDomain);
+            //
+            //               await provider.login(
+            //                 _userNameController.text.trim(),
+            //                 _passwordController.text.trim(),
+            //                 trimmedDomain,
+            //               );
+            //
+            //               if (provider.loginModel != null) {
+            //                 await _sharedPrefService
+            //                     .saveDomainName(trimmedDomain);
+            //
+            //                 Navigator.of(context).pushReplacement(
+            //                   MaterialPageRoute(
+            //                       builder: (context) => HomeScreen()),
+            //                 );
+            //               } else {
+            //                 ScaffoldMessenger.of(context).showSnackBar(
+            //                   const SnackBar(content: Text('Login failed')),
+            //                 );
+            //               }
+            //             },
+            //             buttonText: "Login",
+            //           );
             //   },
-            //   buttonText: "Login",
             // ),
+            // const SizedBox(height: 15.0),
             Consumer<SalesOrderProvider>(
               builder: (context, provider, child) {
                 return provider.isLoading
                     ? const CircularProgressIndicator()
-                    : CommonButton(
-                        onTap: () async {
-                          // await _sharedPrefService.saveLoginDetails(
-                          //     "", "", _domainController.text);
-                          // Api integration
-                          String trimmedDomain = _domainController.text.trim();
-                          _domainController.text = trimmedDomain;
+                    : Column(
+                  children: [
+                    CommonButton(
+                      onTap: () async {
+                        // Api integration
+                        String trimmedDomain = _domainController.text.trim();
+                        _domainController.text = trimmedDomain;
 
-                          provider.setDomain(trimmedDomain);
+                        provider.setDomain(trimmedDomain);
 
-                          await provider.login(
-                            _userNameController.text.trim(),
-                            _passwordController.text.trim(),
-                            trimmedDomain,
+                        await provider.login(
+                          _userNameController.text.trim(),
+                          _passwordController.text.trim(),
+                          trimmedDomain,
+                        );
+
+                        if (provider.loginModel != null) {
+                          await _sharedPrefService
+                              .saveDomainName(trimmedDomain);
+
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) => HomeScreen(),
+                            ),
                           );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Login failed')),
+                          );
+                        }
+                      },
+                      buttonText: "Login",
+                    ),
+                    const SizedBox(height: 25.0),
 
-                          //     provider.setDomain(_domainController.text);
-                          //  //   Timer(const Duration(seconds: 3), () async {
-                          //       await provider.login(
-                          //         _userNameController.text,
-                          //         _passwordController.text,
-                          //         _domainController.text,
-                          //       );
-                          //  });
-
-                          if (provider.loginModel != null) {
-                            await _sharedPrefService
-                                .saveDomainName(trimmedDomain);
-
-                            Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                  builder: (context) => HomeScreen()),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Login failed')),
-                            );
-                          }
-                        },
-                        buttonText: "Login",
-                      );
+                    // Company Name
+                    const Text(
+                      "Turqosoft Solutions Pvt Ltd",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                );
               },
             ),
             const SizedBox(height: 15.0),
+
           ],
         ),
       ),

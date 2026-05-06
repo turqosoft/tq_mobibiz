@@ -9,6 +9,7 @@ class SharedPrefService {
   static const String _keyCompany = 'company';
   static const String _keyPrinterAddress = 'printer_address';
   static const String _keyPrinterName = "printer_name";
+  static const String _defaultWarehouseKey = 'default_warehouse';
 
 
 
@@ -33,7 +34,15 @@ class SharedPrefService {
 
     await prefs.setString(_keyDomainName, domainName);
   }
+  Future<void> saveCustomerFilterBySalesPerson(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool("filter_by_sales_person", value);
+  }
 
+  Future<bool> getCustomerFilterBySalesPerson() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool("filter_by_sales_person") ?? true;
+  }
   Future<Map<String, String?>> getLoginDetails() async {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString(_keyEmail);
@@ -130,21 +139,6 @@ class SharedPrefService {
     return prefs.getString('employee_Id');
   }
 
-  // // 🖨️ --- Printer Helpers ---
-  // Future<void> savePrinterAddress(String address) async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.setString(_keyPrinterAddress, address);
-  // }
-  //
-  // Future<String?> getPrinterAddress() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   return prefs.getString(_keyPrinterAddress);
-  // }
-  //
-  // Future<void> clearPrinterAddress() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.remove(_keyPrinterAddress);
-  // }
 
   // Save both printer name & address
   Future<void> savePrinter(String name, String address) async {
@@ -170,5 +164,23 @@ class SharedPrefService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyPrinterName);
     await prefs.remove(_keyPrinterAddress);
+  }
+
+  // Save default warehouse
+  Future<void> saveDefaultWarehouse(String warehouse) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultWarehouseKey, warehouse);
+  }
+
+// Get default warehouse
+  Future<String?> getDefaultWarehouse() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_defaultWarehouseKey);
+  }
+
+// Clear default warehouse
+  Future<void> clearDefaultWarehouse() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_defaultWarehouseKey);
   }
 }

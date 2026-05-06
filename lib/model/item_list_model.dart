@@ -64,6 +64,7 @@ class ItemData {
   String? image;
   String? brand;
   String? itemGroup;
+  double? actualQty;
 
   ItemData({
     this.itemCode,
@@ -73,6 +74,7 @@ class ItemData {
     this.image,
     this.brand,
     this.itemGroup,
+    this.actualQty
   });
 
   ItemData.fromJson(Map<String, dynamic> json) {
@@ -83,6 +85,7 @@ class ItemData {
     image = json['image'];
     brand = json['brand'];
     itemGroup = json['item_group'];
+    actualQty = (json['actual_qty'] ?? 0).toDouble();
   }
 
   Map<String, dynamic> toJson() {
@@ -94,6 +97,7 @@ class ItemData {
       'image': image,
       'brand': brand,
       'item_group': itemGroup,
+      'actual_qty': actualQty,
     };
   }
 }

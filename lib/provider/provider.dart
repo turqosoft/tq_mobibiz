@@ -4,9 +4,11 @@ import 'dart:io';
 // import 'dart:nativewrappers/_internal/vm/lib/typed_data_patch.dart';
 import 'package:dio/dio.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart' hide CapabilityProfile, Generator, PaperSize;
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter/material.dart';
 // import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer_library.dart' hide CapabilityProfile, Generator, PaperSize;
@@ -23,6 +25,7 @@ import 'package:sales_ordering_app/model/class_group_list_model.dart';
 import 'package:sales_ordering_app/model/current_stock_response.dart';
 import 'package:sales_ordering_app/model/customer_details.dart';
 import 'package:sales_ordering_app/model/customer_list_model.dart';
+import 'package:sales_ordering_app/model/customer_list_model.dart' as customer_models;
 import 'package:sales_ordering_app/model/employee_details.dart';
 import 'package:sales_ordering_app/model/get_payement_receipt_model.dart';
 import 'package:sales_ordering_app/model/get_sales_invoice_response.dart';
@@ -53,7 +56,12 @@ import '../model/pos_invoice_model.dart';
 
 import '../utils/invoice_formatter.dart';
 import 'package:sales_ordering_app/model/customer_list_model.dart' as customer;
+import 'package:image_picker/image_picker.dart';
 
+import '../view/sales_manager/performance/performanceReportBuilder.dart';
+
+
+enum PerformanceReportState { idle, loading, success, error }
 
 class SalesOrderProvider extends ChangeNotifier {
   final SharedPrefService _sharedPrefService = SharedPrefService();
@@ -65,7 +73,8 @@ class SalesOrderProvider extends ChangeNotifier {
   Future<void> initialize() async {
     final pref = await _sharedPrefService.getLoginDetails();
     _domain = pref['domain'] ?? '';
-    _apiService = ApiService(baseUrl: 'https://$_domain.turqosoft.cloud/api');
+    _apiService = ApiService(baseUrl: 'https://$_domain.frappe.cloud/api');
+    // _apiService = ApiService(baseUrl: 'http://$_domain/api');
     await loadOpenedPickLists();
     await loadSeenPicklists();
     notifyListeners();
@@ -75,10 +84,20 @@ class SalesOrderProvider extends ChangeNotifier {
 
   void setDomain(String domain) {
     _domain = domain;
-    _apiService = ApiService(baseUrl: 'https://$_domain.turqosoft.cloud/api');
+    _apiService = ApiService(baseUrl: 'https://$_domain.frappe.cloud/api');
+    // _apiService = ApiService(baseUrl: 'http://$_domain/api');
     notifyListeners();
   }
-  
+
+  Future<List<String>> fetchCompanies() {
+    return _apiService!.fetchCompanyList();
+  }
+
+  Future<void> changeCompanyLocally(String company) async {
+    await _sharedPrefService.saveCompany(company);
+
+    notifyListeners();
+  }
 
   //https://demov15.turqosoft.com/api
 
@@ -128,34 +147,36 @@ class SalesOrderProvider extends ChangeNotifier {
     }
   }
 
-//     // Login new
+//profile
 
-//   LoginNewModel? _loginNewModel;
-//  // bool _isLoading = false;
-//   //String? _errorMessage;
+  Map<String, dynamic>? _userProfile;
+  Map<String, dynamic>? get userProfile => _userProfile;
 
-//   LoginNewModel? get loginNewModel => _loginNewModel;
-//  // bool get isLoading => _isLoading;
-//  // String? get errorMessage => _errorMessage;
+  Future<void> loadLoggedInUserProfile(BuildContext context) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
 
-//   Future<void> loginNew(String username, String password, String domain) async {
-//     _isLoading = true;
-//     _errorMessage = null;
-//     notifyListeners();
+    try {
+      final email = await _apiService!.getLoggedInUserIdentifier();
 
-//     try {
-//       _loginModel = await _apiService!.loginNew(username, password, domain);
-//     } catch (e) {
-//       _loginModel = null;
-//       _errorMessage = e.toString();
-//     } finally {
-//       _isLoading = false;
-//       notifyListeners();
-//     }
-//   }
+      if (email == null) {
+        throw Exception("Unable to determine logged-in user");
+      }
+
+      _userProfile = await _apiService!.fetchUserDetails(email);
+    } catch (e) {
+      _errorMessage = e.toString();
+      _userProfile = null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
+  //profile
 //Customer Details
-
-
 
   CustomerDetails? _customerModel;
 
@@ -204,90 +225,513 @@ class SalesOrderProvider extends ChangeNotifier {
 
     return await _apiService!.checkCustomerExists(name, context);
   }
-
+  Future<String> getSalesPersonWithCache() async {
+    return await _apiService!.getSalesPersonWithCache();
+  }
 
   CustomerList? _customerListModel;
+  bool _isLoadingMore = false;
+  // bool _hasMoreData = true;
+  int _currentPage = 0;
+  final int _pageSize = 20;
 
   CustomerList? get customerListModel => _customerListModel;
+  bool get isLoadingMore => _isLoadingMore;
+  // bool get hasMoreData => _hasMoreData;
+  int _customerCount = 0;
+  int get customerCount => _customerCount;
+  String? _activeSearch;
+  String? get activeSearch => _activeSearch;
 
-  // Future<CustomerList?> customerList(context) async {
-  //   _isLoading = true;
-  //   _errorMessage = null;
-  //   notifyListeners();
-  //
-  //   try {
-  //     // Fetch initial customer list
-  //     _customerListModel = await _apiService!.customerList(context);
-  //
-  //     // 🔑 Enrich each customer with billing and unpaid details
-  //     for (var customer in _customerListModel?.data ?? []) {
-  //       await _apiService!.fetchCustomerDetailss(customer, context);
-  //       debugPrint(
-  //           "Customer ${customer.name}: billingThisYear=${customer.billingThisYear}, totalUnpaid=${customer.totalUnpaid}"
-  //       );
-  //     }
-  //
-  //     return _customerListModel;
-  //   } catch (e) {
-  //     _customerListModel = null;
-  //     _errorMessage = e.toString();
-  //     return null;
-  //   } finally {
-  //     _isLoading = false;
-  //     notifyListeners();
-  //   }
-  // }
-  //
-  Future<CustomerList?> customerList(BuildContext context) async {
+
+// Initial load
+
+  Future<CustomerList?> customerList(
+      BuildContext context, {
+        bool? filterOverride, // 👈 NEW optional param
+      }) async {
     _isLoading = true;
-    _errorMessage = null;
+    _activeSearch = null;
+    _currentPage = 0;
+    _hasMoreData = true;
+    _showOnlyUnpaid = false;    // 👈 reset unpaid when doing a fresh fetch
+    _unpaidCustomerList = [];
     notifyListeners();
-
     try {
-      loggedUser = await _apiService?.getLoggedInUserIdentifier();
-      if (loggedUser == null) throw Exception("Could not get logged user");
+      // 👇 Use override if provided, otherwise fall back to SharedPrefs
+      final filterBySalesPerson = filterOverride ??
+          await _sharedPrefService.getCustomerFilterBySalesPerson();
 
-      /// 1) Get first_name from User
-      final firstName = await _apiService?.fetchUserFirstName(loggedUser!);
-      if (firstName == null) throw Exception("Could not get first_name");
+      // // Read toggle from settings
+      // final filterBySalesPerson =
+      // await _sharedPrefService.getCustomerFilterBySalesPerson();
 
-      /// 2) Get employee.name from first_name
-      final employeeId = await _apiService?.fetchEmployeeByFirstName(firstName);
-      if (employeeId == null) throw Exception("Could not get employee");
+      String? salesPerson;
 
-      /// 3) Get sales person from employee
-      final salesPerson = await _apiService?.fetchSalesPersonByEmployee(employeeId);
-      if (salesPerson == null) throw Exception("Could not get sales person");
+      // Only fetch Sales Person if toggle is ON
+      if (filterBySalesPerson) {
+        salesPerson = await _apiService!.getSalesPersonWithCache();
+      }
 
-      debugPrint("✔️ Sales Person: $salesPerson");
+      // Get logged user BEFORE API call (needed for liked filter)
+      final loggedUser = await _apiService!.getLoggedInUserIdentifier();
 
-      /// 4) Fetch customer list for this sales person
-      _customerListModel = await _apiService!.customerList(
-        context,
-        salesPerson,
-      );
+      // Fetch count + customers in parallel
+      final results = await Future.wait([
+        _apiService!.fetchCustomerCount(
+          context: context,
+          salesPerson: salesPerson,
+          filterBySalesPerson: filterBySalesPerson,
+        ),
+        _apiService!.customerList(
+          context,
+          salesPerson,
+          filterBySalesPerson: filterBySalesPerson,
+          pageLength: _pageSize,
+          start: 0,
+          onlyLiked: _showOnlyLiked,
+          loggedUser: loggedUser,
+        ),
+      ]);
 
-      /// 5) Enrich customer details (as before)
-      for (var customer in _customerListModel?.data ?? []) {
-        await _apiService!.fetchCustomerDetailss(customer, context);
-        debugPrint(
-            "Customer ${customer.name}: billingThisYear=${customer.billingThisYear}, totalUnpaid=${customer.totalUnpaid}"
+      _customerCount = results[0] as int;
+      _customerListModel = results[1] as CustomerList?;
+
+      // Fetch customer details in parallel
+      if (_customerListModel?.data != null &&
+          _customerListModel!.data!.isNotEmpty) {
+        await Future.wait(
+          _customerListModel!.data!.map(
+                (customer) =>
+                _apiService!.fetchCustomerDetailss(customer, context),
+          ),
+          eagerError: false,
         );
+      }
+
+      // Set favorite status locally
+      if (_customerListModel?.data != null && loggedUser != null) {
+        for (var customer in _customerListModel!.data!) {
+          final likedRaw = customer.likedByRaw ?? "[]";
+
+          try {
+            final List likedList = jsonDecode(likedRaw);
+            customer.isLiked = likedList.contains(loggedUser);
+          } catch (e) {
+            customer.isLiked = false;
+          }
+        }
+      }
+
+      if ((_customerListModel?.data?.length ?? 0) < _pageSize) {
+        _hasMoreData = false;
       }
 
       return _customerListModel;
     } catch (e) {
-      debugPrint("Customer Fetch Error: $e");
-      _customerListModel = null;
-      _errorMessage = e.toString();
-      return null;
+      debugPrint('Error in customerList: $e');
+      rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
+  Future<void> toggleCustomerFavorite(
+      BuildContext context,
+      customer.Data customerItem,
+      ) async {
+    final add = !customerItem.isLiked;
+
+    final success = await _apiService!.toggleCustomerLike(
+      context: context,
+      customerName: customerItem.name!,
+      add: add,
+    );
+
+    if (success) {
+      customerItem.isLiked = add;
+      notifyListeners();
+    }
+  }
+// Load more customers
+//   Future<void> loadMoreCustomers(BuildContext context) async {
+//     if (_isLoadingMore || !_hasMoreData) return;
+  Future<void> loadMoreCustomers(BuildContext context) async {
+    // No pagination when showing unpaid — all already loaded
+    if (_showOnlyUnpaid) return;
+
+    if (_isLoadingMore || !_hasMoreData) return;
+    _isLoadingMore = true;
+    notifyListeners();
+
+    try {
+      // ✅ Read toggle from settings
+      final filterBySalesPerson =
+      await _sharedPrefService.getCustomerFilterBySalesPerson();
+
+      String? salesPerson;
+
+      // ✅ Only fetch sales person when filter is ON
+      if (filterBySalesPerson) {
+        salesPerson = await _apiService!.getSalesPersonWithCache();
+      }
+
+      _currentPage++;
+      final start = _currentPage * _pageSize;
+
+      CustomerList? nextBatch;
+
+      // 🔍 SEARCH PAGINATION
+      if (_activeSearch != null && _activeSearch!.isNotEmpty) {
+        nextBatch = await _apiService!.customerSearchPaged(
+          context: context,
+          salesPerson: salesPerson,
+          filterBySalesPerson: filterBySalesPerson,
+          search: _activeSearch!,
+          pageLength: _pageSize,
+          start: start,
+        );
+      }
+      // 📋 NORMAL PAGINATION
+      else {
+        nextBatch = await _apiService!.customerList(
+          context,
+          salesPerson,
+          filterBySalesPerson: filterBySalesPerson,
+          pageLength: _pageSize,
+          start: start,
+          onlyLiked: _showOnlyLiked,
+          loggedUser: loggedUser,
+        );
+      }
+
+      if (nextBatch != null &&
+          nextBatch.data != null &&
+          nextBatch.data!.isNotEmpty) {
+
+        // ✅ Fetch details in parallel (faster than sequential)
+        await Future.wait(
+          nextBatch.data!.map(
+                (customer) => _apiService!.fetchCustomerDetailss(customer, context),
+          ),
+          eagerError: false,
+        );
+
+        _customerListModel?.data?.addAll(nextBatch.data!);
+
+        if (nextBatch.data!.length < _pageSize) {
+          _hasMoreData = false;
+        }
+      } else {
+        _hasMoreData = false;
+      }
+
+    } catch (e) {
+      debugPrint("Load More Error: $e");
+    } finally {
+      _isLoadingMore = false;
+      notifyListeners();
+    }
+  }
+
+//   bool _showOnlyUnpaid = false;
+//   bool get showOnlyUnpaid => _showOnlyUnpaid;
+//
+//   bool _isFetchingAllForUnpaid = false;
+//   bool get isFetchingAllForUnpaid => _isFetchingAllForUnpaid;
+//
+// // Holds full unpaid-filtered list separately
+// // State variables
+//   List<customer_models.Data> _unpaidCustomerList = [];
+//   List<customer_models.Data> get unpaidCustomerList => _unpaidCustomerList;
+//
+// // Track salesPerson for loadMore to reuse
+//   String? _activeSalesPerson;
+//   bool _activeFilterBySalesPerson = false;
+//   Future<void> setUnpaidFilter({
+//     required bool enabled,
+//     required BuildContext context,
+//     bool? filterBySalesPerson,
+//     String? salesPerson,
+//   }) async {
+//     _showOnlyUnpaid = enabled;
+//
+//     if (!enabled) {
+//       // Restore normal paginated list
+//       _unpaidCustomerList = [];
+//       _isFetchingAllForUnpaid = false;  // 👈 always reset the flag on disable
+//       notifyListeners();
+//       return;
+//     }
+//
+//     // Fetch ALL customers and filter for unpaid
+//     _isFetchingAllForUnpaid = true;
+//     _unpaidCustomerList = [];
+//     notifyListeners();
+//
+//     try {
+//       final filterBy = filterBySalesPerson ??
+//           await _sharedPrefService.getCustomerFilterBySalesPerson();
+//
+//       String? sp = salesPerson;
+//       if (filterBy && sp == null) {
+//         sp = await _apiService!.getSalesPersonWithCache();
+//       }
+//
+//       _activeSalesPerson = sp;
+//       _activeFilterBySalesPerson = filterBy;
+//
+//       const int batchSize = 50; // fetch 50 at a time
+//       int start = 0;
+//       bool hasMore = true;
+//
+//       while (hasMore) {
+//         final batch = await _apiService!.customerList(
+//           context,
+//           sp,
+//           filterBySalesPerson: filterBy,
+//           pageLength: batchSize,
+//           start: start,
+//           onlyLiked: _showOnlyLiked,
+//           loggedUser: loggedUser,
+//         );
+//
+//         if (batch?.data == null || batch!.data!.isEmpty) {
+//           hasMore = false;
+//           break;
+//         }
+//
+//         // Fetch details in parallel for this batch
+//         await Future.wait(
+//           batch.data!.map(
+//                 (c) => _apiService!.fetchCustomerDetailss(c, context),
+//           ),
+//           eagerError: false,
+//         );
+//
+//         // Set liked status
+//         if (loggedUser != null) {
+//           for (var customer in batch.data!) {
+//             final likedRaw = customer.likedByRaw ?? "[]";
+//             try {
+//               final List likedList = jsonDecode(likedRaw);
+//               customer.isLiked = likedList.contains(loggedUser);
+//             } catch (_) {
+//               customer.isLiked = false;
+//             }
+//           }
+//         }
+//
+//         final List<customer_models.Data> unpaidInBatch = batch.data!
+//             .where((c) => (c.totalUnpaid ?? 0) > 0)
+//             .toList();
+//         _unpaidCustomerList.addAll(unpaidInBatch);
+//
+//         // Stream results into UI after each batch
+//         notifyListeners();
+//
+//         if (batch.data!.length < batchSize) {
+//           hasMore = false;
+//         } else {
+//           start += batchSize;
+//         }
+//       }
+//     } catch (e) {
+//       debugPrint('Error fetching all for unpaid filter: $e');
+//     } finally {
+//       _isFetchingAllForUnpaid = false;
+//       notifyListeners();
+//     }
+//   }
+  bool _showOnlyUnpaid = false;
+  bool get showOnlyUnpaid => _showOnlyUnpaid;
+
+  bool _isFetchingAllForUnpaid = false;
+  bool get isFetchingAllForUnpaid => _isFetchingAllForUnpaid;
+
+  List<customer_models.Data> _unpaidCustomerList = [];
+  List<customer_models.Data> get unpaidCustomerList => _unpaidCustomerList;
+
+  String? _activeSalesPerson;
+  bool _activeFilterBySalesPerson = false;
+
+  Future<void> setUnpaidFilter({
+    required bool enabled,
+    required BuildContext context,
+    bool? filterBySalesPerson,
+    String? salesPerson,
+  }) async {
+    _showOnlyUnpaid = enabled;
+
+    if (!enabled) {
+      _unpaidCustomerList = [];
+      _allUnpaidCustomerList = []; // 👈 clear backup too
+      _isFetchingAllForUnpaid = false;
+      _activeSearch = null;        // 👈 clear any active search
+      notifyListeners();
+      return;
+    }
+
+    _isFetchingAllForUnpaid = true;
+    _unpaidCustomerList = [];
+    _allUnpaidCustomerList = []; // 👈 clear backup
+    notifyListeners();
+
+    try {
+      final filterBy = filterBySalesPerson ??
+          await _sharedPrefService.getCustomerFilterBySalesPerson();
+
+      String? sp = salesPerson;
+      if (filterBy && sp == null) {
+        sp = await _apiService!.getSalesPersonWithCache();
+      }
+
+      _activeSalesPerson = sp;
+      _activeFilterBySalesPerson = filterBy;
+
+      const int batchSize = 100;
+      const int parallelBatches = 3;
+
+      // Get total count so we know how many pages to fetch
+      final totalCount = await _apiService!.fetchCustomerCount(
+        context: context,
+        salesPerson: sp,
+        filterBySalesPerson: filterBy,
+      );
+
+      if (totalCount == 0) {
+        _isFetchingAllForUnpaid = false;
+        notifyListeners();
+        return;
+      }
+
+      final totalPages = (totalCount / batchSize).ceil();
+
+      // Process pages in parallel windows of 3
+      for (int pageWindow = 0;
+      pageWindow < totalPages;
+      pageWindow += parallelBatches) {
+
+        // Stop if filter was turned off mid-fetch
+        if (!_showOnlyUnpaid) break;
+
+        final pageFutures = <Future<void>>[];
+
+        for (int i = 0;
+        i < parallelBatches && (pageWindow + i) < totalPages;
+        i++) {
+          final start = (pageWindow + i) * batchSize;
+          pageFutures.add(_fetchAndFilterBatch(
+            context: context,
+            sp: sp,
+            filterBy: filterBy,
+            start: start,
+            batchSize: batchSize,
+          ));
+        }
+
+        // Run this window of pages in parallel
+        await Future.wait(pageFutures, eagerError: false);
+
+        // Paint results to UI after each window
+        notifyListeners();
+        await Future.delayed(Duration.zero);
+      }
+
+    } catch (e) {
+      debugPrint('Error fetching all for unpaid filter: $e');
+    } finally {
+      _isFetchingAllForUnpaid = false;
+      notifyListeners();
+    }
+  }
+// Returns sum of all totalUnpaid in the unpaid list
+  double get totalUnpaidSum => _unpaidCustomerList.fold(
+    0.0,
+        (sum, customer) => sum + (customer.totalUnpaid ?? 0.0),
+  );
+  Future<void> _fetchAndFilterBatch({
+    required BuildContext context,
+    required String? sp,
+    required bool filterBy,
+    required int start,
+    required int batchSize,
+  }) async {
+    // Bail out if filter was turned off mid-fetch
+    if (!_showOnlyUnpaid) return;
+
+    try {
+      final batch = await _apiService!.customerList(
+        context,
+        sp,
+        filterBySalesPerson: filterBy,
+        pageLength: batchSize,
+        start: start,
+        onlyLiked: _showOnlyLiked,
+        loggedUser: loggedUser,
+      );
+
+      if (batch?.data == null || batch!.data!.isEmpty) return;
+
+      // 👇 Fire all balance checks in parallel — one lightweight call per customer
+      final balanceResults = await Future.wait(
+        batch.data!.map((customer) =>
+            _apiService!.fetchCustomerOutstandingBalance(
+              customerName: customer.name ?? '',
+              context: context,
+            )),
+        eagerError: false,
+      );
+
+      // 👇 Zip customers with their balance, keep only those with unpaid > 0
+      final List<customer_models.Data> unpaidInBatch = [];
+
+      for (int i = 0; i < batch.data!.length; i++) {
+        final balance = balanceResults[i];
+        if (balance > 0) {
+          batch.data![i].totalUnpaid = balance; // store for display in card
+          unpaidInBatch.add(batch.data![i]);
+        }
+      }
+      // 👇 Fetch full details (billingThisYear etc.) only for unpaid customers
+      // This is a much smaller set so it's fast
+      if (unpaidInBatch.isNotEmpty) {
+        await Future.wait(
+          unpaidInBatch.map(
+                (customer) => _apiService!.fetchCustomerDetailss(customer, context),
+          ),
+          eagerError: false,
+        );
+
+        // fetchCustomerDetailss overwrites totalUnpaid from dashboard_info
+        // so restore the accurate balance we got from get_balance_on
+        for (int i = 0; i < unpaidInBatch.length; i++) {
+          final balance = balanceResults[
+          batch.data!.indexOf(unpaidInBatch[i])];
+          unpaidInBatch[i].totalUnpaid = balance;
+        }
+      }
+      // Set liked status for unpaid customers only
+      if (loggedUser != null) {
+        for (var customer in unpaidInBatch) {
+          final likedRaw = customer.likedByRaw ?? "[]";
+          try {
+            final List likedList = jsonDecode(likedRaw);
+            customer.isLiked = likedList.contains(loggedUser);
+          } catch (_) {
+            customer.isLiked = false;
+          }
+        }
+      }
+
+      _unpaidCustomerList.addAll(unpaidInBatch);
+      _allUnpaidCustomerList.addAll(unpaidInBatch); // 👈 keep backup in sync
 
 
+    } catch (e) {
+      debugPrint('Batch fetch error at start=$start: $e');
+    }
+  }
   void clearCustomerList() {
     _customerSearchModel = null;
     notifyListeners();
@@ -297,104 +741,175 @@ class SalesOrderProvider extends ChangeNotifier {
     _itemListModel = null;
     notifyListeners();
   }
-  
 
-  //customer category filter
-  // Future<CustomerList?> customerGroupFilter(
-  //     String customerGroup, BuildContext context) async {
-  //   _isLoading = true;
-  //   _errorMessage = null;
-  //   notifyListeners();
-  //
-  //   try {
-  //     _customerListModel =
-  //         await _apiService!.customerGroupFilter(customerGroup, context);
-  //     return _customerListModel;
-  //   } catch (e) {
-  //     _customerListModel = null;
-  //     _errorMessage = e.toString();
-  //     return null;
-  //   } finally {
-  //     _isLoading = false;
-  //     notifyListeners();
-  //   }
-  // }
-  //
-  // //customer name search list
-  // Future<CustomerList?> customerNameSearch(
-  //     String customerName, BuildContext context) async {
-  //   _isLoading = true;
-  //   _errorMessage = null;
-  //   notifyListeners();
-  //
-  //   try {
-  //     _customerListModel =
-  //         await _apiService!.customerNameSearchList(customerName, context);
-  //     return _customerListModel;
-  //   } catch (e) {
-  //     _customerListModel = null;
-  //     _errorMessage = e.toString();
-  //     return null;
-  //   } finally {
-  //     _isLoading = false;
-  //     notifyListeners();
-  //   }
-  // }
+
   // filter by customer group
-  Future<CustomerList?> customerGroupFilter(
-      String customerGroup, BuildContext context) async {
+
+  String? _activeCustomerGroup;
+  String? get activeCustomerGroup => _activeCustomerGroup;
+  Future<CustomerList?> applyCustomerGroupFilter(
+      String customerGroup,
+      BuildContext context,
+      ) async {
     _isLoading = true;
-    _errorMessage = null;
+    _activeCustomerGroup = customerGroup;
+    _activeSearch = null; // group overrides search
+    _currentPage = 0;
+    _hasMoreData = true;
     notifyListeners();
 
     try {
-      _customerListModel =
-      await _apiService!.customerGroupFilter(customerGroup, context);
+      loggedUser = await _apiService!.getLoggedInUserIdentifier();
+      final firstName = await _apiService!.fetchUserFirstName(loggedUser!);
+      final employeeId = await _apiService!.fetchEmployeeByFirstName(firstName!);
+      final salesPerson =
+      await _apiService!.fetchSalesPersonByEmployee(employeeId!);
 
-      // 🔑 fetch details for each customer in the new list
-      for (var customer in _customerListModel?.data ?? []) {
+      if (salesPerson == null) {
+        throw Exception("Could not get sales person");
+      }
+
+      _customerListModel = await _apiService!.customerGroupPaged(
+        context: context,
+        salesPerson: salesPerson,
+        customerGroup: customerGroup,
+        pageLength: _pageSize,
+        start: 0,
+        onlyLiked: _showOnlyLiked,
+        loggedUser: loggedUser,
+      );
+
+      // ⭐ APPLY FAVORITE STATUS
+      if (_customerListModel?.data != null && loggedUser != null) {
+        for (var customer in _customerListModel!.data!) {
+          final likedRaw = customer.likedByRaw ?? "[]";
+
+          try {
+            final List likedList = jsonDecode(likedRaw);
+            customer.isLiked = likedList.contains(loggedUser);
+          } catch (e) {
+            customer.isLiked = false;
+          }
+        }
+      }
+
+      // fetch customer details
+      for (final customer in _customerListModel?.data ?? []) {
         await _apiService!.fetchCustomerDetailss(customer, context);
       }
 
+      if ((_customerListModel?.data?.length ?? 0) < _pageSize) {
+        _hasMoreData = false;
+      }
+
       return _customerListModel;
-    } catch (e) {
-      _customerListModel = null;
-      _errorMessage = e.toString();
-      return null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
+  bool _showOnlyLiked = false;
+  bool get showOnlyLiked => _showOnlyLiked;
+  void toggleLikedFilter(bool value) {
+    _showOnlyLiked = value;
+    notifyListeners();
+  }
+  void resetLikedFilter() {
+    _showOnlyLiked = false;
+    notifyListeners();
+  }
+  // Holds the full unfiltered unpaid list for search restore
+  List<customer_models.Data> _allUnpaidCustomerList = [];
 
+  void searchWithinUnpaid(String query) {
+    if (query.isEmpty) {
+      // Restore full unpaid list
+      _unpaidCustomerList = List.from(_allUnpaidCustomerList);
+      _activeSearch = null;
+      notifyListeners();
+      return;
+    }
+
+    _activeSearch = query;
+    final lowerQuery = query.toLowerCase();
+
+    _unpaidCustomerList = _allUnpaidCustomerList.where((customer) {
+      final name = (customer.customerName ?? '').toLowerCase();
+      final id = (customer.name ?? '').toLowerCase();
+      return name.contains(lowerQuery) || id.contains(lowerQuery);
+    }).toList();
+
+    notifyListeners();
+  }
 // search by customer name
   Future<CustomerList?> customerNameSearch(
-      String customerName, BuildContext context) async {
+      String customerName,
+      BuildContext context,
+      ) async {
     _isLoading = true;
-    _errorMessage = null;
+    _activeSearch = customerName;
+    _currentPage = 0;
+    _hasMoreData = true;
     notifyListeners();
 
     try {
-      _customerListModel =
-      await _apiService!.customerNameSearchList(customerName, context);
+      final filterBySalesPerson =
+      await _sharedPrefService.getCustomerFilterBySalesPerson();
 
-      // 🔑 fetch details for each customer in the new list
-      for (var customer in _customerListModel?.data ?? []) {
-        await _apiService!.fetchCustomerDetailss(customer, context);
+      String? salesPerson;
+
+      if (filterBySalesPerson) {
+        salesPerson = await _apiService!.getSalesPersonWithCache();
+      }
+
+      // fetch count
+      _customerCount = await _apiService!.fetchCustomerCount(
+        context: context,
+        salesPerson: salesPerson,
+        filterBySalesPerson: filterBySalesPerson,
+        search: customerName,
+      );
+
+      // fetch search list
+      _customerListModel =
+      await _apiService!.customerSearch(customerName, context);
+
+      // ⭐ GET LOGGED USER
+      final loggedUser = await _apiService!.getLoggedInUserIdentifier();
+
+      // ⭐ DETERMINE LIKE STATUS
+      if (_customerListModel?.data != null && loggedUser != null) {
+        for (var customer in _customerListModel!.data!) {
+          final likedRaw = customer.likedByRaw ?? "[]";
+
+          try {
+            final List likedList = jsonDecode(likedRaw);
+            customer.isLiked = likedList.contains(loggedUser);
+          } catch (e) {
+            customer.isLiked = false;
+          }
+        }
+      }
+
+      // fetch details
+      await Future.wait(
+        _customerListModel?.data?.map(
+              (customer) =>
+              _apiService!.fetchCustomerDetailss(customer, context),
+        ) ??
+            [],
+      );
+
+      if ((_customerListModel?.data?.length ?? 0) < _pageSize) {
+        _hasMoreData = false;
       }
 
       return _customerListModel;
-    } catch (e) {
-      _customerListModel = null;
-      _errorMessage = e.toString();
-      return null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
-
-
   //Customer list
 
   CustomerGroupList? _customerGroupListModel;
@@ -409,6 +924,7 @@ class SalesOrderProvider extends ChangeNotifier {
     try {
       _customerGroupListModel = await _apiService!.customerGroupList(context);
       return _customerGroupListModel;
+
     } catch (e) {
       _customerListModel = null;
       _errorMessage = e.toString();
@@ -419,7 +935,15 @@ class SalesOrderProvider extends ChangeNotifier {
     }
   }
 
-
+  Future<bool> createPaymentCollection(
+      Map<String, dynamic> data, BuildContext context) async {
+    try {
+      return await _apiService!.createPaymentCollection(data, context);
+    } catch (e) {
+      debugPrint("Provider payment collection error: $e");
+      return false;
+    }
+  }
 
 
 // Material request
@@ -1970,7 +2494,222 @@ Future<void> fetchPurchaseRequestDetails(String purchaseRequestName) async {
 
 
 //pick list
+//pick item
 
+  bool isLoadingPickList = false;
+  List<Map<String, dynamic>> pickLists = [];
+
+// Warehouse search
+  List<String> warehouseResultss = [];
+  bool isSearchingWarehouse = false;
+  String? selectedWarehouse;
+  String? defaultWarehouse; // ✅ Add this
+
+  Future<void> fetchPickLists({String? warehouse}) async {
+    try {
+      isLoadingPickList = true;
+      notifyListeners();
+
+      pickLists = await apiService!.fetchPickList(warehouse: warehouse);
+    } catch (e) {
+      debugPrint("fetchPickList Provider Error: $e");
+    } finally {
+      isLoadingPickList = false;
+      notifyListeners();
+    }
+  }
+
+
+  void setSelectedWarehouse(String? warehouse) {
+    selectedWarehouse = warehouse;
+    notifyListeners();
+    fetchPickLists(warehouse: warehouse);
+  }
+
+  void clearWarehouseFilter() {
+    selectedWarehouse = null;
+    notifyListeners();
+    fetchPickLists();
+  }
+  bool isLoadingPickDetail = false;
+  Map<String, dynamic>? pickDetail;
+  bool isLoadingSerialNumbers = false;
+  List<String> availableSerialNumbers = [];
+  Future<void> fetchPickDetail(String pickName) async {
+    try {
+      isLoadingPickDetail = true;
+      notifyListeners();
+
+      pickDetail = await apiService!.fetchPickDetail(pickName);
+    } catch (e) {
+      debugPrint("fetchPickDetail Provider Error: $e");
+    } finally {
+      isLoadingPickDetail = false;
+      notifyListeners();
+    }
+  }
+  bool isSavingPick = false;
+
+  Future<bool> updatePick({
+    required String pickName,
+    required String warehouse,
+    required Map<int, int> statuses,
+    required Map<int, Map<String, int>> boxAllocations,
+    required Map<int, List<String>> serials,
+  }) async {
+    if (pickDetail == null) return false;
+
+    isSavingPick = true;
+    notifyListeners();
+
+    try {
+      final List existingItems = pickDetail!["items"];
+      final List<Map<String, dynamic>> payloadItems = [];
+
+      for (int i = 0; i < existingItems.length; i++) {
+        final item = existingItems[i];
+
+        final serialList = serials[i] ?? [];
+
+        final serialNo = serialList.join("\n"); // empty string if no serials
+
+        final pickedQty =
+            double.tryParse(item["picked_qty"]?.toString() ?? "0") ?? 0;
+
+        /// 🔹 Build tq_pl_box string
+        String tqPlBox = "";
+
+        if (boxAllocations[i] != null &&
+            boxAllocations[i]!.isNotEmpty) {
+
+          tqPlBox = boxAllocations[i]!.entries
+              .map((entry) => "${entry.key}:${entry.value}")
+              .join("\n");
+        }
+
+        payloadItems.add({
+          "name": item["name"],
+          "item_name": item["item_name"],
+          "item_code": item["item_code"],
+          "qty": item["qty"],
+          "picked_qty": pickedQty,            // ✅ SEND PICKED QTY
+          "tq_pl_box": tqPlBox,               // ✅ SEND BOX DATA
+          "has_serial_no": item["has_serial_no"],
+          "status": statuses[i] ?? item["status"],
+          "serial_no": serialNo,
+          "warehouse": item["warehouse"],
+        });
+
+      }
+
+      return await apiService!.updatePick(
+        pickName: pickName,
+        warehouse: warehouse,
+        items: payloadItems,
+      );
+    } catch (e, stack) {
+      debugPrint("updatePick Provider Error: $e");
+      debugPrint("$stack");
+      return false;
+    } finally {
+      isSavingPick = false;
+      notifyListeners();
+    }
+  }
+  bool isSubmittingPick = false;
+
+  Future<bool> submitPick({required String pickName}) async {
+    isSubmittingPick = true;
+    notifyListeners();
+
+    try {
+      return await apiService!.submitPick(pickName: pickName);
+    } catch (e, stack) {
+      debugPrint("submitPick Provider Error: $e");
+      debugPrint("$stack");
+      return false;
+    } finally {
+      isSubmittingPick = false;
+      notifyListeners();
+    }
+  }
+  Future<void> searchWarehouses(String query) async {
+    if (query.isEmpty) {
+      warehouseResultss = [];
+      notifyListeners();
+      return;
+    }
+
+    isSearchingWarehouse = true;
+    notifyListeners();
+
+    warehouseResultss = await apiService!.searchWarehouses(query);
+
+    isSearchingWarehouse = false;
+    notifyListeners();
+  }
+
+  void clearWarehouseResultss() {
+    warehouseResultss.clear();
+    notifyListeners();
+  }
+  Future<void> loadDefaultWarehouse() async {
+    final sharedPrefService = SharedPrefService();
+    defaultWarehouse = await sharedPrefService.getDefaultWarehouse();
+
+    // If no warehouse is selected yet, use the default
+    if (selectedWarehouse == null && defaultWarehouse != null) {
+      selectedWarehouse = defaultWarehouse;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setDefaultWarehouse(String? warehouse) async {
+    final sharedPrefService = SharedPrefService();
+
+    if (warehouse != null && warehouse.isNotEmpty) {
+      await sharedPrefService.saveDefaultWarehouse(warehouse);
+      defaultWarehouse = warehouse;
+    } else {
+      await sharedPrefService.clearDefaultWarehouse();
+      defaultWarehouse = null;
+    }
+
+    notifyListeners();
+  }
+  Future<List<String>> fetchSerialNumbers({
+    required String itemCode,
+    required String warehouse,
+  }) async {
+    try {
+      isLoadingSerialNumbers = true;
+      notifyListeners();
+
+      availableSerialNumbers = await apiService!.fetchAvailableSerialNumbers(
+        itemCode: itemCode,
+        warehouse: warehouse,
+      );
+
+      return availableSerialNumbers;
+    } catch (e) {
+      debugPrint("fetchSerialNumbers Provider Error: $e");
+      return [];
+    } finally {
+      isLoadingSerialNumbers = false;
+      notifyListeners();
+    }
+  }
+
+  void clearSerialNumbers() {
+    availableSerialNumbers = [];
+    notifyListeners();
+  }
+  bool isSerialValid(String serial) {
+    return availableSerialNumbers.contains(serial);
+  }
+
+  //pick item
 //purchase receipt
   List<dynamic> _purchaseReceipts = [];
 
@@ -2463,6 +3202,22 @@ Future<bool> submitInvoice(
 
       detailedItems.add(itemMap);
     }
+    // final List<Map<String, dynamic>> detailedItems =
+    // _itemsList.map((item) {
+    //   final discount = item.discountPercentage ?? 0.0;
+    //
+    //   return {
+    //     "item_code": item.itemCode,
+    //     "qty": item.quantity.toDouble(),
+    //
+    //     // 🔥 REQUIRED for discount
+    //     "price_list_rate": item.priceListRate ?? item.rate,
+    //
+    //     // 🔥 ONLY if > 0
+    //     if (discount > 0)
+    //       "discount_percentage": discount,
+    //   };
+    // }).toList();
 
     // ✅ Submit invoice
     await _apiService!.createSalesInvoice(
@@ -2539,37 +3294,29 @@ void clearSearchResults() {
   _customerSearchModel = null;
   notifyListeners();
 }
-
+  Future<void> getSalesInvoiceByName(
+      BuildContext context,
+      String invoiceName,
+      ) async {
+    try {
+      final result = await _apiService!.getSalesInvoiceByName(
+        context: context,
+        invoiceName: invoiceName,
+      );
+      // Store in the same model your existing list uses
+      // so the UI renders without any changes
+      _salesInvoiceList = result;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching invoice by name: $e');
+    }
+  }
 
 
 //sales invoice
+
 //POS Invoice
-//   String? get posProfile => _posProfile;
-//   List<String> get modesOfPayment => _modesOfPayment;
-//
-//   String? _posProfile;
-//   List<String> _modesOfPayment = [];
-//   /// Fetch POS Profile for current logged in user
-//   Future<void> fetchPosProfile() async{
-//     _isLoading = true;
-//     _errorMessage = null;
-//     notifyListeners();
-//
-//     try {
-//       _posProfile = await _apiService?.fetchPosProfile();
-//       if (_posProfile != null) {
-//         debugPrint("✅ POS Profile: $_posProfile");
-//         await fetchModesOfPayment(_posProfile!);
-//       } else {
-//         _errorMessage = "No POS Profile found for currant user";
-//       }
-//     } catch (e) {
-//       _errorMessage = "Failed to fetch POS Profile: $e";
-//     } finally {
-//       _isLoading = false;
-//       notifyListeners();
-//     }
-//   }
+
   // Expose profile data + discount permission
   Map<String, dynamic>? _posProfile;
   List<String> _modesOfPayment = [];
@@ -3467,23 +4214,26 @@ void clearSearchResults() {
   CustomerList? _customerSearchModel;
 
   CustomerList? get customerSearchModel => _customerSearchModel;
-  Future<CustomerList?> searchCustomer(String customer, context) async {
-  _isLoading = true;
-  _errorMessage = null;
-  notifyListeners();
 
-  try {
-    _customerSearchModel = await _apiService!.customerSearch(customer, context);
-    return _customerSearchModel;
-  } on Exception catch (e) {
-    _customerSearchModel = null;
-    _errorMessage = e.toString();
-    return null;
-  } finally {
-    _isLoading = false;
+  Future<CustomerList?> searchCustomer(String customer, BuildContext context) async {
+    _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
+
+    try {
+      _customerSearchModel =
+      await _apiService!.customerSearch(customer, context);
+
+      return _customerSearchModel;
+    } catch (e) {
+      _customerSearchModel = null;
+      _errorMessage = e.toString();
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
-}
 // ✅ Added: clear method to reset search results
   void clearCustomerSearch() {
     _customerSearchModel = null;
@@ -3663,6 +4413,7 @@ void clearSearchResults() {
       final logType = _isCheckedIn ? "OUT" : "IN";
       _checkInCheckOut = await _apiService!.checkinOrCheckout(
           logType, time, longitude, latitude, city, state, area, customer,remarks, context);
+      await initializeCheckinStatus();
       _isCheckedIn = !_isCheckedIn;
     } catch (e) {
       _errorMessage = e.toString();
@@ -3691,33 +4442,33 @@ void clearSearchResults() {
   }
   String? _lastRemarks;
   String? get lastRemarks => _lastRemarks;
+  String? _lastCheckinTime;
+  DateTime? _lastCheckinDateTime;
 
-  // Future<void> initializeCheckinStatus() async {
-  //   try {
-  //     final latestCheckin = await _apiService!.getLatestCheckinDetailsForEmployee();
-  //     if (latestCheckin != null) {
-  //       _isCheckedIn = latestCheckin['log_type'] == "IN";
-  //
-  //       // ✅ Store last customer only if not empty
-  //       final lastCustomer = latestCheckin['customer'];
-  //       if (lastCustomer != null && lastCustomer.toString().trim().isNotEmpty) {
-  //         _lastCheckedInCustomer = lastCustomer;
-  //       } else {
-  //         _lastCheckedInCustomer = null; // leave blank if empty
-  //       }
-  //
-  //       notifyListeners();
-  //     }
-  //   } catch (e) {
-  //     debugPrint("Error initializing check-in status: $e");
-  //   }
-  // }
+  String? get lastCheckinTime => _lastCheckinTime;
+  DateTime? get lastCheckinDateTime => _lastCheckinDateTime;
   Future<void> initializeCheckinStatus() async {
     try {
       final latestCheckin = await _apiService!.getLatestCheckinDetailsForEmployee();
       if (latestCheckin != null) {
         _isCheckedIn = latestCheckin['log_type'] == "IN";
 
+        /// ✅ TIME PARSING
+        final timeStr = latestCheckin['time'];
+
+        if (timeStr != null) {
+          try {
+            final parsed = DateTime.parse(timeStr);
+
+            _lastCheckinDateTime = parsed;
+
+            _lastCheckinTime =
+                DateFormat('hh:mm a').format(parsed); // 10:30 AM
+          } catch (e) {
+            debugPrint("Time parse error: $e");
+            _lastCheckinTime = null;
+          }
+        }
         // ✅ Store last customer if available
         final lastCustomer = latestCheckin['customer'];
         if (lastCustomer != null && lastCustomer.toString().trim().isNotEmpty) {
@@ -4113,6 +4864,154 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     return value.toString();
   }
 
+//   String buildHtmlReport({
+//     required List<Map<String, dynamic>> rows,
+//     required List<Map<String, dynamic>> columns,
+//     Map<String, dynamic>? totalRow,
+//   }) {
+//     // Remove "sales_person" column
+//     final filteredColumns = columns.where(
+//           (col) => col["fieldname"] != "sales_person",
+//     ).toList();
+//
+//     final buffer = StringBuffer();
+//
+//     buffer.write("""
+// <!DOCTYPE html>
+// <html>
+// <head>
+// <meta charset="utf-8">
+// <title>Salesman Monthly Sales</title>
+// <style>
+//   body { font-family: Arial, sans-serif; font-size: 12px; }
+//   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+//   th, td { border: 1px solid #ddd; padding: 6px; }
+//   th { background: #eee; }
+//   .right { text-align: right; }
+//   .bold { font-weight: bold; }
+// </style>
+// </head>
+// <body>
+//
+// <h2>Salesman Monthly Sales</h2>
+// <table>
+// <thead>
+// <tr>
+// <th>#</th>
+// """);
+//
+//     // Build column headers
+//     for (final col in filteredColumns) {
+//       buffer.write("<th>${col["label"]}</th>");
+//     }
+//
+//     buffer.write("</tr></thead><tbody>");
+//
+//     // Build data rows
+//     for (int i = 0; i < rows.length; i++) {
+//       final r = rows[i];
+//
+//       buffer.write("<tr>");
+//       buffer.write("<td>${i + 1}</td>");
+//
+//       for (final col in filteredColumns) {
+//         final field = col["fieldname"];
+//         // final value = r[field] ?? "";
+//         // final align = value is num ? "right" : "";
+//         //
+//         // buffer.write('<td class="$align">$value</td>');
+//         final rawValue = r[field];
+//         final formattedValue = formatNumber(rawValue);
+//         final align = rawValue is num ? "right" : "";
+//         buffer.write('<td class="$align">$formattedValue</td>');
+//
+//       }
+//
+//       buffer.write("</tr>");
+//     }
+//
+//     // Total row
+//     if (totalRow != null) {
+//       buffer.write('<tr class="bold"><td></td>');
+//
+//       for (final col in filteredColumns) {
+//         final field = col["fieldname"];
+//         // final value = totalRow[field] ?? "";
+//         // final align = value is num ? "right" : "";
+//         //
+//         // buffer.write('<td class="$align">$value</td>');
+//         final rawValue = totalRow[field];
+//         final formattedValue = formatNumber(rawValue);
+//         final align = rawValue is num ? "right" : "";
+//         buffer.write('<td class="$align">$formattedValue</td>');
+//
+//       }
+//
+//       buffer.write("</tr>");
+//     }
+//
+//     buffer.write("""
+// </tbody>
+// </table>
+// </body>
+// </html>
+// """);
+//
+//     return buffer.toString();
+//   }
+  String formatIndianCurrency(dynamic value) {
+    if (value == null) return "0";
+
+    // Convert to number
+    double number;
+    if (value is String) {
+      number = double.tryParse(value) ?? 0;
+    } else if (value is num) {
+      number = value.toDouble();
+    } else {
+      return value.toString();
+    }
+
+    // Handle negative numbers
+    bool isNegative = number < 0;
+    number = number.abs();
+
+    // Split into integer and decimal parts
+    String numStr = number.toStringAsFixed(2);
+    List<String> parts = numStr.split('.');
+    String integerPart = parts[0];
+    String decimalPart = parts.length > 1 ? parts[1] : '00';
+
+    // Indian numbering: last 3 digits, then groups of 2
+    String formatted = '';
+    int length = integerPart.length;
+
+    if (length <= 3) {
+      formatted = integerPart;
+    } else {
+      // Last 3 digits
+      formatted = integerPart.substring(length - 3);
+      int remaining = length - 3;
+
+      // Groups of 2 digits
+      while (remaining > 0) {
+        int end = remaining;
+        int start = remaining > 2 ? remaining - 2 : 0;
+        formatted = integerPart.substring(start, end) + ',' + formatted;
+        remaining = start;
+      }
+    }
+
+    // Add decimal part
+    formatted = '$formatted.$decimalPart';
+
+    // Add negative sign if needed
+    if (isNegative) {
+      formatted = '-$formatted';
+    }
+
+    return formatted;
+  }
   String buildHtmlReport({
     required List<Map<String, dynamic>> rows,
     required List<Map<String, dynamic>> columns,
@@ -4165,15 +5064,15 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
 
       for (final col in filteredColumns) {
         final field = col["fieldname"];
-        // final value = r[field] ?? "";
-        // final align = value is num ? "right" : "";
-        //
-        // buffer.write('<td class="$align">$value</td>');
         final rawValue = r[field];
-        final formattedValue = formatNumber(rawValue);
+
+        // Format if it's a number, otherwise use as-is
+        final formattedValue = (rawValue is num)
+            ? formatIndianCurrency(rawValue)
+            : (rawValue ?? "");
+
         final align = rawValue is num ? "right" : "";
         buffer.write('<td class="$align">$formattedValue</td>');
-
       }
 
       buffer.write("</tr>");
@@ -4185,15 +5084,15 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
 
       for (final col in filteredColumns) {
         final field = col["fieldname"];
-        // final value = totalRow[field] ?? "";
-        // final align = value is num ? "right" : "";
-        //
-        // buffer.write('<td class="$align">$value</td>');
         final rawValue = totalRow[field];
-        final formattedValue = formatNumber(rawValue);
+
+        // Format if it's a number, otherwise use as-is
+        final formattedValue = (rawValue is num)
+            ? formatIndianCurrency(rawValue)
+            : (rawValue ?? "");
+
         final align = rawValue is num ? "right" : "";
         buffer.write('<td class="$align">$formattedValue</td>');
-
       }
 
       buffer.write("</tr>");
@@ -4209,9 +5108,161 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     return buffer.toString();
   }
 
-
 //Sales Person Report
+//Site Visit
 
+//   // ── State variables ──────────────────────────────────
+  List<Map<String, dynamic>> _todaySiteVisits = [];
+  bool _isSiteVisitsLoading = false;
+
+  List<Map<String, dynamic>> get todaySiteVisits => _todaySiteVisits;
+  bool get isSiteVisitsLoading => _isSiteVisitsLoading;
+
+  Future<bool> canCreateSiteVisit() async {
+    try {
+      loggedUser = await apiService?.getLoggedInUserIdentifier();
+      final firstName = await apiService?.fetchUserFirstName(loggedUser!);
+      final empData = await apiService?.fetchEmployeeDetails(firstName!);
+      final employee = empData?["employee"];
+
+      if (employee == null) return false;
+
+      final logType =
+      await apiService!.fetchLatestEmployeeLogType(employee);
+
+      // Must be checked IN to create a site visit
+      return logType == "IN";
+    } catch (e) {
+      debugPrint("canCreateSiteVisit Error: $e");
+      return false;
+    }
+  }
+  // ── Fetch today's site visits ─────────────────────────────────────────
+  Future<void> fetchTodaySiteVisits() async {
+    _isSiteVisitsLoading = true;
+    notifyListeners();
+
+    try {
+      final ok = await _ensureEmployeeInfo();
+      if (!ok) {
+        _todaySiteVisits = [];
+        return;
+      }
+      _todaySiteVisits =
+      await apiService!.fetchTodaySiteVisits(eemEmployee!);
+    } catch (e) {
+      debugPrint("Provider fetchTodaySiteVisits Error: $e");
+      _todaySiteVisits = [];
+    } finally {
+      _isSiteVisitsLoading = false;
+      notifyListeners();
+    }
+  }
+
+// ── Create site visit (add to EEM child table) ────────────────────────
+  Future<bool> createSiteVisit({
+    required BuildContext context,
+    required String customer,
+    required String site,
+    required double latitude,
+    required double longitude,
+    required String remarks,
+    required String time,
+    double? actualDistance,
+  }) async {
+    try {
+      // EEM must exist before adding a site visit
+      if (!eemCreated || eemDocName == null) {
+        Fluttertoast.showToast(
+          msg: "Please save expenses first before adding a site visit.",
+          backgroundColor: Colors.red.shade600,
+          textColor: Colors.white,
+        );
+        return false;
+      }
+
+      final success = await apiService!.addSiteVisitToEEM(
+        eemName: eemDocName!,
+        customer: customer,
+        site: site,
+        siteLat: latitude,
+        siteLong: longitude,
+        remarks: remarks,
+        actualDistance: actualDistance,   // ← add this
+
+      );
+
+      if (success) await fetchTodaySiteVisits();
+      return success;
+    } catch (e) {
+      debugPrint("Provider createSiteVisit Error: $e");
+      return false;
+    }
+  }
+
+// ── Update site visit row ─────────────────────────────────────────────
+  Future<bool> updateSiteVisit({
+    required String docName,   // row name
+    required String customer,
+    required String site,
+    required double latitude,
+    required double longitude,
+    required String remarks,
+    required String time,
+    double? actualDistance,       // ← add this
+
+  }) async {
+    try {
+      if (eemDocName == null) return false;
+
+      final success = await apiService!.updateSiteVisitInEEM(
+        eemName: eemDocName!,
+        rowName: docName,
+        customer: customer,
+        site: site,
+        siteLat: latitude,
+        siteLong: longitude,
+        remarks: remarks,
+        actualDistance: actualDistance,   // ← add this
+
+      );
+
+      if (success) await fetchTodaySiteVisits();
+      return success;
+    } catch (e) {
+      debugPrint("Provider updateSiteVisit Error: $e");
+      return false;
+    }
+  }
+
+// ── Delete site visit row ─────────────────────────────────────────────
+//   Future<bool> deleteSiteVisit(String rowName) async {
+//     // Optimistic removal
+//     _todaySiteVisits.removeWhere((v) => v["name"] == rowName);
+//     notifyListeners();
+//
+//     try {
+//       final eemName = eemDocName ??
+//           _todaySiteVisits.isNotEmpty
+//           ? _todaySiteVisits.first["_eem_name"]
+//           : null;
+//
+//       if (eemName == null) return false;
+//
+//       final success = await apiService!.deleteSiteVisitFromEEM(
+//         eemName: eemName,
+//         rowName: rowName,
+//       );
+//
+//       if (!success) await fetchTodaySiteVisits(); // rollback
+//       return success;
+//     } catch (e) {
+//       debugPrint("Provider deleteSiteVisit Error: $e");
+//       await fetchTodaySiteVisits();
+//       return false;
+//     }
+//   }
+  //Site Visit
   //Expense Tracker
   bool isTracking = false;
 
@@ -4241,6 +5292,11 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     isTracking = trackingActive;
     activeExpenseDocName = trackingActive ? latestEEM["name"] : null;
 
+    notifyListeners();
+  }
+  // Directly set site visits from EEM data (used in edit mode)
+  void setTodaySiteVisitsFromEEM(List<Map<String, dynamic>> visits) {
+    _todaySiteVisits = visits;
     notifyListeners();
   }
 
@@ -4273,43 +5329,145 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     notifyListeners();
   }
 
-  Future<bool> saveEEM(List<Map<String, dynamic>> expenses) async {
-    if (isSaveLoading) return false;
+  // Future<List<Map<String, dynamic>>?> saveEEM(
+  //     List<Map<String, dynamic>> expenses,
+  //     ) async {
+  //   if (isSaveLoading) return null;
+  //
+  //   _setSaveLoading(true);
+  //   try {
+  //     final eemDetails = await _getLatestEEM();
+  //     if (eemDetails == null) return null;
+  //
+  //     final ok = await apiService!.saveExecutiveExpenseTracking(
+  //       eemData: eemDetails,
+  //       siteVisits: siteVisits,
+  //       expenses: expenses,
+  //     );
+  //
+  //     if (!ok) return null;
+  //
+  //     // 🔴 REFRESH FROM SERVER (USE EXISTING METHOD)
+  //     final refreshed =
+  //     await apiService!.fetchEEMDetails(eemDetails["name"]);
+  //
+  //     return List<Map<String, dynamic>>.from(
+  //       refreshed!["employee_expense_tracking"],
+  //     );
+  //   } finally {
+  //     _setSaveLoading(false);
+  //   }
+  // }
 
-    _setSaveLoading(true);
+  // Future<bool> submitEEM(List<Map<String, dynamic>> expenses) async {
+  //   if (isSubmitLoading) return false;
+  //
+  //   _setSubmitLoading(true);
+  //
+  //   try {
+  //     final eemDetails = await _getLatestEEM();
+  //     if (eemDetails == null) return false;
+  //
+  //     // Ensure all expenses have the attachment field
+  //     final processedExpenses = expenses.map((expense) {
+  //       return {
+  //         ...expense,
+  //         'attachment': expense['attachment'], // Can be null or file URL
+  //       };
+  //     }).toList();
+  //
+  //     return await apiService!.submitExecutiveExpenseTracking(
+  //       eemData: eemDetails,
+  //       siteVisits: siteVisits,
+  //       expenses: processedExpenses,
+  //     );
+  //   } finally {
+  //     _setSubmitLoading(false);
+  //   }
+  // }
 
+  bool _isUploadingFile = false;
+  bool get isUploadingFile => _isUploadingFile;
+
+  void _setUploadingFile(bool value) {
+    _isUploadingFile = value;
+    notifyListeners();
+  }
+
+  /// Pick file from gallery (images) or camera
+  Future<File?> pickFile({bool fromCamera = false}) async {
     try {
-      final eemDetails = await _getLatestEEM();
-      if (eemDetails == null) return false;
-
-      return await apiService!.saveExecutiveExpenseTracking(
-        eemData: eemDetails,
-        siteVisits: siteVisits,
-        expenses: expenses,
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: fromCamera ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
       );
-    } finally {
-      _setSaveLoading(false); // ✅ always reset
+
+      if (image != null) {
+        return File(image.path);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error picking file: $e');
+      return null;
+    }
+  }
+  Future<File?> pickDocument() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        return File(result.files.single.path!);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error picking document: $e');
+      return null;
+    }
+  }
+  /// Pick multiple images from gallery
+  Future<List<File>?> pickMultipleFiles() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final List<XFile> images = await picker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (images.isNotEmpty) {
+        return images.map((xFile) => File(xFile.path)).toList();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error picking multiple files: $e');
+      return null;
     }
   }
 
-  Future<bool> submitEEM(List<Map<String, dynamic>> expenses) async {
-    if (isSubmitLoading) return false;
+  /// Upload file and return the file URL
+  Future<String?> uploadExpenseFile(
+      File file, {
+        required String expenseRowName,
+      }) async {
+    if (apiService == null) return null;
 
-    _setSubmitLoading(true);
-
+    _setUploadingFile(true);
     try {
-      final eemDetails = await _getLatestEEM();
-      if (eemDetails == null) return false;
-
-      return await apiService!.submitExecutiveExpenseTracking(
-        eemData: eemDetails,
-        siteVisits: siteVisits,
-        expenses: expenses,
+      return await apiService!.uploadFile(
+        file: file,
+        expenseRowName: expenseRowName,
       );
     } finally {
-      _setSubmitLoading(false); // ✅ always reset
+      _setUploadingFile(false);
     }
   }
+
 
   String? activeExpenseDocName;
 
@@ -4321,15 +5479,14 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     notifyListeners();
   }
 
-
   // Future<bool> startTracking({
   //   required BuildContext context,
   //   required String startTime,
   //   required double startLat,
   //   required double startLong,
   // }) async {
-  //   if (isTrackingLoading) return false;
   //
+  //   if (isTrackingLoading) return false;
   //   _setTrackingLoading(true);
   //
   //   try {
@@ -4354,6 +5511,41 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   //
   //     if (activeExpenseDocName != null) {
   //       isTracking = true;
+  //
+  //       return true;
+  //     }
+  //     return false;
+  //   } finally {
+  //     _setTrackingLoading(false);
+  //   }
+  // }
+  //
+  //
+  // Future<bool> stopTracking({
+  //   required String endTime,
+  //   required double endLat,
+  //   required double endLong,
+  //   required List<Map<String, dynamic>> expenses,
+  // }) async {
+  //   if (activeExpenseDocName == null || isTrackingLoading) return false;
+  //
+  //   _setTrackingLoading(true);
+  //
+  //   try {
+  //     final data = await apiService!.stopExecutiveExpenseTracking(
+  //       docName: activeExpenseDocName!,
+  //       endTime: endTime,
+  //       endLat: endLat,
+  //       endLong: endLong,
+  //       expenses: expenses,
+  //     );
+  //
+  //     if (data != null) {
+  //       siteVisits = data;
+  //       this.expenses = expenses;
+  //
+  //       isTracking = false;
+  //       activeExpenseDocName = null;
   //       return true;
   //     }
   //     return false;
@@ -4361,80 +5553,6 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   //     _setTrackingLoading(false); // ✅ ALWAYS reset
   //   }
   // }
-  Future<bool> startTracking({
-    required BuildContext context,
-    required String startTime,
-    required double startLat,
-    required double startLong,
-  }) async {
-
-    if (isTrackingLoading) return false;
-    _setTrackingLoading(true);
-
-    try {
-      loggedUser = await apiService?.getLoggedInUserIdentifier();
-      final firstName = await apiService?.fetchUserFirstName(loggedUser!);
-      final empData = await apiService?.fetchEmployeeDetails(firstName!);
-
-      final today = DateTime.now();
-      final date =
-          "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
-
-      activeExpenseDocName =
-      await apiService!.startExecutiveExpenseTracking(
-        context: context,
-        employee: empData!["employee"],
-        employeeName: empData["employee_name"],
-        date: date,
-        startTime: startTime,
-        startLat: startLat,
-        startLong: startLong,
-      );
-
-      if (activeExpenseDocName != null) {
-        isTracking = true;
-
-        return true;
-      }
-      return false;
-    } finally {
-      _setTrackingLoading(false);
-    }
-  }
-
-
-  Future<bool> stopTracking({
-    required String endTime,
-    required double endLat,
-    required double endLong,
-    required List<Map<String, dynamic>> expenses,
-  }) async {
-    if (activeExpenseDocName == null || isTrackingLoading) return false;
-
-    _setTrackingLoading(true);
-
-    try {
-      final data = await apiService!.stopExecutiveExpenseTracking(
-        docName: activeExpenseDocName!,
-        endTime: endTime,
-        endLat: endLat,
-        endLong: endLong,
-        expenses: expenses,
-      );
-
-      if (data != null) {
-        siteVisits = data;
-        this.expenses = expenses;
-
-        isTracking = false;
-        activeExpenseDocName = null;
-        return true;
-      }
-      return false;
-    } finally {
-      _setTrackingLoading(false); // ✅ ALWAYS reset
-    }
-  }
 
   Future<List<String>> fetchExpenseTypes(String query) async {
     return await apiService!.searchExpenseClaimTypes(query);
@@ -4456,65 +5574,373 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
 
     return true;
   }
+// In provider.dart
+
+  Future<bool> canStartTracking() async {
+    loggedUser = await apiService?.getLoggedInUserIdentifier();
+    final firstName = await apiService?.fetchUserFirstName(loggedUser!);
+    final empData = await apiService?.fetchEmployeeDetails(firstName!);
+
+    if (empData == null) return true;
+
+    final logType = await apiService
+        ?.fetchLatestEmployeeLogType(empData["employee"]);
+
+    // ❌ If still checked IN, block starting
+    if (logType == "IN") {
+      return false;
+    }
+
+    return true;
+  }
+  void setSiteVisits(List<Map<String, dynamic>> visits) {
+    siteVisits = visits;
+    notifyListeners();
+  }
+// In your SalesOrderProvider class
 
 
+  void clearTrackingData() {
+    isTracking = false;
+    isTrackingLoading = false;
+    isSaveLoading = false;
+    isSubmitLoading = false;
+
+    // ✅ Clear site visits and expenses
+    siteVisits.clear();
+    expenses.clear();
+    eemDocName = null;
+    eemCreated = false;
+    eemEmployee = null;
+    eemEmployeeName = null;
+    eemDate = null;
+    isEEMSaveLoading = false;
+    isEEMSubmitLoading = false;
+    notifyListeners();
+    // ✅ Clear active expense document name
+    activeExpenseDocName = null;
+
+    // Clear from SharedPreferences
+    _clearTrackingFromPrefs();
+
+    notifyListeners();
+  }
+
+  Future<void> _clearTrackingFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('tracking_state');
+    await prefs.remove('start_time');
+    await prefs.remove('start_lat');
+    await prefs.remove('start_long');
+    await prefs.remove('end_time');
+    await prefs.remove('end_lat');
+    await prefs.remove('end_long');
+    await prefs.remove('eem_name');
+    await prefs.remove('eem_date');
+    // Add any other keys you're storing
+  }
   //Expense Tracker
+//claude
 
+  // ── State ─────────────────────────────────────────────────────────────
+  String? eemDocName;           // active EEM doc name
+  String? eemEmployee;          // cached employee id
+  String? eemEmployeeName;      // cached employee name
+  String? eemDate;              // cached date string
+  bool isEEMSaveLoading = false;
+  bool isEEMSubmitLoading = false;
+  bool eemCreated = false;      // true once EEM is POSTed
+
+  void _setEEMSaveLoading(bool v) { isEEMSaveLoading = v; notifyListeners(); }
+  void _setEEMSubmitLoading(bool v) { isEEMSubmitLoading = v; notifyListeners(); }
+
+// ── Fetch & cache employee info ───────────────────────────────────────
+  Future<bool> _ensureEmployeeInfo() async {
+    if (eemEmployee != null) return true;
+    try {
+      loggedUser = await apiService?.getLoggedInUserIdentifier();
+      final firstName = await apiService?.fetchUserFirstName(loggedUser!);
+      final empData = await apiService?.fetchEmployeeDetails(firstName!);
+      if (empData == null) return false;
+
+      eemEmployee = empData["employee"];
+      eemEmployeeName = empData["employee_name"];
+
+      final today = DateTime.now();
+      eemDate =
+      "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+      return true;
+    } catch (e) {
+      debugPrint("_ensureEmployeeInfo Error: $e");
+      return false;
+    }
+  }
+
+// ── CREATE EEM (POST — called on first Save tap) ──────────────────────
+  Future<bool> createEEM({
+    double? startLat,
+    double? startLong,
+    double? startOdometer,
+  }) async {
+    if (eemCreated) return true;
+    final ok = await _ensureEmployeeInfo();
+    if (!ok) return false;
+
+    eemDocName = await apiService!.createExecutiveExpenseManager(
+      employee: eemEmployee!,
+      employeeName: eemEmployeeName!,
+      date: eemDate!,
+      startLat: startLat,
+      startLong: startLong,
+      startOdometer: startOdometer,
+    );
+
+    if (eemDocName != null) {
+      eemCreated = true;
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+  bool isEEMEndLoading = false;
+
+  void _setEEMEndLoading(bool v) {
+    isEEMEndLoading = v;
+    notifyListeners();
+  }
+
+  Future<bool> updateEEMEnd({
+    required double endOdometer,
+    required double endLat,
+    required double endLong,
+  }) async {
+    if (eemDocName == null) return false;
+    _setEEMEndLoading(true);
+
+    try {
+      final endTime =
+      DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+
+      final ok = await apiService!.updateEEMEndDetails(
+        eemName: eemDocName!,
+        endTime: endTime,
+        endLat: endLat,
+        endLong: endLong,
+        endOdometer: endOdometer,
+      );
+
+      return ok;
+    } catch (e) {
+      debugPrint("updateEEMEnd Error: $e");
+      return false;
+    } finally {
+      _setEEMEndLoading(false);
+    }
+  }
+// ── SAVE EEM (PUT, docstatus=0) ───────────────────────────────────────
+
+  Future<bool> saveEEMExpenses(
+      List<Map<String, dynamic>> expenses, {
+        double? startOdometer,
+        double? startLat,
+        double? startLong,
+        double? endOdometer,
+      }) async {
+    if (isEEMSaveLoading) return false;
+    _setEEMSaveLoading(true);
+
+    try {
+      if (!eemCreated) {
+        final created = await createEEM(
+          startLat: startLat,
+          startLong: startLong,
+          startOdometer: startOdometer,
+        );
+        if (!created) return false;
+      }
+
+      final ok = await apiService!.saveEEMWithExpenses(
+        eemName: eemDocName!,
+        employee: eemEmployee!,
+        employeeName: eemEmployeeName!,
+        date: eemDate!,
+        expenses: expenses,
+        startOdometer: startOdometer,
+        endOdometer: endOdometer,
+      );
+
+      return ok;
+    } catch (e) {
+      debugPrint("saveEEMExpenses Error: $e");
+      return false;
+    } finally {
+      _setEEMSaveLoading(false);
+    }
+  }
+
+// ── SUBMIT EEM (PUT, docstatus=1) ─────────────────────────────────────
+  Future<bool> submitEEMExpenses(
+      List<Map<String, dynamic>> expenses, {
+        double? startOdometer,
+        double? endOdometer,
+      }) async  {
+    if (isEEMSubmitLoading) return false;
+    _setEEMSubmitLoading(true);
+
+    try {
+      if (!eemCreated) {
+        final created = await createEEM();
+        if (!created) return false;
+      }
+
+      final ok = await apiService!.submitEEMWithExpenses(
+        eemName: eemDocName!,
+        employee: eemEmployee!,
+        employeeName: eemEmployeeName!,
+        date: eemDate!,
+        expenses: expenses,
+        startOdometer: startOdometer,
+        endOdometer: endOdometer,
+      );
+
+      if (ok) {
+        // Reset EEM state after successful submit
+        eemDocName = null;
+        eemCreated = false;
+        eemEmployee = null;
+        eemEmployeeName = null;
+        eemDate = null;
+        _todaySiteVisits = [];
+
+        notifyListeners();
+      }
+
+      return ok;
+    } catch (e) {
+      debugPrint("submitEEMExpenses Error: $e");
+      return false;
+    } finally {
+      _setEEMSubmitLoading(false);
+    }
+  }
+  bool isEEMRestoring = false;
+
+  void _setEEMRestoring(bool v) {
+    isEEMRestoring = v;
+    notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>?> restoreUnsubmittedEEM() async {
+    _setEEMRestoring(true);
+
+    try {
+      final ok = await _ensureEmployeeInfo();
+      if (!ok) return null;
+
+      final eem = await apiService!
+          .fetchLatestUnsubmittedEEM(eemEmployee!);
+
+      if (eem == null) return null;
+
+      // Restore EEM state
+      eemDocName = eem["name"];
+      eemCreated = true;
+      eemEmployee = eem["employee"];
+      eemEmployeeName = eem["employee_name"];
+      eemDate = eem["date"];
+      notifyListeners();
+
+      // Return expense rows for UI to restore
+      final rows = eem["employee_expense_tracking"];
+      if (rows is List) {
+        return List<Map<String, dynamic>>.from(rows);
+      }
+      return [];
+    } catch (e) {
+      debugPrint("restoreUnsubmittedEEM Error: $e");
+      return null;
+    } finally {
+      _setEEMRestoring(false);
+    }
+  }
+  //claude
   //checkin
 
+  // Future<List<dynamic>> fetchCheckinsAfterEEMStart(
+  //     BuildContext context) async {
+  //   try {
+  //     // Step 1: Identify employee
+  //     loggedUser = await apiService?.getLoggedInUserIdentifier();
+  //     final firstName = await apiService?.fetchUserFirstName(loggedUser!);
+  //     final empData = await apiService?.fetchEmployeeDetails(firstName!);
+  //
+  //     final employeeId = empData!["employee"];
+  //
+  //     // Step 2: Fetch latest EEM
+  //     final latestEEM = await apiService?.fetchLatestEEM(employeeId);
+  //
+  //     if (latestEEM == null) {
+  //       debugPrint('NO LATEST EEM FOUND');
+  //       return [];
+  //     }
+  //
+  //     final int docstatus = latestEEM["docstatus"] ?? 1;
+  //
+  //     // 🚫 ENFORCE DRAFT CONDITION
+  //     if (docstatus != 0) {
+  //       debugPrint(
+  //         'EEM IS NOT IN DRAFT (docstatus=$docstatus) — CHECKINS NOT DISPLAYED',
+  //       );
+  //       return [];
+  //     }
+  //
+  //     final eemDate = latestEEM["date"];
+  //     final eemStartTime = latestEEM["start_time"];
+  //
+  //     if (eemDate == null || eemStartTime == null) {
+  //       debugPrint('LATEST EEM MISSING START DATA');
+  //       return [];
+  //     }
+  //
+  //     // Step 3: Fetch filtered checkins
+  //     final checkins =
+  //     await apiService!.fetchEmployeeCheckinsAfterStart(
+  //       context: context,
+  //       employee: employeeId,
+  //       eemDate: eemDate,
+  //       eemStartTime: eemStartTime,
+  //     );
+  //
+  //     debugPrint('FILTERED CHECKINS COUNT => ${checkins?.length}');
+  //     return checkins ?? [];
+  //   } catch (e) {
+  //     debugPrint('Provider fetchCheckinsAfterEEMStart Error => $e');
+  //     return [];
+  //   }
+  // }
   Future<List<dynamic>> fetchCheckinsAfterEEMStart(
       BuildContext context) async {
     try {
-      // Step 1: Identify employee
+      // Identify employee
       loggedUser = await apiService?.getLoggedInUserIdentifier();
       final firstName = await apiService?.fetchUserFirstName(loggedUser!);
       final empData = await apiService?.fetchEmployeeDetails(firstName!);
 
-      final employeeId = empData!["employee"];
+      if (empData == null) return [];
 
-      // Step 2: Fetch latest EEM
-      final latestEEM = await apiService?.fetchLatestEEM(employeeId);
+      final employeeId = empData["employee"];
 
-      if (latestEEM == null) {
-        debugPrint('NO LATEST EEM FOUND');
-        return [];
-      }
+      // Fetch today's checkins directly — no EEM dependency
+      final checkins = await apiService!
+          .fetchTodayEmployeeCheckins(employeeId);
 
-      final int docstatus = latestEEM["docstatus"] ?? 1;
-
-      // 🚫 ENFORCE DRAFT CONDITION
-      if (docstatus != 0) {
-        debugPrint(
-          'EEM IS NOT IN DRAFT (docstatus=$docstatus) — CHECKINS NOT DISPLAYED',
-        );
-        return [];
-      }
-
-      final eemDate = latestEEM["date"];
-      final eemStartTime = latestEEM["start_time"];
-
-      if (eemDate == null || eemStartTime == null) {
-        debugPrint('LATEST EEM MISSING START DATA');
-        return [];
-      }
-
-      // Step 3: Fetch filtered checkins
-      final checkins =
-      await apiService!.fetchEmployeeCheckinsAfterStart(
-        context: context,
-        employee: employeeId,
-        eemDate: eemDate,
-        eemStartTime: eemStartTime,
-      );
-
-      debugPrint('FILTERED CHECKINS COUNT => ${checkins?.length}');
-      return checkins ?? [];
+      debugPrint('TODAY CHECKINS COUNT => ${checkins.length}');
+      return checkins;
     } catch (e) {
       debugPrint('Provider fetchCheckinsAfterEEMStart Error => $e');
       return [];
     }
   }
-
 
   //checkin
 //EEM List
@@ -4570,6 +5996,190 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   }
 
   //EEM List
+
+  //performance report
+  // ── Performance Report ─────────────────────────────────────────────────────
+
+
+  PerformanceReportState performanceReportState = PerformanceReportState.idle;
+  String? performanceReportError;
+  String? resolvedSalesPerson;
+
+  List<Map<String, dynamic>> perfSalesOrders = [];
+  List<Map<String, dynamic>> perfEstimates = [];
+  List<Map<String, dynamic>> perfQuotations = [];
+  List<Map<String, dynamic>> perfPaymentCollections = [];
+  List<Map<String, dynamic>> perfVisits = [];
+  int get perfVisitCount => perfVisits.length;
+
+// Aggregation helpers
+  int perfTotalCount(List<Map<String, dynamic>> list) =>
+  list.fold(0, (sum, e) => sum + (e['total_count'] as int? ?? 0));
+
+  double perfTotalAmount(List<Map<String, dynamic>> list) =>
+  list.fold(0.0, (sum, e) => sum + (e['total_amount'] as num? ?? 0).toDouble());
+
+  /// Pass [salesperson] to skip auto-resolution (manager view).
+  /// Omit to resolve from the logged-in user session.
+  Future<void> fetchPerformanceReport({String? salesperson}) async {
+  performanceReportState = PerformanceReportState.loading;
+  performanceReportError = null;
+  notifyListeners();
+
+  try {
+  String? sp = salesperson;
+
+  if (sp == null) {
+  sp = await _resolveSalesPerson();
+  if (sp == null) {
+  performanceReportState = PerformanceReportState.error;
+  performanceReportError = 'Could not resolve salesperson from logged-in user.';
+  notifyListeners();
+  return;
+  }
+  }
+
+  resolvedSalesPerson = sp;
+
+  final data = await _apiService?.fetchSalesPersonDashboard(
+  salesperson: sp,
+  fromDate: _perfFromDateApi,
+  toDate: _perfToDateApi,
+  );
+
+  if (data == null) {
+  performanceReportState = PerformanceReportState.error;
+  performanceReportError = 'Failed to load report. Please try again.';
+  notifyListeners();
+  return;
+  }
+
+  _mapPerformanceData(data);
+  performanceReportState = PerformanceReportState.success;
+  } catch (e) {
+  performanceReportState = PerformanceReportState.error;
+  performanceReportError = 'Unexpected error: $e';
+  debugPrint('fetchPerformanceReport: $e');
+  }
+
+  notifyListeners();
+  }
+
+// ── Date filter state ──────────────────────────────────────────────────────
+
+  final DateFormat _apiFmt = DateFormat('yyyy-MM-dd');
+  final DateFormat _displayFmt = DateFormat('dd MMM yyyy');
+
+  // DateTime _perfFromDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _perfFromDate = DateTime.now();
+  DateTime _perfToDate = DateTime.now();
+
+  DateTime get perfFromDate => _perfFromDate;
+  DateTime get perfToDate => _perfToDate;
+
+  String get perfFromDateDisplay => _displayFmt.format(_perfFromDate);
+  String get perfToDateDisplay => _displayFmt.format(_perfToDate);
+
+  String get _perfFromDateApi => _apiFmt.format(_perfFromDate);
+  String get _perfToDateApi => _apiFmt.format(_perfToDate);
+
+  void setPerfFromDate(DateTime date) {
+  _perfFromDate = date;
+  notifyListeners();
+  }
+
+  void setPerfToDate(DateTime date) {
+  _perfToDate = date;
+  notifyListeners();
+  }
+
+// ── Private helpers ────────────────────────────────────────────────────────
+
+  Future<String?> _resolveSalesPerson() async {
+  final loggedUser = await _apiService?.getLoggedInUserIdentifier();
+  if (loggedUser == null) return null;
+
+  final firstName = await _apiService?.fetchUserFirstName(loggedUser);
+  if (firstName == null) return null;
+
+  final employeeId = await _apiService?.fetchEmployeeByFirstName(firstName);
+  if (employeeId == null) return null;
+
+  return await _apiService?.fetchSalesPersonByEmployee(employeeId);
+  }
+
+  void _mapPerformanceData(Map<String, dynamic> data) {
+  perfSalesOrders     = _toMapList(data['sales_order']);
+  perfEstimates       = _toMapList(data['estimate']);
+  perfQuotations      = _toMapList(data['quotation']);
+  perfPaymentCollections = _toMapList(data['payment_collection']);
+  perfVisits          = _toMapList(data['visit']);
+  }
+
+  List<Map<String, dynamic>> _toMapList(dynamic raw) {
+  if (raw is List) {
+  return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+  return [];
+  }
+
+  void resetPerformanceReport() {
+  performanceReportState = PerformanceReportState.idle;
+  performanceReportError = null;
+  resolvedSalesPerson = null;
+  perfSalesOrders = [];
+  perfEstimates = [];
+  perfQuotations = [];
+  perfPaymentCollections = [];
+  perfVisits = [];
+  notifyListeners();
+  }
+
+  bool isPdfDownloading = false;
+  String _buildReportHtml() {
+    return PerformanceReportHtmlBuilder(
+      salesperson: resolvedSalesPerson,
+      fromDate: _perfFromDateApi,
+      toDate: _perfToDateApi,
+      salesOrders: perfSalesOrders,
+      estimates: perfEstimates,
+      quotations: perfQuotations,
+      paymentCollections: perfPaymentCollections,
+      visits: perfVisits,
+    ).build();
+  }
+
+  Future<void> downloadPerformanceReportPdf() async {
+    isPdfDownloading = true;
+    notifyListeners();
+
+    try {
+      final html = _buildReportHtml();
+
+      // Get temp directory to save PDF
+      final dir = await getTemporaryDirectory();
+      final fileName =
+          'performance_report_${resolvedSalesPerson ?? 'report'}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
+      final savePath = '${dir.path}/$fileName';
+
+      final filePath = await _apiService?.downloadPerformanceReportPdf(
+        html: html,
+        savePath: savePath,
+      );
+
+      if (filePath != null) {
+        // Open/share the PDF
+        await OpenFilex.open(filePath);
+      } else {
+        debugPrint('PDF download failed');
+      }
+    } catch (e) {
+      debugPrint('downloadPerformanceReportPdf provider error: $e');
+    }
+
+    isPdfDownloading = false;
+    notifyListeners();
+  }
   // ToDo List
   bool isLoadingToDos = false;
   List<Map<String, dynamic>> toDoList = [];
@@ -4621,8 +6231,547 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
-
+  // Future<bool> maintenanceVisitExistsForSalesOrder(String salesOrderName) async {
+  //   return await apiService!
+  //       .maintenanceVisitExistsForSalesOrder(salesOrderName);
+  // }
+  Future<String?> fetchMaintenanceVisitStatusForSalesOrder(
+      String salesOrderName) async {
+    return await apiService!
+        .fetchMaintenanceVisitStatusForSalesOrder(salesOrderName);
+  }
   // ToDo List
+//Task List
+
+  bool isLoadingTasks = false;
+  List<Map<String, dynamic>> taskList = [];
+
+// Fetch Tasks
+  Future<void> fetchTaskList() async {
+    try {
+      isLoadingTasks = true;
+      notifyListeners();
+
+      taskList = await apiService!.fetchTaskList();
+    } catch (e) {
+      debugPrint("fetchTaskList Provider Error: $e");
+    } finally {
+      isLoadingTasks = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateTask({
+    required int index,
+    String? newStatus,
+    double? newProgress,
+    String? completedBy,
+    String? completedOn,
+  }) async {
+    if (index < 0 || index >= taskList.length) return false;
+
+    try {
+      final taskName = taskList[index]["name"];
+      if (taskName == null) return false;
+
+      updatingIndex = index;
+      notifyListeners();
+
+      final success = await apiService!.updateTask(
+        taskName: taskName,
+        status: newStatus,
+        progress: newProgress,
+        completedBy: completedBy,
+        completedOn: completedOn,
+      );
+
+      if (success) {
+        if (newStatus != null) taskList[index]["status"] = newStatus;
+        if (newProgress != null) taskList[index]["progress"] = newProgress;
+        if (completedBy != null) taskList[index]["completed_by"] = completedBy;
+        if (completedOn != null) taskList[index]["completed_on"] = completedOn;
+      }
+
+      return success;
+    } finally {
+      updatingIndex = -1;
+      notifyListeners();
+    }
+  }
+
+
+// Legacy method for backward compatibility (optional)
+  Future<void> updateTaskStatus(int index, String newStatus) async {
+    await updateTask(index: index, newStatus: newStatus);
+  }
+
+//Task List
+
+  // Project list
+
+  bool isLoadingProjects = false;
+  List<Map<String, dynamic>> projectList = [];
+
+  Future<void> fetchProjectList() async {
+    try {
+      isLoadingProjects = true;
+      notifyListeners();
+      projectList = await apiService!.fetchProjectsList();
+    } catch (e) {
+      debugPrint("fetchProjectList Provider Error: $e");
+    } finally {
+      isLoadingProjects = false;
+      notifyListeners();
+    }
+  }
+
+  // Project
+
+  //maintenance visit
+
+  bool isCreatingMaintenanceVisit = false;
+  bool maintenanceVisitCreated = false;
+
+  Future<void> createMaintenanceVisit({
+    required String customer,
+    required String customerName,
+    required String mntcDate,
+    required String mntcTime,
+    required String completionStatus,
+    required String maintenanceType,
+    required String customerFeedback,
+    required List<Map<String, dynamic>> purposes,
+    String? prevDocName,
+    String? prevDocType,
+  }) async {
+    try {
+      isCreatingMaintenanceVisit = true;
+      maintenanceVisitCreated = false;
+      notifyListeners();
+
+      // ✅ Get company here (NOT from UI)
+      final company = await _sharedPrefService.getCompany() ?? "";
+
+      if (company.isEmpty) {
+        debugPrint("No company selected");
+        maintenanceVisitCreated = false;
+        return;
+      }
+
+      final result = await apiService!.createMaintenanceVisit(
+        customer: customer,
+        customerName: customerName,
+        mntcDate: mntcDate,
+        mntcTime: mntcTime,
+        completionStatus: completionStatus,
+        maintenanceType: maintenanceType,
+        customerFeedback: customerFeedback,
+        company: company,
+        purposes: purposes,
+        prevDocName: prevDocName,
+        prevDocType: prevDocType,
+      );
+
+      maintenanceVisitCreated = result;
+
+    } catch (e) {
+      debugPrint("Provider createMaintenanceVisit Error: $e");
+    } finally {
+      isCreatingMaintenanceVisit = false;
+      notifyListeners();
+    }
+  }
+  Future<void> updateMaintenanceVisit({
+    required String name,
+    required String customer,
+    required String customerName,
+    required String mntcDate,
+    required String mntcTime,
+    required String completionStatus,
+    required String maintenanceType,
+    required String customerFeedback,
+
+    required List<Map<String, dynamic>> purposes,
+  }) async {
+    try {
+      isCreatingMaintenanceVisit = true;
+      maintenanceVisitCreated = false;
+      notifyListeners();
+
+      final company = await _sharedPrefService.getCompany() ?? "";
+
+      if (company.isEmpty) {
+        maintenanceVisitCreated = false;
+        return;
+      }
+
+      final result = await apiService!.updateMaintenanceVisit(
+        name: name,
+        customer: customer,
+        customerName: customerName,
+        mntcDate: mntcDate,
+        mntcTime: mntcTime,
+        completionStatus: completionStatus,
+        maintenanceType: maintenanceType,
+        company: company,
+        customerFeedback: customerFeedback,
+
+        purposes: purposes,
+      );
+
+      maintenanceVisitCreated = result;
+    } catch (e) {
+      debugPrint("Provider updateMaintenanceVisit Error: $e");
+    } finally {
+      isCreatingMaintenanceVisit = false;
+      notifyListeners();
+    }
+  }
+  List<String> customerSearchResults = [];
+  bool isSearchingCustomer = false;
+
+  Future<void> searchCustomers(String query) async {
+    if (query.isEmpty) {
+      customerSearchResults = [];
+      notifyListeners();
+      return;
+    }
+
+    isSearchingCustomer = true;
+    notifyListeners();
+
+    customerSearchResults = await apiService!.searchCustomers(query);
+
+    isSearchingCustomer = false;
+    notifyListeners();
+  }
+  List<Map<String, String>> itemSearchResults = [];
+  bool isSearchingItem = false;
+
+  Future<void> searchItemm(String query) async {
+    if (query.isEmpty) {
+      itemSearchResults = [];
+      notifyListeners();
+      return;
+    }
+
+    isSearchingItem = true;
+    notifyListeners();
+
+    itemSearchResults = await apiService!.searchItemm(query);
+
+    isSearchingItem = false;
+    notifyListeners();
+  }
+  Future<Map<String, dynamic>?> fetchSalesOrderByName(String name) async {
+    return await apiService!.fetchSalesOrderByName(name);
+  }
+
+  bool isLoadingSerials = false;
+  List<String> serialSearchResults = [];
+
+  Future<void> fetchSerialNumber(String itemCode) async {
+    if (itemCode.isEmpty) return;
+
+    isLoadingSerials = true;
+    notifyListeners();
+
+    serialSearchResults =
+    await apiService!.fetchSerialNumbers(itemCode: itemCode);
+
+    isLoadingSerials = false;
+    notifyListeners();
+  }
+  bool isLoadingMaintenanceVisits = false;
+  List<Map<String, dynamic>> maintenanceVisitList = [];
+
+  Future<void> fetchMaintenanceVisitList() async {
+    try {
+      isLoadingMaintenanceVisits = true;
+      notifyListeners();
+
+      // 🔥 Resolve logged-in sales person
+      final salesPerson =
+      await apiService!.resolveLoggedInSalesPerson();
+
+      if (salesPerson == null || salesPerson.isEmpty) {
+        maintenanceVisitList = [];
+        return;
+      }
+
+      final result =
+      await apiService!.fetchMaintenanceVisitList(
+        salesPerson: salesPerson,
+      );
+
+      maintenanceVisitList = result;
+    } catch (e) {
+      debugPrint("Provider fetchMaintenanceVisitList Error: $e");
+    } finally {
+      isLoadingMaintenanceVisits = false;
+      notifyListeners();
+    }
+  }
+  Future<Map<String, dynamic>?> fetchMaintenanceVisitByName(String name) async {
+    return await apiService!.fetchMaintenanceVisitByName(name);
+  }
+  //maintenance visit
+
+    //estimate preparation
+
+  bool isCreatingEstimate = false;
+
+  Future<Map<String, dynamic>> createEstimate({
+    required BuildContext context,
+    required String customer,
+    required String date,
+    required String contact,
+    required String validTill,
+    required String itemCode,
+    required String itemName,
+    required String itemDescription,
+    required double rate,
+    required double gstPerc,
+    required String message,
+  }) async {
+    isCreatingEstimate = true;
+    notifyListeners();
+
+    try {
+      final company = await _sharedPrefService.getCompany();
+      final double gstAmount = (rate * gstPerc) / 100;
+      final double totalAmount = rate + gstAmount;
+
+      return await apiService!.createEstimate(
+        context: context,
+        customer: customer,
+        company: company ?? '',
+        date: date,
+        contact: contact,
+        validTill: validTill,
+        itemCode: itemCode,
+        itemName: itemName,
+        itemDescription: itemDescription,
+        rate: rate,
+        gstPerc: gstPerc,
+        gstAmount: gstAmount,
+        totalAmount: totalAmount,
+        message: message,
+      );
+    } catch (e) {
+      debugPrint("Provider createEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    } finally {
+      isCreatingEstimate = false;
+      notifyListeners();
+    }
+  }
+  Future<String?> getCustomerContact(String customer) async {
+    try {
+      return await _apiService!.getCustomerContact(customer);
+    } catch (e) {
+      debugPrint("Provider getCustomerContact Error: $e");
+      return null;
+    }
+  }
+  Future<double?> getItemGstPerc(String itemCode) async {
+    try {
+      final company = await _sharedPrefService.getCompany();
+      return await apiService!.getItemGstPerc(itemCode, company ?? '');
+    } catch (e) {
+      debugPrint("Provider getItemGstPerc Error: $e");
+      return null;
+    }
+  }
+  Future<double?> getItemRate(String itemCode) async {
+    try {
+      return await apiService!.getItemRate(itemCode);
+    } catch (e) {
+      debugPrint("Provider getItemRate Error: $e");
+      return null;
+    }
+  }
+  List<Map<String, dynamic>> _estimateList = [];
+  List<Map<String, dynamic>> get estimateList => _estimateList;
+
+  bool _isLoadingEstimates = false;
+  bool get isLoadingEstimates => _isLoadingEstimates;
+  //
+  // Future<void> fetchEstimateList() async {
+  //   _isLoadingEstimates = true;
+  //   notifyListeners();
+  //
+  //   try {
+  //     _estimateList = await apiService!.fetchEstimateList();
+  //   } catch (e) {
+  //     debugPrint("Provider fetchEstimateList Error: $e");
+  //     _estimateList = [];
+  //   } finally {
+  //     _isLoadingEstimates = false;
+  //     notifyListeners();
+  //   }
+  // }
+  Future<void> fetchEstimateList({
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    _isLoadingEstimates = true;
+    notifyListeners();
+
+    try {
+      _estimateList = await apiService!.fetchEstimateList(
+        fromDate: fromDate,
+        toDate: toDate,
+      );
+    } catch (e) {
+      debugPrint("Provider fetchEstimateList Error: $e");
+      _estimateList = [];
+    } finally {
+      _isLoadingEstimates = false;
+      notifyListeners();
+    }
+  }
+  Future<Map<String, dynamic>> updateEstimate({
+    required BuildContext context,
+    required String docname,
+    required String customer,
+    required String date,
+    required String contact,
+    required String validTill,
+    required String itemCode,
+    required String itemName,
+    required String itemDescription,
+    required double rate,
+    required double gstPerc,
+    required String message,
+  }) async {
+    isCreatingEstimate = true;
+    notifyListeners();
+
+    try {
+      final company = await _sharedPrefService.getCompany();
+      final double gstAmount = (rate * gstPerc) / 100;
+      final double totalAmount = rate + gstAmount;
+
+      return await apiService!.updateEstimate(
+        context: context,
+        docname: docname,
+        customer: customer,
+        company: company ?? '',
+        date: date,
+        contact: contact,
+        validTill: validTill,
+        itemCode: itemCode,
+        itemName: itemName,
+        itemDescription: itemDescription,
+        rate: rate,
+        gstPerc: gstPerc,
+        gstAmount: gstAmount,
+        totalAmount: totalAmount,
+        message: message,
+      );
+    } catch (e) {
+      debugPrint("Provider updateEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    } finally {
+      isCreatingEstimate = false;
+      notifyListeners();
+    }
+  }
+  // Save only (docstatus: 0) — POST for new, PUT for existing
+  Future<Map<String, dynamic>> saveDraftEstimate({
+    required BuildContext context,
+    required String? docname,     // null = new estimate
+    required String customer,
+    required String date,
+    required String contact,
+    required String validTill,
+    required String itemCode,
+    required String itemName,
+    required String itemDescription,
+    required double rate,
+    required double gstPerc,
+    required String message,
+  }) async {
+    isCreatingEstimate = true;
+    notifyListeners();
+
+    try {
+      final company = await _sharedPrefService.getCompany();
+      final double gstAmount = (rate * gstPerc) / 100;
+      final double totalAmount = rate + gstAmount;
+
+      return await apiService!.saveDraftEstimate(
+        context: context,
+        docname: docname,
+        customer: customer,
+        company: company ?? '',
+        date: date,
+        contact: contact,
+        validTill: validTill,
+        itemCode: itemCode,
+        itemName: itemName,
+        itemDescription: itemDescription,
+        rate: rate,
+        gstPerc: gstPerc,
+        gstAmount: gstAmount,
+        totalAmount: totalAmount,
+        message: message,
+      );
+    } catch (e) {
+      debugPrint("Provider saveDraftEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    } finally {
+      isCreatingEstimate = false;
+      notifyListeners();
+    }
+  }
+
+// Submit + WhatsApp only
+  Future<Map<String, dynamic>> submitEstimate({
+    required BuildContext context,
+    required String docname,
+    required String contact,
+  }) async {
+    isCreatingEstimate = true;
+    notifyListeners();
+
+    try {
+      return await apiService!.submitEstimate(
+        docname: docname,
+        contact: contact,
+      );
+    } catch (e) {
+      debugPrint("Provider submitEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    } finally {
+      isCreatingEstimate = false;
+      notifyListeners();
+    }
+  }
+  //estimate preparation
+
+  //appointments
+
+  bool isLoadingAppointments = false;
+  List<Map<String, dynamic>> appointmentList = [];
+
+  Future<void> fetchAppointments() async {
+    try {
+      isLoadingAppointments = true;
+      notifyListeners();
+
+      appointmentList = await apiService!.fetchAppointments();
+    } catch (e) {
+      debugPrint("fetchAppointments Provider Error: $e");
+    } finally {
+      isLoadingAppointments = false;
+      notifyListeners();
+    }
+  }
+
+
+  //appointments
 //S Ord
 //Sales Order
   SalesOrderResponse? _salesOrderModel;
@@ -4635,7 +6784,8 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     List items,
     BuildContext context, {
     Map<String, dynamic>? customerDetails, // 🆕 Accept customer details also
-            String? setWarehouse, // 🆕
+            String? setWarehouse,
+        // String? quotation,
       }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -4649,6 +6799,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         context,
         customerDetails: customerDetails, // 🆕 Pass along
         setWarehouse: setWarehouse,
+        // quotation: quotation,
 
       );
       return _salesOrderModel;
@@ -4664,6 +6815,19 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
+  Future<Map<String, dynamic>?> mapQuotationToSalesOrder(
+      String quotationName) async {
+    try {
+      final data = await _apiService!
+          .createSalesOrderFromQuotation(quotationName: quotationName);
+
+      return data;
+    } catch (e) {
+      debugPrint("❌ Provider mapping error: $e");
+      return null;
+    }
+  }
+
   String? _setWarehouse;
   String? get setWarehouse => _setWarehouse;
 
@@ -4676,11 +6840,21 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     _setWarehouse = null;
     notifyListeners();
   }
+  void clearSalesOrderModel() {
+    _salesOrderModel = null;
+  }
+  bool get hasActiveOrder {
+    return (_selectedSalesOrderName != null &&
+        _selectedSalesOrderName!.isNotEmpty) ||
+        (_salesOrderModel?.data?.name != null &&
+            _salesOrderModel!.data!.name!.isNotEmpty);
+  }
 
   Future<SalesOrderResponse?> updateSalesOrder(
       String name,
       String customerName,
       String deliveryDate,
+      String? setWarehouse,
       List items,
       BuildContext context, {
         Map<String, dynamic>? customerDetails,
@@ -4694,6 +6868,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         name,
         customerName,
         deliveryDate,
+        setWarehouse,
         items,
         context,
         customerDetails: customerDetails,
@@ -4710,6 +6885,40 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       _isLoading = false;
       notifyListeners();
     }
+  }
+  Future<bool> submitSalesOrder(String name) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _apiService!.submitSalesOrder(name);
+      return result;
+    } catch (e) {
+      _errorMessage = e.toString();
+      debugPrint("❌ Provider submit error: $e");
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  Future<List<String>> fetchPrintFormats() async {
+    return await _apiService!.fetchPrintFormats();
+  }
+
+  // Future<void> downloadSalesOrderPdf(
+  //     String name,
+  //     String format,
+  //     // BuildContext context,
+  //     ) async {
+  //   await _apiService!.downloadSalesOrderPdf(name, format);
+  // }
+  Future<String?> downloadSalesOrderPdf(
+      String name,
+      String format,
+      ) async {
+    return await _apiService!.downloadSalesOrderPdf(name, format);
   }
 
   //mode of payment list
@@ -4866,6 +7075,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   SalesOrderDetails? _selectedSalesOrder;
   SalesOrderDetails? get selectedSalesOrder => _selectedSalesOrder;
 
+// Original method — keep for Draft (needs form rebuild)
   Future<void> fetchSalesOrderDetails(String orderName) async {
     _isLoading = true;
     notifyListeners();
@@ -4874,11 +7084,9 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       _selectedSalesOrder = await _apiService!.getSalesOrderDetails(orderName);
 
       if (_selectedSalesOrder != null) {
-        // ✅ Store name and transaction date
         setSelectedSalesOrderName(_selectedSalesOrder!.name);
         setSelectedTransactionDate(_selectedSalesOrder!.transactionDate);
 
-        // ✅ Store total (prefer net_total if available, else total)
         final netTotal = _selectedSalesOrder!.netTotal;
         final total = _selectedSalesOrder!.total;
         setSelectedSalesOrderTotal(
@@ -4896,6 +7104,41 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
 
+// Silent fetch — for dialog preview (no notifyListeners, no rebuild)
+//   Future<SalesOrderDetails?> fetchSalesOrderDetailsSilent(String orderName) async {
+//     try {
+//       final data = await _apiService!.getSalesOrderDetails(orderName);
+//       _selectedSalesOrder = data; // updates field silently
+//
+//       if (data != null) {
+//         setSelectedSalesOrderName(data.name);
+//         setSelectedTransactionDate(data.transactionDate);
+//
+//         final netTotal = data.netTotal;
+//         final total = data.total;
+//         setSelectedSalesOrderTotal(
+//           (netTotal != null && netTotal != 0)
+//               ? netTotal.toString()
+//               : (total?.toString() ?? '0'),
+//         );
+//       }
+//
+//       return data;
+//     } catch (e) {
+//       debugPrint('Error fetching sales order details (silent): $e');
+//       return null;
+//     }
+//   }
+  Future<SalesOrderDetails?> fetchSalesOrderDetailsSilent(String orderName) async {
+    try {
+      final data = await _apiService!.getSalesOrderDetails(orderName);
+      // ✅ Do NOT update any provider state — just return the data
+      return data;
+    } catch (e) {
+      debugPrint('Error fetching sales order details (silent): $e');
+      return null;
+    }
+  }
   Future<GetSalesOrderResponse?> getSalesOrdersWithFilters(
       context, {
         String? startDate,
@@ -4959,38 +7202,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   CreateQuotationResponse? _quotationResponse;
 
   CreateQuotationResponse? get quotationResponse => _quotationResponse;
-  //
-  // Future<CreateQuotationResponse?> createQuotation(
-  //     String partyName,
-  //     String transactionDate,
-  //     String validTill,
-  //     List<Map<String, dynamic>> items,
-  //     BuildContext context,
-  //     ) async {
-  //   final customerDetails = _customerDetails;
-  //   final itemDetailsList = await Future.wait(
-  //     items.map((i) async {
-  //       return await _apiService?.getItemDetails(
-  //         context: context,
-  //         itemCode: i["item_code"],
-  //         currency: customerDetails?["customer_currency"] ?? "INR",
-  //         quantity: i["qty"] ?? 1,
-  //         company: await _sharedPrefService.getCompany() ?? "",
-  //         priceList: customerDetails?["selling_price_list"] ?? "Standard Selling",
-  //       );
-  //     }),
-  //   );
-  //
-  //   _quotationResponse = await _apiService?.createQuotation(
-  //     partyName,
-  //     transactionDate,
-  //     validTill,
-  //     items,
-  //     context,
-  //     customerDetails: customerDetails,
-  //     itemDetails: itemDetailsList.cast<Map<String, dynamic>>(),
-  //   );
-  // }
+
 
   Map<String, dynamic>? _customerDetails;
   Map<String, dynamic>? get customerDetail => _customerDetails;
@@ -5010,6 +7222,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
+
   Future<Map<String, dynamic>?> fetchItemDetail({
     required BuildContext context,
     required String itemCode,
@@ -5020,28 +7233,50 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     try {
       final company = await _sharedPrefService.getCompany();
       final customerData = _customerDetails;
-      final customerCurrency = customerData?["customer_currency"] ?? "INR";
-
-      // 🧭 Get selling price list from fetched customer details
       final priceList = _customerDetails?['selling_price_list'] ?? 'Standard Selling';
 
-      if (company == null) {
-        throw Exception('Company not found in SharedPreferences');
+      if (company == null) throw Exception('Company not found in SharedPreferences');
+
+      // ✅ Fetch both in parallel
+      final results = await Future.wait([
+        _apiService!.getItemDetails(
+          context: context,
+          itemCode: itemCode,
+          currency: currency,
+          quantity: quantity,
+          company: company,
+          priceList: priceList,
+        ),
+        _apiService!.getLastPurchaseRate(itemCode: itemCode),
+      ]);
+
+      final itemDetailsResponse = results[0] as Map<String, dynamic>?;
+      final lastPurchaseRate = results[1] as double?;
+
+      // ✅ Inject lastPurchaseRate into the response map
+      if (itemDetailsResponse != null && itemDetailsResponse['message'] != null) {
+        itemDetailsResponse['message']['last_purchase_rate'] = lastPurchaseRate ?? 0.0;
       }
 
-      final response = await _apiService?.getItemDetails(
-        context: context,
-        itemCode: itemCode,
-        currency: currency,
-        quantity: quantity,
-        company: company,
-        priceList: priceList,
-      );
-
-      return response;
+      return itemDetailsResponse;
     } catch (e) {
       debugPrint('Error in provider.fetchItemDetails: $e');
       return null;
+    }
+  }
+
+  Future<double> getLastPurchaseRate(String itemCode) async {
+    try {
+      final item = await _apiService?.fetchItemDetails(itemCode);
+
+      if (item != null && item['last_purchase_rate'] != null) {
+        return (item['last_purchase_rate'] as num).toDouble();
+      }
+
+      return 0.0;
+    } catch (e) {
+      debugPrint("Error fetching last purchase rate: $e");
+      return 0.0;
     }
   }
   Future<CreateQuotationResponse?> createQuotationWithDetails({
@@ -5079,9 +7314,27 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
+
+  // Map<String, dynamic>? _quotationDetails;
+  // Map<String, dynamic>? get quotationDetails => _quotationDetails;
+  //
+  // Future<void> fetchQuotationDetails(String quotationName, BuildContext context) async {
+  //   _isLoading = true;
+  //   notifyListeners();
+  //   try {
+  //     _quotationDetails = await _apiService?.getQuotationDetails(quotationName, context);
+  //   } catch (e) {
+  //     _quotationDetails = null;
+  //     debugPrint('Error fetching quotation details: $e');
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Map<String, dynamic>? _quotationDetails;
   Map<String, dynamic>? get quotationDetails => _quotationDetails;
 
+// Original method — keep this for Draft prefill (it needs to rebuild the form)
   Future<void> fetchQuotationDetails(String quotationName, BuildContext context) async {
     _isLoading = true;
     notifyListeners();
@@ -5096,6 +7349,18 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
 
+// Silent fetch — for dialog preview (no notifyListeners, no rebuild)
+  Future<Map<String, dynamic>?> fetchQuotationDetailsSilent(String quotationName, BuildContext context) async {
+    try {
+      final data = await _apiService?.getQuotationDetails(quotationName, context);
+      _quotationDetails = data; // still updates the field, just silently
+      return data;
+    } catch (e) {
+      debugPrint('Error fetching quotation details (silent): $e');
+      return null;
+    }
+  }
+
   void setItemsFromQuotation(List<Map<String, dynamic>> items) {
     _itemsList
       ..clear()
@@ -5103,7 +7368,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         itemCode: i["item_code"] ?? '',
         name: i["item_name"] ?? '',
         quantity: (i["qty"] ?? 1).toDouble(),
-        rate: (i["price_list_rate"] ?? 0.0).toDouble(),
+        rate: (i["rate"] ?? 0.0).toDouble(),
         priceListRate: (i["price_list_rate"] ?? 0.0).toDouble(),
         discountPercentage: (i["discount_percentage"] ?? 0.0).toDouble(),
       )));
@@ -5192,6 +7457,36 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
 
+  // Future<bool> submitQuotation(String quotationName, BuildContext context) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     final result = await _apiService?.submitQuotationToERP(quotationName);
+  //     if (result == true) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Quotation submitted successfully!')),
+  //       );
+  //       return true;
+  //     } else {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Failed to submit quotation')),
+  //       );
+  //       return false;
+  //     }
+  //   } catch (e) {
+  //     _errorMessage = e.toString();
+  //     debugPrint('Error submitting quotation: $e');
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Error: $_errorMessage')),
+  //     );
+  //     return false;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<bool> submitQuotation(String quotationName, BuildContext context) async {
     _isLoading = true;
     _errorMessage = null;
@@ -5203,6 +7498,12 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Quotation submitted successfully!')),
         );
+
+        // 🆕 Optionally update the local list immediately if you have the updated data
+        // This provides instant feedback before the full refresh
+        _updateQuotationStatusInList(quotationName, 'Submitted');
+        notifyListeners();
+
         return true;
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5220,6 +7521,16 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+// 🆕 Helper method to update quotation status locally
+  void _updateQuotationStatusInList(String quotationName, String newStatus) {
+    if (_quotationList == null || _quotationList!.data == null) return;
+
+    final index = _quotationList!.data!.indexWhere((q) => q.name == quotationName);
+    if (index != -1) {
+      _quotationList!.data![index].status = newStatus;
     }
   }
 
@@ -5378,7 +7689,27 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   List<Item> get itemsList => _itemsList;
 
   // Add an item with price_list_rate and discount_percentage
-  void addItem(double rate, double quantity, String name, String itemCode, double priceListRate, double discountPercentage) {
+  // void addItem(double rate, double quantity, String name, String itemCode, double priceListRate, double discountPercentage) {
+  //   _itemsList.add(Item(
+  //     rate: rate,
+  //     quantity: quantity,
+  //     name: name,
+  //     itemCode: itemCode,
+  //     priceListRate: priceListRate,
+  //     discountPercentage: discountPercentage,
+  //   ));
+  //   notifyListeners();
+  // }
+  void addItem(
+      double rate,
+      double quantity,
+      String name,
+      String itemCode,
+      double priceListRate,
+      double discountPercentage,
+      String itemTaxTemplate,       // ✅ NEW
+      double lastPurchaseRate,      // ✅ NEW
+      ) {
     _itemsList.add(Item(
       rate: rate,
       quantity: quantity,
@@ -5386,12 +7717,31 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       itemCode: itemCode,
       priceListRate: priceListRate,
       discountPercentage: discountPercentage,
+      itemTaxTemplate: itemTaxTemplate,
+      lastPurchaseRate: lastPurchaseRate,
     ));
     notifyListeners();
   }
 
   // Edit an existing item with new values for rate, quantity, price_list_rate, and discount_percentage
-  void editItem(int index, double newRate, double newQuantity, double newPriceListRate, double newDiscountPercentage) {
+  // void editItem(int index, double newRate, double newQuantity, double newPriceListRate, double newDiscountPercentage) {
+  //   _itemsList[index] = Item(
+  //     rate: newRate,
+  //     quantity: newQuantity,
+  //     name: _itemsList[index].name,
+  //     itemCode: _itemsList[index].itemCode,
+  //     priceListRate: newPriceListRate,
+  //     discountPercentage: newDiscountPercentage,
+  //   );
+  //   notifyListeners();
+  // }
+  void editItem(
+      int index,
+      double newRate,
+      double newQuantity,
+      double newPriceListRate,
+      double newDiscountPercentage,
+      ) {
     _itemsList[index] = Item(
       rate: newRate,
       quantity: newQuantity,
@@ -5399,6 +7749,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       itemCode: _itemsList[index].itemCode,
       priceListRate: newPriceListRate,
       discountPercentage: newDiscountPercentage,
+
+      /// ✅ PRESERVE OLD VALUES
+      itemTaxTemplate: _itemsList[index].itemTaxTemplate,
+      lastPurchaseRate: _itemsList[index].lastPurchaseRate,
     );
     notifyListeners();
   }
@@ -5418,9 +7772,12 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       ..addAll(items);
     notifyListeners();
   }
+
   void clearSelectedSalesOrder() {
     _selectedSalesOrder = null;
-    _itemsList.clear(); // clear items list too
+    _selectedSalesOrderName = null;
+    _selectedSalesOrderTotal = null;
+    _itemsList.clear();
     notifyListeners();
   }
   void clearTransactionDate() {
@@ -5450,10 +7807,22 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     _selectedSalesOrderTotal = total;
     notifyListeners();
   }
+
   double get totalItemAmount {
     if (itemsList.isEmpty) return 0.0;
-    return itemsList.fold(0.0, (sum, item) => sum + (item.rate * item.quantity));
+
+    return itemsList.fold(0.0, (sum, item) {
+      final rate = item.rate;
+      final qty = item.quantity;
+      final discount = item.discountPercentage;
+
+      final discountedRate =
+      discount! > 0 ? rate * (1 - discount / 100) : rate;
+
+      return sum + (discountedRate * qty);
+    });
   }
+
   double _getCurrentTotal() {
     return double.tryParse(_selectedSalesOrderTotal ?? '0') ?? 0.0;
   }

@@ -51,15 +51,47 @@ class _ExecutiveReportScreenState extends State<ExecutiveReportScreen> {
     return DateTime(newYear, adjustedMonth, day > lastDayOfMonth ? lastDayOfMonth : day);
   }
 
+  // Future<void> pickFromDate() async {
+  //   final DateTime today = DateTime.now();
+  //   final DateTime fiveMonthsAgo = subtractMonths(today, 5);
+  //
+  //   final picked = await showDatePicker(
+  //     context: context,
+  //     initialDate: fromDate,
+  //     firstDate: fiveMonthsAgo,   // Limit moved to last 5 months
+  //     lastDate: today,            // Cannot go beyond today
+  //   );
+  //
+  //   if (picked != null) {
+  //     setState(() {
+  //       fromDate = picked;
+  //
+  //       // Ensure toDate is always >= fromDate
+  //       if (toDate.isBefore(fromDate)) {
+  //         toDate = fromDate;
+  //       }
+  //     });
+  //   }
+  // }
   Future<void> pickFromDate() async {
     final DateTime today = DateTime.now();
-    final DateTime fiveMonthsAgo = subtractMonths(today, 5);
+
+    // Calculate 5 months ago properly
+    int targetYear = today.year;
+    int targetMonth = today.month - 5;
+
+    if (targetMonth <= 0) {
+      targetYear -= 1;
+      targetMonth += 12;
+    }
+
+    final DateTime fiveMonthsAgo = DateTime(targetYear, targetMonth, today.day);
 
     final picked = await showDatePicker(
       context: context,
-      initialDate: fromDate,
-      firstDate: fiveMonthsAgo,   // Limit moved to last 5 months
-      lastDate: today,            // Cannot go beyond today
+      initialDate: fromDate.isAfter(today) ? today : fromDate,
+      firstDate: fiveMonthsAgo,
+      lastDate: today,
     );
 
     if (picked != null) {
@@ -281,6 +313,40 @@ class _ExecutiveReportScreenState extends State<ExecutiveReportScreen> {
                         ),
 
                         // ===== Total Summary Card =====
+                        // if (provider.totalRow != null)
+                        //   Container(
+                        //     width: double.infinity,
+                        //     margin: const EdgeInsets.all(12),
+                        //     padding: const EdgeInsets.all(14),
+                        //     decoration: BoxDecoration(
+                        //       color: Colors.blueGrey.shade50,
+                        //       borderRadius: BorderRadius.circular(8),
+                        //       border: Border.all(color: Colors.blueGrey),
+                        //     ),
+                        //     child: Column(
+                        //       crossAxisAlignment: CrossAxisAlignment.start,
+                        //       children: [
+                        //         const Text(
+                        //           "SUMMARY",
+                        //           style: TextStyle(
+                        //             fontSize: 16,
+                        //             fontWeight: FontWeight.bold,
+                        //           ),
+                        //         ),
+                        //
+                        //         const SizedBox(height: 8),
+                        //
+                        //         Row(
+                        //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //           children: [
+                        //             const Text("Grand Total:"),
+                        //             Text(formatDouble(provider.totalRow!["total"]?.toString() ?? "0")),
+                        //           ],
+                        //         ),
+                        //       ],
+                        //     ),
+                        //   ),
+// ===== Total Summary Card =====
                         if (provider.totalRow != null)
                           Container(
                             width: double.infinity,
@@ -308,13 +374,15 @@ class _ExecutiveReportScreenState extends State<ExecutiveReportScreen> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Text("Grand Total:"),
-                                    Text(formatDouble(provider.totalRow!["total"]?.toString() ?? "0")),
+                                    Text(
+                                      formatIndianCurrency(provider.totalRow!["total"]),
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
                                   ],
                                 ),
                               ],
                             ),
                           ),
-
                         const SizedBox(height: 35),
                       ],
                     );
@@ -338,6 +406,58 @@ class _ExecutiveReportScreenState extends State<ExecutiveReportScreen> {
       ],
     );
   }
+  String formatIndianCurrency(dynamic value) {
+    if (value == null) return "0";
 
+    // Convert to number
+    double number;
+    if (value is String) {
+      number = double.tryParse(value) ?? 0;
+    } else if (value is num) {
+      number = value.toDouble();
+    } else {
+      return value.toString();
+    }
+
+    // Handle negative numbers
+    bool isNegative = number < 0;
+    number = number.abs();
+
+    // Split into integer and decimal parts
+    String numStr = number.toStringAsFixed(2);
+    List<String> parts = numStr.split('.');
+    String integerPart = parts[0];
+    String decimalPart = parts.length > 1 ? parts[1] : '00';
+
+    // Indian numbering: last 3 digits, then groups of 2
+    String formatted = '';
+    int length = integerPart.length;
+
+    if (length <= 3) {
+      formatted = integerPart;
+    } else {
+      // Last 3 digits
+      formatted = integerPart.substring(length - 3);
+      int remaining = length - 3;
+
+      // Groups of 2 digits
+      while (remaining > 0) {
+        int end = remaining;
+        int start = remaining > 2 ? remaining - 2 : 0;
+        formatted = integerPart.substring(start, end) + ',' + formatted;
+        remaining = start;
+      }
+    }
+
+    // Add decimal part
+    formatted = '$formatted.$decimalPart';
+
+    // Add negative sign if needed
+    if (isNegative) {
+      formatted = '-$formatted';
+    }
+
+    return formatted;
+  }
 
 }

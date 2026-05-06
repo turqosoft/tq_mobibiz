@@ -6,6 +6,8 @@ import 'package:sales_ordering_app/provider/provider.dart';
 import 'package:sales_ordering_app/view/pick_list/PickList.dart';
 import 'package:sales_ordering_app/view/splash_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
 
 
 
@@ -61,14 +63,40 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // return MaterialApp(
+    //   navigatorKey: navigatorKey,
+    //   debugShowCheckedModeBanner: false,
+    //   theme: ThemeData(
+    //     primaryColor: AppColors.primaryColor,
+    //     primarySwatch: Colors.blue,
+    //   ),
+    //   home: SplashScreen(),
+    // );
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
+
       theme: ThemeData(
         primaryColor: AppColors.primaryColor,
         primarySwatch: Colors.blue,
       ),
+
+      // ✅ ADD THESE
+      locale: const Locale('en', 'GB'), // 👈 Forces DD/MM/YYYY globally
+
+      supportedLocales: const [
+        Locale('en', 'US'),
+        Locale('en', 'GB'), // 👈 Required for DD/MM/YYYY
+      ],
+
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+
       home: SplashScreen(),
     );
+
   }
 }

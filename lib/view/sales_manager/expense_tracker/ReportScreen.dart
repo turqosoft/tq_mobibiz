@@ -3,6 +3,9 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:sales_ordering_app/provider/provider.dart';
 
+import 'ExecutiveTrackerScreen.dart';
+import 'ExpenseTrackerScreen.dart';
+
 class ReportScreen extends StatefulWidget {
   @override
   State<ReportScreen> createState() => _ReportScreenState();
@@ -83,76 +86,6 @@ class _ReportScreenState extends State<ReportScreen> {
     DateTime tempFrom = provider.fromDate;
     DateTime tempTo = provider.toDate;
 
-    // await showModalBottomSheet(
-    //   context: context,
-    //   shape: const RoundedRectangleBorder(
-    //     borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    //   ),
-    //   builder: (_) {
-    //     return Padding(
-    //       padding: const EdgeInsets.all(16),
-    //       child: Column(
-    //         mainAxisSize: MainAxisSize.min,
-    //         crossAxisAlignment: CrossAxisAlignment.start,
-    //         children: [
-    //           const Text(
-    //             "Filter by Date",
-    //             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-    //           ),
-    //           const SizedBox(height: 16),
-    //
-    //           ListTile(
-    //             title: const Text("From Date"),
-    //             subtitle: Text(_formatDate(
-    //                 DateFormat('yyyy-MM-dd').format(tempFrom))),
-    //             trailing: const Icon(Icons.calendar_today),
-    //             onTap: () async {
-    //               final picked = await showDatePicker(
-    //                 context: context,
-    //                 initialDate: tempFrom,
-    //                 firstDate: DateTime(2020),
-    //                 lastDate: DateTime.now(),
-    //               );
-    //               if (picked != null) tempFrom = picked;
-    //             },
-    //           ),
-    //
-    //           ListTile(
-    //             title: const Text("To Date"),
-    //             subtitle: Text(_formatDate(
-    //                 DateFormat('yyyy-MM-dd').format(tempTo))),
-    //             trailing: const Icon(Icons.calendar_today),
-    //             onTap: () async {
-    //               final picked = await showDatePicker(
-    //                 context: context,
-    //                 initialDate: tempTo,
-    //                 firstDate: tempFrom,
-    //                 lastDate: DateTime.now(),
-    //               );
-    //               if (picked != null) tempTo = picked;
-    //             },
-    //           ),
-    //
-    //           const SizedBox(height: 12),
-    //
-    //           SizedBox(
-    //             width: double.infinity,
-    //             child: ElevatedButton(
-    //               onPressed: () {
-    //                 provider.fetchEEMList(
-    //                   from: tempFrom,
-    //                   to: tempTo,
-    //                 );
-    //                 Navigator.pop(context);
-    //               },
-    //               child: const Text("Apply Filter"),
-    //             ),
-    //           ),
-    //         ],
-    //       ),
-    //     );
-    //   },
-    // );
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true, // important for small screens
@@ -415,13 +348,66 @@ class _ReportScreenState extends State<ReportScreen> {
                 content: Text("Failed to load details"),
               );
             }
+            final int docStatus = data["docstatus"] is int
+                ? data["docstatus"]
+                : int.tryParse(data["docstatus"]?.toString() ?? "1") ?? 1;
+
+            final bool canEdit = docStatus == 0;
 
             return AlertDialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-              title: const Text(
-                "Expense Details",
-                style: TextStyle(fontWeight: FontWeight.w600),
+
+              title: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  /// TITLE + NAME
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          "Expense Details",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          data["name"]?.toString() ?? "-",
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  /// EDIT ICON (Draft only)
+                  if (canEdit)
+                    IconButton(
+                      tooltip: "Edit Expense",
+                      icon: const Icon(Icons.edit, size: 20),
+                      onPressed: () {
+                        Navigator.pop(context); // close dialog first
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ExecutiveTrackerScreen(
+                              eemData: data,
+                              isEditMode: true,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
+
               content: SizedBox(
                 width: 420,
                 child: SingleChildScrollView(
@@ -478,94 +464,6 @@ class _ReportScreenState extends State<ReportScreen> {
                         ],
                       ),
 
-                      /// SITE VISITS
-            //           ExpansionTile(
-            //             title: const Text(
-            //               "Site Visits",
-            //               style: TextStyle(fontWeight: FontWeight.w600),
-            //             ),
-            //             childrenPadding:
-            //             const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            //             children: (data["employee_site_tracking"] is List &&
-            //                 data["employee_site_tracking"].isNotEmpty)
-            //                 ? (data["employee_site_tracking"] as List)
-            //                 .map<Widget>(
-            //                   (s) => Card(
-            //                 elevation: 0,
-            //                 margin: const EdgeInsets.only(bottom: 8),
-            //
-            //                 child: Padding(
-            //                   padding: const EdgeInsets.all(8),
-            //                   child: Column(
-            //                     crossAxisAlignment: CrossAxisAlignment.start,
-            //                     children: [
-            //                       // Text(
-            //                       //   s?["customer"] ?? "Unknown Customer",
-            //                       //   style: const TextStyle(
-            //                       //     fontWeight: FontWeight.w600,
-            //                       //   ),
-            //                       // ),
-            //                       Text(
-            //                         _siteVisitTitle(s),
-            //                         style: const TextStyle(
-            //                           fontWeight: FontWeight.w600,
-            //                         ),
-            //                       ),
-            //
-            //                       const SizedBox(height: 4),
-            //                       _compactRow(
-            //                         "Distance",
-            //                         s?["distance_travelled"] != null
-            //                             ? "${s["distance_travelled"]} km"
-            //                             : "-",
-            //                       ),
-            //                       _compactRow(
-            //                         "Actual",
-            //                         s?["actual_distance"] != null
-            //                             ? "${s["actual_distance"]} km"
-            //                             : "-",
-            //                       ),
-            //                       // if ((s?["remarks"] ?? "").isNotEmpty)
-            //                       //   Padding(
-            //                       //     padding: const EdgeInsets.only(top: 4),
-            //                       //     child: Text(
-            //                       //       s["remarks"],
-            //                       //       style: const TextStyle(
-            //                       //         color: Colors.grey,
-            //                       //         fontSize: 12,
-            //                       //       ),
-            //                       //     ),
-            //                       //   ),
-            //
-            //
-            //               if (isCustomerValid && (s?["remarks"] ?? "").isNotEmpty)
-            //       Padding(
-            //   padding: const EdgeInsets.only(top: 4),
-            //   child: Text(
-            //     s["remarks"],
-            //     style: const TextStyle(
-            //       color: Colors.grey,
-            //       fontSize: 12,
-            //     ),
-            //   ),
-            // ),
-            //
-            // ],
-            //                   ),
-            //                 ),
-            //               ),
-            //             )
-            //                 .toList()
-            //                 : [
-            //               const Padding(
-            //                 padding: EdgeInsets.all(8.0),
-            //                 child: Text(
-            //                   "No site visits available",
-            //                   style: TextStyle(color: Colors.grey),
-            //                 ),
-            //               )
-            //             ],
-            //           ),
                       /// SITE VISITS
                       ExpansionTile(
                         title: const Text(

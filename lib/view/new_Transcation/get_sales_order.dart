@@ -1,5 +1,6 @@
 // import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter/material.dart';
@@ -9,7 +10,15 @@ import 'package:sales_ordering_app/view/new_Transcation/sales_order.dart';
 
 import '../../model/get_sales_order_response.dart';
 
+// class SalesOrderPage extends StatefulWidget {
 class SalesOrderPage extends StatefulWidget {
+  final Map<String, dynamic>? mappedQuotation;
+
+  const SalesOrderPage({
+    super.key,
+    this.mappedQuotation,
+  });
+
   @override
   _SalesOrderPageState createState() => _SalesOrderPageState();
 }
@@ -22,16 +31,39 @@ class _SalesOrderPageState extends State<SalesOrderPage>
   GlobalKey<SalesOrderScreenState>();
   TabController get tabController => _tabController; // 👈 expose controller
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   // 👇 now we can use `this` as vsync safely
+  //   _tabController = TabController(length: 2, vsync: this);
+  //   _tabController.addListener(() {
+  //     if (mounted) {
+  //       setState(() {}); // rebuild AppBar when tab changes
+  //     }
+  //
+  //   });
+  //   // ✅ Clear previous order data on fresh load
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     if (widget.mappedQuotation == null) {
+  //       context.read<SalesOrderProvider>().clearSelectedSalesOrder();
+  //     }
+  //   });
+  //
+  // }
+  // SalesOrderPage
   @override
   void initState() {
     super.initState();
-    // 👇 now we can use `this` as vsync safely
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (mounted) {
-        setState(() {}); // rebuild AppBar when tab changes
-      }
+      if (mounted) setState(() {});
     });
+
+    // ✅ Clear SYNCHRONOUSLY before SalesOrderScreen builds
+    if (widget.mappedQuotation == null) {
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+      provider.clearSelectedSalesOrder();
+    }
   }
 
   @override
@@ -40,95 +72,13 @@ class _SalesOrderPageState extends State<SalesOrderPage>
     super.dispose();
   }
 
-  void _showWarehouseDialog(BuildContext context) {
-    final provider =
-    Provider.of<SalesOrderProvider>(context, listen: false);
-
-    String? selectedWarehouse = provider.setWarehouse;
-
-    showDialog(
-      context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: const Text('Set Warehouse'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Autocomplete<String>(
-              initialValue: TextEditingValue(
-                text: selectedWarehouse ?? '',
-              ),
-              optionsBuilder: (TextEditingValue textEditingValue) async {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<String>.empty();
-                }
-                return await provider.fetchWarehouse(
-                  textEditingValue.text,
-                );
-              },
-              displayStringForOption: (option) => option,
-              onSelected: (String selection) {
-                selectedWarehouse = selection;
-              },
-              fieldViewBuilder:
-                  (context, controller, focusNode, onEditingComplete) {
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  decoration: const InputDecoration(
-                    hintText: 'Search Warehouse',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                );
-              },
-              optionsViewBuilder:
-                  (context, onSelected, Iterable<String> options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      itemCount: options.length,
-                      itemBuilder: (context, index) {
-                        final option = options.elementAt(index);
-                        return ListTile(
-                          title: Text(option),
-                          onTap: () => onSelected(option),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (selectedWarehouse != null &&
-                    selectedWarehouse!.isNotEmpty) {
-                  provider.setWarehousee(selectedWarehouse!);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<SalesOrderProvider>(context);
+
     return Scaffold(
+
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leading: GestureDetector(
@@ -138,31 +88,18 @@ class _SalesOrderPageState extends State<SalesOrderPage>
           child: const Icon(Icons.arrow_back, color: Colors.white),
         ),
         backgroundColor: AppColors.primaryColor,
-        title: const Text('Sales Order', style: TextStyle(color: Colors.white)),
-
-        // actions: _tabController.index == 0
-        //     ? [
-        //   IconButton(
-        //     icon: const Icon(Icons.save, color: Colors.white),
-        //     onPressed: () async {
-        //       final state = _salesOrderKey.currentState;
-        //       if (state != null) {
-        //         await state.handleSave(context);
-        //       }
-        //     },
-        //   ),
-        // ]
-        //     : null,
+        title: const Text(
+          'Sales Order',
+          style: TextStyle(color: Colors.white),
+        ),
 
         actions: _tabController.index == 0
             ? [
-          IconButton(
-            icon: const Icon(Icons.warehouse, color: Colors.white),
-            tooltip: 'Set Warehouse',
-            onPressed: () => _showWarehouseDialog(context),
-          ),
+
+          // 💾 Save
           IconButton(
             icon: const Icon(Icons.save, color: Colors.white),
+            tooltip: "Save Sales Order",
             onPressed: () async {
               final state = _salesOrderKey.currentState;
               if (state != null) {
@@ -170,9 +107,146 @@ class _SalesOrderPageState extends State<SalesOrderPage>
               }
             },
           ),
+
+          // ✅ SHOW ONLY WHEN ORDER EXISTS
+          if (provider.hasActiveOrder)...[
+
+            // ➕ NEW ORDER
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.white),
+              tooltip: "New Sales Order",
+              onPressed: () async {
+                final state = _salesOrderKey.currentState;
+
+                // 🚫 Prevent losing unsaved changes
+                if (state?.isDirty == true) {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text("Discard changes?"),
+                      content: const Text(
+                          "You have unsaved changes. Continue?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.pop(context, false),
+                          child: const Text("Cancel"),
+                        ),
+                        ElevatedButton(
+                          onPressed: () =>
+                              Navigator.pop(context, true),
+                          child: const Text("Continue"),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm != true) return;
+                }
+
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => const SalesOrderPage(),
+                  ),
+                );
+              },
+            ),
+
+            // ✅ SUBMIT
+            IconButton(
+              icon: const Icon(Icons.check_circle, color: Colors.white),
+              tooltip: "Submit Sales Order",
+              onPressed: () async {
+                final state = _salesOrderKey.currentState;
+                if (state == null) return;
+
+                // 🚫 BLOCK IF DIRTY
+                if (state.isDirty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content:
+                      Text("Please save changes before submitting"),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                final orderName = state.getCurrentOrderName();
+
+                if (orderName == null || orderName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          "Please create/save Sales Order before submitting"),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text("Submit Sales Order"),
+                    content: const Text(
+                        "Are you sure you want to submit?"),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pop(context, false),
+                        child: const Text("Cancel"),
+                      ),
+                      ElevatedButton(
+                        onPressed: () =>
+                            Navigator.pop(context, true),
+                        child: const Text("Submit"),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm != true) return;
+
+                final provider =
+                Provider.of<SalesOrderProvider>(context,
+                    listen: false);
+
+                final success =
+                await provider.submitSalesOrder(orderName);
+
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          "Sales Order submitted successfully!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  await Future.delayed(
+                      const Duration(milliseconds: 500));
+
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) =>
+                      const SalesOrderPage(),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(provider.errorMessage ??
+                          "Submit failed"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
         ]
             : null,
-
 
         bottom: TabBar(
           controller: _tabController,
@@ -190,6 +264,7 @@ class _SalesOrderPageState extends State<SalesOrderPage>
               SalesOrderScreen(
                 key: _salesOrderKey,
                 salesOrder: provider.selectedSalesOrder,
+                mappedQuotation: widget.mappedQuotation,
               ),
               SalesOrderListScreen(),
             ],
@@ -205,7 +280,8 @@ class SalesOrderListScreen extends StatefulWidget {
   _SalesOrderListScreenState createState() => _SalesOrderListScreenState();
 }
 
-class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
+class _SalesOrderListScreenState extends State<SalesOrderListScreen>
+    with AutomaticKeepAliveClientMixin {
   TextEditingController _searchController = TextEditingController();
   TextEditingController _searchCustomerController = TextEditingController();
   TextEditingController _searchCustomerNameController = TextEditingController();
@@ -223,6 +299,8 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
   int pageLength = 10;
   bool isLoadingMore = false;
 
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -234,7 +312,7 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
     _setTodayAsDefaultDate(); // this already fetches data
   }
 
-  void _setTodayAsDefaultDate() {
+  void _setTodayAsDefaultDate({bool fetchImmediately = true}) {
     final today = DateTime.now();
 
     // UI format
@@ -243,18 +321,19 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
     // API format
     final apiDate = DateFormat('yyyy-MM-dd').format(today);
 
-    _fromDateController.text = displayDate;
-    _toDateController.text = displayDate;
+    setState(() {
+      _fromDateController.text = displayDate;
+      _toDateController.text = displayDate;
 
-    _fromDate = apiDate;
-    _toDate = apiDate;
-
-    // Fetch today's Sales Orders by default
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchSalesOrders();
+      _fromDate = apiDate;
+      _toDate = apiDate;
     });
 
+    if (fetchImmediately) {
+      _fetchSalesOrders();
+    }
   }
+
 
   @override
   void dispose() {
@@ -343,19 +422,13 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
   }
 
   void _resetFilters() {
-    setState(() {
-      _fromDateController.clear();
-      _toDateController.clear();
-      _fromDate = "";
-      _toDate = "";
+    // Clear non-date filters
+    _searchController.clear();
+    _searchCustomerController.clear();
+    _searchCustomerNameController.clear();
 
-      _searchController.clear();
-      _searchCustomerController.clear();
-      _searchCustomerNameController.clear();
-    });
-
-    // 🔥 Fetch ALL sales orders
-    _getSalesOrderList();
+    // Reuse existing logic
+    _setTodayAsDefaultDate();
   }
 
   void _showSearchPopup(BuildContext context) {
@@ -446,6 +519,7 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
   }
 @override
 Widget build(BuildContext context) {
+  super.build(context);
   return Scaffold(
     key: _scaffoldKey, // ✅ Add this line
 
@@ -509,7 +583,7 @@ Widget build(BuildContext context) {
                   icon: Icon(Icons.refresh),
                   onPressed: () {
                     _resetFilters();
-                    _getSalesOrderList();
+                    // _getSalesOrderList();
                   },
                 ),
               ],
@@ -532,6 +606,7 @@ Widget build(BuildContext context) {
                     children: [
                       // ✅ Scrollable list underneath
                       ListView.builder(
+                        key: const PageStorageKey<String>('orderListScroll'),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         itemCount: provider.getSalesOrderList!.data!.length,
                         itemBuilder: (context, index) {
@@ -552,14 +627,21 @@ Widget build(BuildContext context) {
                                 tabController?.animateTo(0);
                                 await salesOrderProvider.fetchSalesOrderDetails(data.name!);
                               } else {
-                                await salesOrderProvider.fetchSalesOrderDetails(data.name!);
-                                final order = salesOrderProvider.selectedSalesOrder;
+                                // Show local loader — no provider state change, no list rebuild
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (_) => const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                                final order = await salesOrderProvider.fetchSalesOrderDetailsSilent(data.name!);
 
-                                // ✅ Only continue if still mounted AND scaffold context is valid
-                                if (!mounted || safeContext == null) return;
+                                // Dismiss loader
+                                if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+                                if (!mounted || safeContext == null || order == null) return;
 
-                                if (order != null) {
-                                  final items = order.items ?? [];
+                                final items = order.items ?? [];
 
                                   showDialog(
                                     context: safeContext,
@@ -572,12 +654,6 @@ Widget build(BuildContext context) {
                                         } catch (_) {
                                           return date;
                                         }
-                                      }
-
-                                      double _toDouble(dynamic value) {
-                                        if (value == null) return 0.0;
-                                        if (value is num) return value.toDouble();
-                                        return double.tryParse(value.toString()) ?? 0.0;
                                       }
 
                                       return AlertDialog(
@@ -634,57 +710,6 @@ Widget build(BuildContext context) {
 
                                                 const Divider(height: 16),
 
-                                                // _sectionHeader("Items (${items.length})"),
-                                                // const SizedBox(height: 4),
-                                                //
-                                                // if (items.isEmpty)
-                                                //   const Text("No items available."),
-                                                //
-                                                // ...items.asMap().entries.map((entry) {
-                                                //   final index = entry.key;
-                                                //   final item = entry.value;
-                                                //
-                                                //   return ExpansionTile(
-                                                //     tilePadding: EdgeInsets.zero,
-                                                //     childrenPadding:
-                                                //     const EdgeInsets.symmetric(vertical: 6),
-                                                //     title: Row(
-                                                //       children: [
-                                                //         SizedBox(
-                                                //           width: 24,
-                                                //           child: Text(
-                                                //             "${index + 1}.",
-                                                //             style: const TextStyle(
-                                                //               fontWeight: FontWeight.w600,
-                                                //               fontSize: 13,
-                                                //             ),
-                                                //           ),
-                                                //         ),
-                                                //         Expanded(
-                                                //           child: Text(
-                                                //             "${item.itemCode ?? ''} ${item.itemName ?? ''}",
-                                                //             style: const TextStyle(
-                                                //               fontWeight: FontWeight.w600,
-                                                //               fontSize: 13,
-                                                //             ),
-                                                //           ),
-                                                //         ),
-                                                //       ],
-                                                //     ),
-                                                //     subtitle: Padding(
-                                                //       padding: const EdgeInsets.only(left: 24),
-                                                //       child: Text(
-                                                //         "Qty ${item.qty?.toStringAsFixed(2)} • ₹${item.amount?.toStringAsFixed(2)}",
-                                                //         style: const TextStyle(fontSize: 12),
-                                                //       ),
-                                                //     ),
-                                                //     children: [
-                                                //       _itemRow("Qty", item.qty?.toString()),
-                                                //       _itemRow("Rate", item.rate?.toStringAsFixed(2)),
-                                                //       _itemRow("Amount", item.amount?.toStringAsFixed(2)),
-                                                //     ],
-                                                //   );
-                                                // }).toList(),
                                                 _sectionHeader("Items (${items.length})"),
                                                 const SizedBox(height: 4),
 
@@ -697,6 +722,7 @@ Widget build(BuildContext context) {
 
                                                   final qty = item.qty ?? 0;
                                                   final netRate = item.netRate ?? item.rate ?? 0;
+                                                  final amount = item.amount ?? (qty * netRate);
 
                                                   return ExpansionTile(
                                                     tilePadding: EdgeInsets.zero,
@@ -730,26 +756,45 @@ Widget build(BuildContext context) {
                                                     subtitle: Padding(
                                                       padding: const EdgeInsets.only(left: 24),
                                                       child: Text(
-                                                        "Qty ${qty.toStringAsFixed(2)} • Net Rt ₹${netRate.toStringAsFixed(2)}",
+                                                        "Qty ${qty.toStringAsFixed(2)} • Net Rt ₹${netRate.toStringAsFixed(2)} • Total ₹${amount.toStringAsFixed(2)}",
                                                         style: const TextStyle(fontSize: 12),
                                                       ),
                                                     ),
 
                                                     // ---------- DETAILS ----------
+                                                  children: [
+                                                  Container(
+                                                  width: double.infinity,
+                                                  padding: const EdgeInsets.all(12),
+                                                  margin: const EdgeInsets.only(bottom: 8),
+                                                  decoration: BoxDecoration(
+                                                  color: Colors.grey.shade50,
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  border: Border.all(color: Colors.grey.shade300),
+                                                  ),
+                                                  child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
                                                       _itemRow("Code", item.itemCode),
                                                       _itemRow("Qty", qty.toStringAsFixed(2)),
                                                       _itemRow("Unit", item.uom),
+                                                      _itemRow("Item Tax Details", item.itemTaxDetails),
+
                                                       _itemRow(
                                                         "Price List Rate",
                                                         item.priceListRate?.toStringAsFixed(2),
                                                       ),
 
-                                                      /// ✅ Discount % (only if > 0)
                                                       if ((item.discountPercentage ?? 0) > 0)
                                                         _itemRow(
                                                           "Discount %",
                                                           "${item.discountPercentage!.toStringAsFixed(2)} %",
+                                                        ),
+
+                                                      if ((item.discountAmount ?? 0) > 0)
+                                                        _itemRow(
+                                                          "Discount Amt",
+                                                          "₹ ${item.discountAmount!.toStringAsFixed(2)}",
                                                         ),
 
                                                       _itemRow(
@@ -757,18 +802,22 @@ Widget build(BuildContext context) {
                                                         item.rate?.toStringAsFixed(2),
                                                       ),
 
-                                                      /// ✅ Additional Discount Amount
-                                                      if ((item.distributedDiscountAmount ?? 0) > 0)
-                                                        _itemRow(
-                                                          "Addl.Disc.Amt",
-                                                          item.distributedDiscountAmount!.toStringAsFixed(2),
-                                                        ),
-
                                                       _itemRow(
-                                                        "Net Rate",
-                                                        "₹ ${netRate.toStringAsFixed(2)}",
+                                                        "Total",
+                                                        "₹ ${amount.toStringAsFixed(2)}",
                                                       ),
                                                     ],
+                                                  ),
+                                                  ),
+
+                                                      /// 🔽 RIGHT-BOTTOM SUMMARY BLOCK
+                                                      _rightBottomSummary(
+                                                        addlDiscount: item.distributedDiscountAmount,
+                                                        netRate: netRate,
+                                                        netAmount: item.netAmount,
+                                                      ),
+                                                    ],
+
                                                   );
                                                 }).toList(),
 
@@ -790,7 +839,7 @@ Widget build(BuildContext context) {
                                     },
                                   );
 
-                                }
+                                // }
                               }
                             },
 
@@ -848,43 +897,58 @@ Widget build(BuildContext context) {
     ),
   );
 }
-  // Widget _financialGrid(order) {
-  //   Widget cell(String label, String value) {
-  //     return SizedBox(
-  //       width: 140,
-  //       child: Column(
-  //         crossAxisAlignment: CrossAxisAlignment.start,
-  //         children: [
-  //           Text(label,
-  //               style: const TextStyle(fontSize: 12, color: Colors.grey)),
-  //           const SizedBox(height: 2),
-  //           Text(value,
-  //               style: const TextStyle(
-  //                   fontWeight: FontWeight.w600, fontSize: 13)),
-  //         ],
-  //       ),
-  //     );
-  //   }
-  //
-  //   final total = (order.roundedTotal != null && order.roundedTotal != 0)
-  //       ? order.roundedTotal
-  //       : order.grandTotal;
-  //
-  //   return Wrap(
-  //     spacing: 16,
-  //     runSpacing: 12,
-  //     children: [
-  //       cell(
-  //         "Net Total",
-  //         order.netTotal?.toStringAsFixed(2) ?? "0.00",
-  //       ),
-  //       cell(
-  //         "Grand Total",
-  //         total?.toStringAsFixed(2) ?? "0.00",
-  //       ),
-  //     ],
-  //   );
-  // }
+  Widget _rightBottomSummary({
+    double? addlDiscount,
+    double? netRate,
+    double? netAmount,
+  }) {
+    final hasAnyValue =
+        (addlDiscount ?? 0) > 0 ||
+            (netRate ?? 0) > 0 ||
+            (netAmount ?? 0) > 0;
+
+    if (!hasAnyValue) return const SizedBox.shrink();
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        // margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if ((addlDiscount ?? 0) > 0)
+              _summaryRow("Addl. Disc. Amt", addlDiscount!),
+
+            if ((netRate ?? 0) > 0)
+              _summaryRow("Net Rate", netRate!),
+
+            if ((netAmount ?? 0) > 0)
+              _summaryRow("Net Amount", netAmount!, isBold: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, double value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Text(
+        "$label : ₹ ${value.toStringAsFixed(2)}",
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
   Widget _financialGrid(SalesOrderDetails order) {
     const TextStyle labelStyle =
     TextStyle(fontSize: 12, color: Colors.grey);
@@ -1014,27 +1078,6 @@ Widget build(BuildContext context) {
 
 }
 
-Widget _buildInfoRow(String label, String? value) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4.0),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "$label: ",
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        Expanded(
-          child: Text(
-            value ?? 'N/A',
-            style: const TextStyle(color: Colors.black87),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    ),
-  );
-}
 class SalesOrderCard extends StatelessWidget {
   final dynamic data;
 
@@ -1042,6 +1085,8 @@ class SalesOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
     return Card(
       elevation: 4,
       margin: const EdgeInsets.symmetric(vertical: 5.0),
@@ -1057,6 +1102,104 @@ class SalesOrderCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
+            /// 🔽 HEADER WITH DOWNLOAD ICON
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long, size: 20),
+                      const SizedBox(width: 10),
+                      Text(
+                        data.name ?? '',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                /// 🔥 DOWNLOAD ICON
+                IconButton(
+                  icon: const Icon(Icons.picture_as_pdf_rounded),
+                  color: Colors.red,
+                  onPressed: () async {
+                    final provider =
+                    Provider.of<SalesOrderProvider>(context, listen: false);
+
+                    try {
+                      final formats = await provider.fetchPrintFormats();
+
+                      if (formats.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("No print formats found")),
+                        );
+                        return;
+                      }
+
+                      /// 🔥 SHOW DIALOG
+                      showDialog(
+                        context: context,
+                        builder: (_) {
+                          return AlertDialog(
+                            title: const Text("Select Print Format"),
+                            content: SizedBox(
+                              width: double.maxFinite,
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: formats.length,
+                                itemBuilder: (context, index) {
+                                  final format = formats[index];
+
+                                  return ListTile(
+                                    title: Text(format),
+                                    // onTap: () async {
+                                    //   Navigator.pop(context);
+                                    //
+                                    //   await provider.downloadSalesOrderPdf(
+                                    //     data.name,
+                                    //     format,
+                                    //   );
+                                    // },
+                                      onTap: () async {
+                                        final path = await provider.downloadSalesOrderPdf(data.name, format);
+
+                                        if (path == null) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text("Failed to download PDF")),
+                                          );
+                                          return;
+                                        }
+
+                                        final result = await OpenFilex.open(path);
+
+                                        debugPrint("Open result: ${result.message}");
+
+                                        if (result.type != ResultType.done) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text("No app found to open PDF")),
+                                          );
+                                        }
+                                      }
+                                  );
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Error loading formats")),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 5),
             _buildRow('Order', data.name, Icons.receipt_long),
             // _buildRow('Customer Name', data.customerName, Icons.person),
             _buildRow('Customer', data.customer, Icons.person),

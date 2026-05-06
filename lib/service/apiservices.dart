@@ -5,7 +5,9 @@ import 'dart:typed_data';
 // import 'dart:nativewrappers/_internal/vm/lib/typed_data_patch.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:mime/mime.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 // import 'package:intl/intl.dart';
@@ -33,6 +35,7 @@ import 'package:sales_ordering_app/model/sales_order_response.dart';
 import 'package:sales_ordering_app/model/supplier_pricing_model.dart';
 import 'package:sales_ordering_app/model/user_details_model.dart';
 import 'package:sales_ordering_app/provider/provider.dart';
+import 'package:sales_ordering_app/service/user_cache_service.dart';
 import 'package:sales_ordering_app/utils/sharedpreference.dart';
 import 'package:sales_ordering_app/view/login.dart';
 import 'package:provider/provider.dart';
@@ -42,6 +45,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sales_ordering_app/model/customer_list_model.dart'as customer_models;
 import 'package:sales_ordering_app/model/customer_list_model.dart' as customer;
 
+import 'package:http_parser/http_parser.dart';
 
 // import 'package:sales_ordering_app/view/material_demand/material_demand.dart';
 import 'package:sales_ordering_app/model/material_demand_model.dart';
@@ -280,6 +284,33 @@ class ApiService {
 
     return null;
   }
+  Future<List<String>> fetchCompanyList() async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        '/resource/Company',
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      final list = response.data?['data'] as List<dynamic>?;
+
+      if (list == null) return [];
+
+      return list
+          .map((e) => e['name']?.toString())
+          .whereType<String>()
+          .toList();
+    } catch (e) {
+      debugPrint('❌ fetchCompanyList error: $e');
+      return [];
+    }
+  }
 
 
   //Home Tile visibility
@@ -307,13 +338,6 @@ class ApiService {
       debugPrint('Response  status: ${response.statusCode}');
       debugPrint('Response data in employee: ${response.data}');
 
-      // if (response.statusCode == 200) {
-      //   final details = HomeTileResponse.fromJson(response.data);
-
-      //   return details;
-      // } else {
-      //   apiErrorHandler.handleHttpError(context, response);
-      // }
       if (response.statusCode == 200 && response.data != null) {
   final details = HomeTileResponse.fromJson(response.data);
   if (details.message == null || details.message!.isEmpty) {
@@ -322,16 +346,6 @@ class ApiService {
   return details;
 }
 
-      //   else if (response.statusCode == 401) {
-      //   debugPrint('Unauthorized: Incorrect username, password, or domain.');
-      //   throw Exception('Unauthorized: Incorrect username, password, or domain.');
-      // } else if (response.data['session_expired'] == 1) {
-      //   debugPrint('Session expired. Logging out...');
-      //    apiErrorHandler.logout(context); .
-      //   throw Exception('Session expired. Please log in again.');
-      // } else {
-      //   throw Exception('Failed to fetch data');
-      // }
     } on DioException catch (e) {
       debugPrint('DioException: ${e.message}');
       if (e.response != null) {
@@ -343,7 +357,34 @@ class ApiService {
       throw Exception('Failed to fetch  data');
     }
   }
+//profile
 
+  Future<Map<String, dynamic>?> fetchUserDetails(String email) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        '/resource/User/$email',
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data['data'];
+      }
+    } catch (e) {
+      debugPrint('fetchUserDetails error: $e');
+    }
+    return null;
+  }
+
+
+  //profile
 
   // Attendance
   // Future<AttendanceDetails?> attendance(String employeeId, context) async {
@@ -701,7 +742,7 @@ class ApiService {
       const baseUrl = '/resource/Employee Checkin';
       final queryParams =
           '?filters=[["employee","=","$employeeId"]]'
-          '&fields=["log_type","customer","remarks"]'
+          '&fields=["log_type","customer","remarks","time"]'
           '&order_by=creation desc&limit_page_length=1';
 
       final response = await _dio.get(
@@ -958,53 +999,54 @@ class ApiService {
     }
   }
 
+  final UserCacheService _userCache = UserCacheService();
 
-  // Future<CustomerList?> customerList(context) async {
-  //   final url =
-  //       '/resource/Customer?fields=["name","tax_id","gstin","territory","customer_primary_contact","customer_primary_address","primary_address","mobile_no","email_id","tax_category","territory","customer_group"]';
-  //
-  //   try {
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     debugPrint('Requesting  data from URL: ${baseUrl + url}');
-  //     final response = await _dio.get(
-  //       url,
-  //       options: Options(
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Cookie': cookies,
-  //         },
-  //         validateStatus: (status) {
-  //           return status! < 500;
-  //         },
-  //       ),
-  //     );
-  //
-  //     debugPrint('Response  status: ${response.statusCode}');
-  //     debugPrint('Response data: ${response.data}');
-  //
-  //     if (response.statusCode == 200) {
-  //       return CustomerList.fromJson(response.data);
-  //     } else {
-  //       apiErrorHandler.handleHttpError(context, response);
-  //     }
-  //   } on DioException catch (e) {
-  //     debugPrint('DioException: ${e.message}');
-  //     if (e.response != null) {
-  //       debugPrint('Response data: ${e.response?.data}');
-  //     }
-  //     throw Exception('Failed to fetch  data');
-  //   } catch (e) {
-  //     debugPrint('Exception: $e');
-  //     throw Exception('Failed to fetch  data');
-  //   }
-  // }
+// ✅ Optimized method to get sales person with caching
+  Future<String> getSalesPersonWithCache() async {
+    // Check cache first
+    final cached = _userCache.salesPerson;
+    if (cached != null) {
+      debugPrint('Using cached sales person: $cached');
+      return cached;
+    }
+
+    // Fetch if not cached
+    final loggedUser = await getLoggedInUserIdentifier();
+    if (loggedUser == null) throw Exception("Could not get logged in user");
+
+    final firstName = await fetchUserFirstName(loggedUser);
+    if (firstName == null) throw Exception("Could not get first name");
+
+    final employeeId = await fetchEmployeeByFirstName(firstName);
+    if (employeeId == null) throw Exception("Could not get employee");
+
+    final salesPerson = await fetchSalesPersonByEmployee(employeeId);
+    if (salesPerson == null) throw Exception("Could not get sales person");
+
+    // Cache the result
+    _userCache.cacheSalesPerson(salesPerson, loggedUser);
+
+    return salesPerson;
+  }
+
   Future<CustomerList?> customerList(
       BuildContext context,
-      String salesPerson,
-      ) async {
+      String? salesPerson, {
+        bool filterBySalesPerson = true,
+        int pageLength = 20,
+        int start = 0,
+        bool onlyLiked = false,
+        String? loggedUser,
+      }) async {
     final url = '/resource/Customer';
-
+    List filters = [];
+    if (filterBySalesPerson && salesPerson != null) {
+      filters.add(["Sales Team", "sales_person", "=", salesPerson]);
+    }
+    // ⭐ Add liked filter
+    if (onlyLiked && loggedUser != null) {
+      filters.add(["Customer", "_liked_by", "like", "%$loggedUser%"]);
+    }
     final queryParams = {
       "fields": jsonEncode([
         "name",
@@ -1017,12 +1059,16 @@ class ApiService {
         "mobile_no",
         "email_id",
         "tax_category",
-        "territory",
         "customer_group",
+        "_liked_by"
       ]),
-      "filters": jsonEncode([
-        ["Sales Team", "sales_person", "=", salesPerson]
-      ]),
+      // "filters": jsonEncode([
+      //   ["Sales Team", "sales_person", "=", salesPerson]
+      // ]),
+      "filters": jsonEncode(filters),
+
+      "limit_page_length": pageLength,
+      "limit_start": start,
     };
 
     try {
@@ -1041,7 +1087,6 @@ class ApiService {
       );
 
       debugPrint('Customer Fetch Status: ${response.statusCode}');
-      debugPrint('Customer Fetch Data: ${response.data}');
 
       if (response.statusCode == 200) {
         return CustomerList.fromJson(response.data);
@@ -1050,7 +1095,6 @@ class ApiService {
       }
     } on DioException catch (e) {
       debugPrint('DioException: ${e.message}');
-      debugPrint('Response: ${e.response?.data}');
       throw Exception('Failed to fetch customers');
     } catch (e) {
       debugPrint('Exception: $e');
@@ -1059,6 +1103,231 @@ class ApiService {
 
     return null;
   }
+  Future<bool> toggleCustomerLike({
+    required BuildContext context,
+    required String customerName,
+    required bool add,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.post(
+        "/method/frappe.desk.like.toggle_like",
+        queryParameters: {
+          "doctype": "Customer",
+          "name": customerName,
+          "add": add ? "Yes" : "No",
+        },
+        options: Options(
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": cookies,
+          },
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        apiErrorHandler.handleHttpError(context, response);
+        return false;
+      }
+    } catch (e) {
+      debugPrint("toggleCustomerLike error: $e");
+      return false;
+    }
+  }
+
+  Future<void> fetchCustomerDetailss(
+      customer_models.Data customer,
+      BuildContext context
+      ) async {
+
+    final encodedName = Uri.encodeComponent(customer.name ?? "");
+    final url =
+        '/method/frappe.desk.form.load.getdoc?doctype=Customer&name=$encodedName';
+
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data['docs'][0];
+
+        /// ⭐ Extract ALL sales persons
+        final salesTeam = data['sales_team'];
+
+        if (salesTeam != null && salesTeam.isNotEmpty) {
+          customer.salesPersons =
+              salesTeam.map<String>((e) => e['sales_person'].toString()).toList();
+        }
+
+        /// Dashboard data
+        final dashboardList = data['__onload']?['dashboard_info'];
+
+        if (dashboardList != null && dashboardList.isNotEmpty) {
+          final dashboard = dashboardList[0];
+
+          customer.billingThisYear =
+              (dashboard['billing_this_year'] ?? 0).toDouble();
+
+          customer.totalUnpaid =
+              (dashboard['total_unpaid'] ?? 0).toDouble();
+        }
+      }
+
+    } catch (e) {
+      debugPrint('Error fetching customer details for ${customer.name}: $e');
+    }
+  }
+  Future<double> fetchCustomerOutstandingBalance({
+    required String customerName,
+    required BuildContext context,
+  }) async {
+    try {
+      final encodedName = Uri.encodeComponent(customerName);
+      final url =
+          '/method/erpnext.accounts.utils.get_balance_on'
+          '?party_type=Customer&party=$encodedName';
+
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return (response.data['message'] ?? 0.0).toDouble();
+      }
+      return 0.0;
+    } catch (e) {
+      debugPrint('Error fetching balance for $customerName: $e');
+      return 0.0;
+    }
+  }
+
+  Future<int> fetchCustomerCount({
+    required BuildContext context,
+    String? salesPerson,
+    bool filterBySalesPerson = true,
+    String? search,
+  }) async {
+    final url = '/method/frappe.desk.reportview.get_count';
+
+    List filters = [];
+
+    // ✅ Apply Sales Person filter only if toggle is ON
+    if (filterBySalesPerson && salesPerson != null) {
+      filters.add(["Sales Team", "sales_person", "=", salesPerson]);
+    }
+
+    // ✅ Apply search filter if provided
+    if (search != null && search.isNotEmpty) {
+      filters.add(["name", "like", "%$search%"]);
+    }
+
+    final queryParams = {
+      "doctype": "Customer",
+      "filters": jsonEncode(filters),
+    };
+
+    final cookies = await _sharedPrefService.getCookies();
+
+    final response = await _dio.get(
+      url,
+      queryParameters: queryParams,
+      options: Options(
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": cookies,
+        },
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      return response.data["message"] ?? 0;
+    }
+
+    throw Exception("Failed to fetch customer count");
+  }
+
+  Future<CustomerList?> customerSearchPaged({
+    required BuildContext context,
+    String? salesPerson,
+    bool filterBySalesPerson = true,
+    required String search,
+    required int pageLength,
+    required int start,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    List filters = [];
+
+    // ✅ Apply Sales Person filter only when toggle is ON
+    if (filterBySalesPerson && salesPerson != null) {
+      filters.add(["Sales Team", "sales_person", "=", salesPerson]);
+    }
+
+    // ✅ Always apply search filter
+    filters.add(["name", "like", "%$search%"]);
+
+    final queryParams = {
+      "fields": jsonEncode([
+        "name",
+        "tax_id",
+        "gstin",
+        "territory",
+        "customer_primary_contact",
+        "customer_primary_address",
+        "primary_address",
+        "mobile_no",
+        "email_id",
+        "tax_category",
+        "territory",
+        "customer_group",
+        "_liked_by"
+      ]),
+      "filters": jsonEncode(filters),
+      "limit_page_length": pageLength,
+      "limit_start": start,
+    };
+
+    final response = await _dio.get(
+      "/resource/Customer",
+      queryParameters: queryParams,
+      options: Options(
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": cookies,
+        },
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      return CustomerList.fromJson(response.data);
+    }
+
+    return null;
+  }
+
 
   Future<Map<String, dynamic>?> fetchCustomerLocation(String customerName, BuildContext context) async {
     final url = '/resource/Customer/$customerName';
@@ -1151,13 +1420,65 @@ class ApiService {
     }
   }
 
+  // Future<List<Map<String, dynamic>>> fetchCustomerSalesInvoices({
+  //   required String customerName,
+  //   required BuildContext context,
+  // }) async {
+  //   try {
+  //     final encodedFilter = Uri.encodeComponent(
+  //       '[["Sales Invoice","customer","=","$customerName"]]',
+  //     );
+  //     final encodedFields = Uri.encodeComponent(
+  //       '["name","customer","posting_date","due_date","status","grand_total","rounded_total"]',
+  //     );
+  //
+  //     final url =
+  //         '/resource/Sales Invoice?filters=$encodedFilter&fields=$encodedFields';
+  //
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       final data = response.data['data'] as List<dynamic>? ?? [];
+  //       // 👇 Return full map instead of just the name string
+  //       return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  //     }
+  //     return [];
+  //   } catch (e) {
+  //     debugPrint('Error fetching invoices for $customerName: $e');
+  //     return [];
+  //   }
+  // }
 
-  Future<void> fetchCustomerDetailss(customer_models.Data customer, BuildContext context) async {
-    final encodedName = Uri.encodeComponent(customer.name ?? "");
-    final url = '/method/frappe.desk.form.load.getdoc?doctype=Customer&name=$encodedName';
-
+  Future<List<Map<String, dynamic>>> fetchCustomerSalesInvoices({
+    required String customerName,
+    required BuildContext context,
+  }) async {
     try {
+      final encodedFilter = Uri.encodeComponent(
+        '[["Sales Invoice","customer","=","$customerName"],'
+            '["Sales Invoice","status","not in","Paid,Cancelled"]]', // 👈 exclude Paid & Cancelled
+      );
+      final encodedFields = Uri.encodeComponent(
+        '["name","customer","posting_date","due_date","status","grand_total","rounded_total"]',
+      );
+
+      // 👇 page_length=0 removes the default 20-item cap — returns all matching records
+      final url =
+          '/resource/Sales Invoice?filters=$encodedFilter&fields=$encodedFields&limit=999999';
+
       final cookies = await _sharedPrefService.getCookies();
+
       final response = await _dio.get(
         url,
         options: Options(
@@ -1170,17 +1491,13 @@ class ApiService {
       );
 
       if (response.statusCode == 200) {
-        final data = response.data['docs'][0];
-        final dashboard = data['__onload']['dashboard_info'][0];
-
-        customer.billingThisYear = (dashboard['billing_this_year'] ?? 0).toDouble();
-        customer.totalUnpaid = (dashboard['total_unpaid'] ?? 0).toDouble();
-
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
+        final data = response.data['data'] as List<dynamic>? ?? [];
+        return data.map((e) => Map<String, dynamic>.from(e)).toList();
       }
+      return [];
     } catch (e) {
-      debugPrint('Error fetching customer details: $e');
+      debugPrint('Error fetching invoices for $customerName: $e');
+      return [];
     }
   }
 
@@ -1191,7 +1508,7 @@ class ApiService {
       String fromDate,
       String toDate,
       ) async {
-    const url = "/method/tqerp_concord.api.get_general_ledger";
+    const url = "/method/tqerp_mobibiz_serv.api.get_general_ledger";
 
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -1264,47 +1581,6 @@ class ApiService {
     return null;
   }
 
-  // Future<Map<String, dynamic>?> fetchAccountsReceivable(
-  //     BuildContext context,
-  //     String company,
-  //     String postingDate,
-  //     String party,
-  //     ) async {
-  //
-  //   const url = "/method/tqerp_concord.api.get_accounts_receivable";
-  //
-  //   try {
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     final response = await _dio.get(
-  //       url,
-  //       queryParameters: {
-  //         "company": company,
-  //         "posting_date": postingDate,
-  //         "party": party,
-  //       },
-  //       options: Options(
-  //         headers: {
-  //           "Content-Type": "application/json",
-  //           "Cookie": cookies,
-  //         },
-  //         validateStatus: (status) => status! < 500,
-  //       ),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       debugPrint("ACCOUNTS RECEIVABLE RAW RESPONSE: ${response.data}");
-  //       return response.data;
-  //     } else {
-  //       apiErrorHandler.handleHttpError(context, response);
-  //     }
-  //
-  //   } catch (e) {
-  //     debugPrint("fetchAccountsReceivable Error: $e");
-  //   }
-  //
-  //   return null;
-  // }
   Future<Map<String, dynamic>?> fetchAccountsReceivable(
       BuildContext context,
       String company,
@@ -1313,7 +1589,7 @@ class ApiService {
       String range, // <-- NEW (example: "30,60")
       ) async {
 
-    const url = "/method/tqerp_concord.api.get_accounts_receivable";
+    const url = "/method/tqerp_mobibiz_serv.api.get_accounts_receivable";
 
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -1398,6 +1674,64 @@ class ApiService {
     return null;
   }
 
+  Future<bool> createPaymentCollection(
+      Map<String, dynamic> paymentData, BuildContext context) async {
+    const url = "/resource/Payment Collection";
+
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.post(
+        url,
+        data: paymentData,
+        options: Options(
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint("Create payment collection error: $e");
+      return false;
+    }
+  }
+  Future<List<String>> fetchModeOfPayments() async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        '/method/frappe.desk.search.search_link',
+        queryParameters: {
+          "doctype": "Mode of Payment",
+          "reference_doctype": "Payment Collection",
+          "txt": "",
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final List message = response.data['message'] ?? [];
+        return message.map((e) => e['value'].toString()).toList();
+      }
+
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching mode of payments: $e');
+      return [];
+    }
+  }
 //material request
 
 Future<Map<String, dynamic>?> fetchMaterialRequests(
@@ -2547,44 +2881,6 @@ Future<List<dynamic>?> fetchItemsDemand(
 
 //salesreturn
 
-
-// Future<String?> _fetchCustomerInfo(BuildContext context) async {
-//   try {
-//     final userEmail = await _sharedPrefService.getEmailId();
-//     if (userEmail == null || userEmail.isEmpty) {
-//       throw Exception('User email is missing');
-//     }
-
-//     final userUrl = '/resource/User/$userEmail';
-//     final cookies = await _sharedPrefService.getCookies();
-
-//     debugPrint('Fetching customer_info from: ${baseUrl + userUrl}');
-//     final userResponse = await _dio.get(
-//       userUrl,
-//       options: Options(
-//         headers: {
-//           'Content-Type': 'application/json',
-//           'Cookie': cookies,
-//         },
-//         validateStatus: (status) => status! < 500,
-//       ),
-//     );
-
-//     if (userResponse.statusCode == 200) {
-//       final customerInfo = userResponse.data['data']['customer_info'];
-//       if (customerInfo == null || customerInfo.isEmpty) {
-//         throw Exception('No customer_info found for user');
-//       }
-//       return customerInfo;
-//     } else {
-//       apiErrorHandler.handleHttpError(context, userResponse);
-//       return null;
-//     }
-//   } catch (e) {
-//     debugPrint('Error fetching customer_info: $e');
-//     return null;
-//   }
-// }
 Future<String?> _fetchCustomerInfo(BuildContext context) async {
   try {
     final userId = await getLoggedInUserIdentifier();
@@ -4039,11 +4335,6 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     return msg;
   }
 
-  // Future<Map<String, dynamic>> updatePickedQty(
-  //     BuildContext context,
-  //     String pickListName,
-  //     List<Map<String, dynamic>> locations,
-  //     ) async {
   Future<Map<String, dynamic>> updatePickedQty(
       BuildContext context,
       String pickListName,
@@ -4052,14 +4343,6 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       ) async {
 
     final url = '$baseUrl/resource/Pick List/$pickListName';
-    // final Map<String, dynamic> updatedData = {
-    //   "data": {
-    //     "name": pickListName,
-    //     "scan_mode": 1,
-    //     "docstatus": 0,
-    //     "locations": locations,
-    //   }
-    // };
     final Map<String, dynamic> updatedData = {
       "data": {
         "name": pickListName,
@@ -4111,6 +4394,238 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
 
 //pick list
+
+// Pick Item
+
+  Future<List<Map<String, dynamic>>> fetchPickList({String? warehouse}) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // Build filters dynamically
+      List<List<dynamic>> filters = [
+        ["docstatus", "=", 0], // Draft only
+      ];
+
+      // Add warehouse filter if provided
+      if (warehouse != null && warehouse.isNotEmpty) {
+        filters.add(["Pick", "warehouse", "=", warehouse]);
+      }
+
+      final response = await _dio.get(
+        "/resource/Pick",
+        queryParameters: {
+          "fields": jsonEncode([
+            "name",
+            "docstatus",
+            "date",
+            "delivery_note",
+            "sales_invoice",
+            "customer",
+            "warehouse", // Add warehouse to fields
+          ]),
+          "filters": jsonEncode(filters),
+          "order_by": "date desc",
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data["data"];
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        }
+      }
+    } catch (e) {
+      debugPrint("fetchPickList Error: $e");
+    }
+
+    return [];
+  }
+
+
+  Future<Map<String, dynamic>?> fetchPickDetail(String pickName) async {
+    debugPrint("➡️ fetchPickDetail: $pickName");
+
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/Pick/$pickName",
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      debugPrint("📦 Pick Detail response: ${response.data}");
+
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(response.data["data"]);
+      }
+    } catch (e, stack) {
+      debugPrint("❌ fetchPickDetail Error: $e");
+      debugPrint("$stack");
+    }
+
+    return null;
+  }
+  Future<bool> updatePick({
+    required String pickName,
+    required String warehouse,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.put(
+        "/resource/Pick/$pickName",
+        data: {
+          "warehouse": warehouse,
+          "items": items,
+        },
+        options: Options(
+          headers: {
+            "Cookie": cookies,
+            "Content-Type": "application/json",
+          },
+        ),
+      );
+
+      debugPrint("✅ Pick updated: ${response.data}");
+      return response.statusCode == 200;
+    } catch (e, stack) {
+      debugPrint("❌ updatePick error: $e");
+      debugPrint("$stack");
+      return false;
+    }
+  }
+  Future<bool> submitPick({required String pickName}) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.put(
+        "/resource/Pick/$pickName",
+        data: {"docstatus": 1},
+        options: Options(
+          headers: {
+            "Cookie": cookies,
+            "Content-Type": "application/json",
+          },
+        ),
+      );
+
+      debugPrint("✅ Pick submitted: ${response.data}");
+      return response.statusCode == 200;
+    } catch (e, stack) {
+      debugPrint("❌ submitPick error: $e");
+      debugPrint("$stack");
+      return false;
+    }
+  }
+  Future<List<String>> searchWarehouses(String query) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // 🔹 Fetch company from SharedPreferences
+      final company = await _sharedPrefService.getCompany();
+
+      if (company == null || company.isEmpty) {
+        throw Exception("Company not found in SharedPreferences");
+      }
+
+      // 🔹 Build ERPNext filters
+      final filters = jsonEncode([
+        ["Warehouse", "company", "in", ["", company]],
+        ["Warehouse", "is_group", "=", 0],
+      ]);
+
+      final response = await _dio.get(
+        "/method/frappe.desk.search.search_link",
+        queryParameters: {
+          "doctype": "Warehouse",
+          "reference_doctype": "Pick Items",
+          "txt": query,
+          "filters": filters,
+        },
+        options: Options(
+          headers: {
+            'Cookie': cookies,
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final List list = response.data["message"] ?? [];
+        return list
+            .map<String>((e) => e["value"].toString())
+            .toList();
+      }
+    } catch (e, stack) {
+      debugPrint("❌ searchWarehouses error: $e");
+      debugPrintStack(stackTrace: stack);
+    }
+
+    return [];
+  }
+
+  Future<List<String>> fetchAvailableSerialNumbers({
+    required String itemCode,
+    required String warehouse,
+    int qty = 1000,
+  }) async {
+    debugPrint("➡️ fetchAvailableSerialNumbers: item=$itemCode, warehouse=$warehouse");
+
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/erpnext.stock.doctype.serial_no.serial_no.auto_fetch_serial_number",
+        queryParameters: {
+          'qty': qty,
+          'warehouse': warehouse,
+          'item_code': itemCode,
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      debugPrint("📦 Serial Numbers response: ${response.data}");
+
+      if (response.statusCode == 200) {
+        final message = response.data["message"];
+        if (message is List) {
+          return message.map((e) => e.toString()).toList();
+        }
+      }
+    } catch (e, stack) {
+      debugPrint("❌ fetchAvailableSerialNumbers Error: $e");
+      debugPrint("$stack");
+    }
+
+    return [];
+  }
+  Future<List<String>> fetchItemBarcodes(String itemCode) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/Item/$itemCode",
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data["data"];
+        final barcodes = data["barcodes"] as List<dynamic>? ?? [];
+
+        return barcodes
+            .map((b) => b["barcode"]?.toString() ?? "")
+            .where((b) => b.isNotEmpty)
+            .toList();
+      }
+    } catch (e) {
+      debugPrint("fetchItemBarcodes error: $e");
+    }
+
+    return [];
+  }
+//pick item
 
 // purchase receipt
 
@@ -4509,75 +5024,6 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
 // sales invoice
 
-  // Future<Map<String, String>?> fetchUserBranch(BuildContext context) async {
-  //   try {
-  //     final userIdentifier = await getLoggedInUserIdentifier();
-  //     if (userIdentifier == null) {
-  //       throw Exception('Unable to determine logged-in user identifier.');
-  //     }
-  //
-  //     final encodedUser = Uri.encodeComponent(userIdentifier);
-  //     final userUrl = '$baseUrl/resource/User/$encodedUser';
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     // Step 1: Fetch user data
-  //     final userResponse = await _dio.get(
-  //       userUrl,
-  //       options: Options(
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Cookie': cookies,
-  //         },
-  //         validateStatus: (status) => status! < 500,
-  //       ),
-  //     );
-  //
-  //     if (userResponse.statusCode == 200 && userResponse.data != null) {
-  //       final userData = userResponse.data['data'];
-  //       if (userData != null && userData.containsKey('customer_info')) {
-  //         final customerInfo = userData['customer_info'];
-  //
-  //         // Step 2: Fetch customer data
-  //         final customerUrl = '$baseUrl/resource/Customer/$customerInfo';
-  //         final customerResponse = await _dio.get(
-  //           customerUrl,
-  //           options: Options(
-  //             headers: {
-  //               'Content-Type': 'application/json',
-  //               'Cookie': cookies,
-  //             },
-  //             validateStatus: (status) => status! < 500,
-  //           ),
-  //         );
-  //
-  //         if (customerResponse.statusCode == 200 && customerResponse.data != null) {
-  //           final customerData = customerResponse.data['data'];
-  //           final branch = customerData['branch'];
-  //           final defaultWarehouse = customerData['default_warehouse'];
-  //
-  //           if (branch != null && defaultWarehouse != null) {
-  //             return {
-  //               "branch": branch,
-  //               "default_warehouse": defaultWarehouse,
-  //             };
-  //           } else {
-  //             throw Exception('branch or default_warehouse not found in customer data.');
-  //           }
-  //         } else {
-  //           throw Exception('Failed to fetch customer details.');
-  //         }
-  //       } else {
-  //         throw Exception('customer_info not found in user data.');
-  //       }
-  //     } else {
-  //       throw Exception('Failed to fetch user details.');
-  //     }
-  //   } catch (e) {
-  //     debugPrint('Exception: $e');
-  //     return null;
-  //   }
-  // }
-
   Future<Map<String, String>?> fetchUserBranch(BuildContext context) async {
     try {
       final userIdentifier = await getLoggedInUserIdentifier();
@@ -4719,8 +5165,8 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
           '"rounded_total","grand_total","outstanding_amount",'
           '"discount_amount","additional_discount_percentage",'
           '"items.item_name","items.item_code","items.uom","items.qty",'
-          '"items.price_list_rate","items.net_amount","items.amount"'
-          '"items.discount_amount","items.discount_percentage"'
+          '"items.price_list_rate","items.net_amount","items.amount",'
+          '"items.discount_amount","items.discount_percentage",'
           '"items.rate","distributed_discount_amount","items.net_rate"'
           ']';
       final response = await _dio.get(
@@ -4844,20 +5290,68 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
 
 
+  // Future<Map<String, dynamic>> fetchInvoiceCustomerDetails(
+  //     BuildContext context,
+  //     String customerName,
+  //     ) async {
+  //   try {
+  //     // Get company from SharedPreferences
+  //     final company = await _sharedPrefService.getCompany();
+  //
+  //     if (company == null || company.isEmpty) {
+  //       throw Exception("Company not found in SharedPreferences");
+  //     }
+  //
+  //     final url =
+  //         '/method/erpnext.accounts.party.get_party_details?company=${Uri.encodeComponent(company)}&party=$customerName&doctype=Sales%20Invoice';
+  //
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final response = await _dio.post(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //       ),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       return response.data["message"];
+  //     } else {
+  //       throw Exception("Failed to fetch customer details");
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error in fetchInvoiceCustomerDetails: $e");
+  //     throw Exception("Failed to fetch customer details");
+  //   }
+  // }
   Future<Map<String, dynamic>> fetchInvoiceCustomerDetails(
       BuildContext context,
       String customerName,
       ) async {
     try {
-      // Get company from SharedPreferences
       final company = await _sharedPrefService.getCompany();
 
       if (company == null || company.isEmpty) {
         throw Exception("Company not found in SharedPreferences");
       }
 
+      // ✅ Encode customerName to handle special chars like &
+      final encodedCompany = Uri.encodeComponent(company);
+      final encodedCustomer = Uri.encodeComponent(customerName);
+
       final url =
-          '/method/erpnext.accounts.party.get_party_details?company=${Uri.encodeComponent(company)}&party=$customerName&doctype=Sales%20Invoice';
+          '/method/erpnext.accounts.party.get_party_details?company=$encodedCompany&party=$encodedCustomer&doctype=Sales%20Invoice';
+
+      debugPrint('┌─ [fetchInvoiceCustomerDetails] REQUEST ────────');
+      debugPrint('│ raw customerName : $customerName');
+      debugPrint('│ encoded customer : $encodedCustomer');
+      debugPrint('│ raw company      : $company');
+      debugPrint('│ encoded company  : $encodedCompany');
+      debugPrint('│ full URL         : ${baseUrl + url}');
+      debugPrint('└────────────────────────────────────────────────');
 
       final cookies = await _sharedPrefService.getCookies();
 
@@ -4868,20 +5362,38 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
             'Content-Type': 'application/json',
             'Cookie': cookies,
           },
+          validateStatus: (status) => status! < 500,
         ),
       );
+
+      debugPrint('┌─ [fetchInvoiceCustomerDetails] RESPONSE ───────');
+      debugPrint('│ status : ${response.statusCode}');
+      debugPrint('│ data   : ${response.data}');
+      debugPrint('└────────────────────────────────────────────────');
 
       if (response.statusCode == 200) {
         return response.data["message"];
       } else {
+        debugPrint('[fetchInvoiceCustomerDetails] ❌ status ${response.statusCode}');
+        apiErrorHandler.handleHttpError(context, response);
         throw Exception("Failed to fetch customer details");
       }
-    } catch (e) {
-      debugPrint("Error in fetchInvoiceCustomerDetails: $e");
+    } on DioException catch (e) {
+      debugPrint('┌─ [fetchInvoiceCustomerDetails] DIO ERROR ──────');
+      debugPrint('│ type    : ${e.type}');
+      debugPrint('│ status  : ${e.response?.statusCode}');
+      debugPrint('│ message : ${e.message}');
+      debugPrint('│ response: ${e.response?.data}');
+      debugPrint('└────────────────────────────────────────────────');
+      throw Exception("Failed to fetch customer details due to DioException");
+    } catch (e, stack) {
+      debugPrint('┌─ [fetchInvoiceCustomerDetails] ERROR ──────────');
+      debugPrint('│ error : $e');
+      debugPrint('│ stack : $stack');
+      debugPrint('└────────────────────────────────────────────────');
       throw Exception("Failed to fetch customer details");
     }
   }
-
   Future<Map<String, dynamic>> fetchInvoiceItemDetail({
     required BuildContext context,
     required String itemCode,
@@ -4951,32 +5463,40 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      // ✅ Fetch both branch and warehouse
+      // 🔹 Fetch user data (may be null or partial)
       final userData = await fetchUserBranch(context);
-      if (userData == null) {
-        throw Exception('Failed to fetch user branch and warehouse.');
-      }
 
-      final defaultWarehouse = userData["default_warehouse"];
+      final String? branch = userData?["branch"];
+      final String? defaultWarehouse = userData?["default_warehouse"];
 
-      // ✅ Set the warehouse field in each item to the defaultWarehouse
+      // 🔹 Set warehouse only if available
       final updatedItems = item.map((itm) {
-        return {
-          ...itm,
-          "warehouse": defaultWarehouse,
-        };
+        final updated = Map<String, dynamic>.from(itm);
+        if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
+          updated["warehouse"] = defaultWarehouse;
+        }
+        return updated;
       }).toList();
 
-      final invoiceData = {
+      // 🔹 Build invoice payload
+      final Map<String, dynamic> invoiceData = {
         "customer": customerName,
         ...customerDetails,
         "due_date": dueDate,
         "posting_date": postingDate,
         "set_posting_time": 1,
         "items": updatedItems,
-        "branch": userData["branch"],
-        "set_warehouse": defaultWarehouse,
       };
+
+      // 🔹 Add branch ONLY if present
+      if (branch != null && branch.isNotEmpty) {
+        invoiceData["branch"] = branch;
+      }
+
+      // 🔹 Add warehouse ONLY if present
+      if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
+        invoiceData["set_warehouse"] = defaultWarehouse;
+      }
 
       final response = await _dio.post(
         url,
@@ -4990,24 +5510,20 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       );
 
       if (response.statusCode != 200) {
-        debugPrint('❌ Failed to create Sales Invoice:');
-        debugPrint('Status Code: ${response.statusCode}');
-        debugPrint('Response Data: ${response.data}');
+        debugPrint('❌ Failed to create Sales Invoice');
+        debugPrint('Status: ${response.statusCode}');
+        debugPrint('Response: ${response.data}');
         throw Exception('Failed to create Sales Invoice');
       }
 
       debugPrint('✅ Sales Invoice created successfully');
       debugPrint('Response: ${response.data}');
     } on DioError catch (dioError) {
-      debugPrint('❌ DioError while creating Sales Invoice:');
-      debugPrint('Type: ${dioError.type}');
+      debugPrint('❌ DioError while creating Sales Invoice');
       debugPrint('Message: ${dioError.message}');
       if (dioError.response != null) {
-        debugPrint('Status Code: ${dioError.response?.statusCode}');
-        debugPrint('Response Data: ${dioError.response?.data}');
-        debugPrint('Headers: ${dioError.response?.headers}');
-      } else {
-        debugPrint('No response from server.');
+        debugPrint('Status: ${dioError.response?.statusCode}');
+        debugPrint('Response: ${dioError.response?.data}');
       }
       rethrow;
     } catch (e, stackTrace) {
@@ -5016,6 +5532,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       rethrow;
     }
   }
+
   Future<List<String>> fetchInvoicePrintFormats() async {
     const url =
         '/resource/Print Format?filters=[["doc_type","=","Sales Invoice"],["disabled","=","0"]]&fields=["name"]';
@@ -5055,53 +5572,66 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     return Uint8List.fromList(response.data);
   }
 
+  // Future<GetSalesInvoiceResponse?> getSalesInvoiceByName({
+  //   required BuildContext context,
+  //   required String invoiceName,
+  // }) async {
+  //   final encodedFilter = Uri.encodeComponent(
+  //     '[["Sales Invoice","name","=","$invoiceName"]]',
+  //   );
+  //   final url = '/resource/Sales Invoice?filters=$encodedFilter';
+  //
+  //   final cookies = await _sharedPrefService.getCookies();
+  //
+  //   final response = await _dio.get(
+  //     url,
+  //     options: Options(
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'Cookie': cookies,
+  //       },
+  //       validateStatus: (status) => status! < 500,
+  //     ),
+  //   );
+  //
+  //   // Replace with your actual model parser
+  //   return GetSalesInvoiceResponse?.fromJson(response.data);
+  // }
+  Future<GetSalesInvoiceResponse?> getSalesInvoiceByName({
+    required BuildContext context,
+    required String invoiceName,
+  }) async {
+    final encodedFilter = Uri.encodeComponent(
+      '[["Sales Invoice","name","=","$invoiceName"]]',
+    );
+    final encodedFields = Uri.encodeComponent(
+      '["name","customer","posting_date","due_date","status","grand_total","rounded_total"]',
+    );
 
+    final url =
+        '/resource/Sales Invoice?filters=$encodedFilter&fields=$encodedFields';
+
+    final cookies = await _sharedPrefService.getCookies();
+
+    final response = await _dio.get(
+      url,
+      options: Options(
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': cookies,
+        },
+        validateStatus: (status) => status! < 500,
+      ),
+    );
+
+    return GetSalesInvoiceResponse?.fromJson(response.data);
+  }
 
 //sales invoices
 
 //POS Invoice
 
   /// Fetch POS Profile for a given user
-  // Future<String?> fetchPosProfile() async {
-  //   try {
-  //     // Step 1: Get the canonical logged-in user identifier (email)
-  //     final loggedInUser = await getLoggedInUserIdentifier();
-  //     if (loggedInUser == null) {
-  //       debugPrint("Failed to fetch logged-in user identifier");
-  //       return null;
-  //     }
-  //
-  //     // Step 2: Use that email/identifier to fetch the POS Profile
-  //     final url =
-  //         '/resource/POS Profile?filters=[["POS Profile User","user","=","$loggedInUser"]]';
-  //
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     final response = await _dio.get(
-  //       url,
-  //       options: Options(
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Cookie': cookies,
-  //         },
-  //       ),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = response.data['data'] as List<dynamic>;
-  //       if (data.isNotEmpty) {
-  //         return data.first['name'];
-  //       } else {
-  //         debugPrint("No POS Profile found for user: $loggedInUser");
-  //       }
-  //     } else {
-  //       debugPrint("Failed POS Profile request: ${response.data}");
-  //     }
-  //   } catch (e) {
-  //     debugPrint("Error fetching POS Profile: $e");
-  //   }
-  //   return null;
-  // }
   Future<Map<String, dynamic>?> fetchPosProfile() async {
     try {
       // Step 1: Get logged-in user identifier
@@ -5729,49 +6259,115 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
   //POS Invoice
   //customer group filter
-  Future<CustomerList?> customerGroupFilter(
-      String customerGroup, BuildContext context) async {
-    final url =
-        '/resource/Customer?fields=["name","tax_id","gstin","territory","customer_primary_contact","customer_primary_address","primary_address","mobile_no","email_id","tax_category","territory","customer_group"]&filters=[["Customer","customer_group","=","$customerGroup"]]';
 
-    try {
-      final cookies = await _sharedPrefService.getCookies();
+  // Future<CustomerList?> customerGroupPaged({
+  //   required BuildContext context,
+  //   required String salesPerson,
+  //   required String customerGroup,
+  //   required int pageLength,
+  //   required int start,
+  // }) async {
+  //   final cookies = await _sharedPrefService.getCookies();
+  //
+  //   final queryParams = {
+  //     "fields": jsonEncode([
+  //       "name",
+  //       "tax_id",
+  //       "gstin",
+  //       "territory",
+  //       "customer_primary_contact",
+  //       "customer_primary_address",
+  //       "primary_address",
+  //       "mobile_no",
+  //       "email_id",
+  //       "tax_category",
+  //       "customer_group",
+  //       "_liked_by"
+  //     ]),
+  //     "filters": jsonEncode([
+  //       ["Sales Team", "sales_person", "=", salesPerson],
+  //       ["customer_group", "=", customerGroup],
+  //     ]),
+  //     "limit_page_length": pageLength,
+  //     "limit_start": start,
+  //   };
+  //
+  //   final response = await _dio.get(
+  //     "/resource/Customer",
+  //     queryParameters: queryParams,
+  //     options: Options(
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         "Cookie": cookies,
+  //       },
+  //     ),
+  //   );
+  //
+  //   if (response.statusCode == 200) {
+  //     return CustomerList.fromJson(response.data);
+  //   }
+  //
+  //   return null;
+  // }
 
-      debugPrint('Requesting  data from URL: ${baseUrl + url}');
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-          validateStatus: (status) {
-            return status! < 500;
-          },
-        ),
-      );
+  Future<CustomerList?> customerGroupPaged({
+    required BuildContext context,
+    required String salesPerson,
+    required String customerGroup,
+    required int pageLength,
+    required int start,
+    bool onlyLiked = false,
+    String? loggedUser,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
 
-      debugPrint('Response  status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
+    List filters = [
+      ["Sales Team", "sales_person", "=", salesPerson],
+      ["customer_group", "=", customerGroup],
+    ];
 
-      if (response.statusCode == 200) {
-        Navigator.pop(context);
-        return CustomerList.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-      }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        debugPrint('Response data: ${e.response?.data}');
-      }
-      throw Exception('Failed to fetch  data');
-    } catch (e) {
-      debugPrint('Exception: $e');
-      throw Exception('Failed to fetch  data');
+    // ⭐ Add liked filter
+    if (onlyLiked && loggedUser != null) {
+      filters.add(["Customer", "_liked_by", "like", "%$loggedUser%"]);
     }
-  }
 
+    final queryParams = {
+      "fields": jsonEncode([
+        "name",
+        "tax_id",
+        "gstin",
+        "territory",
+        "customer_primary_contact",
+        "customer_primary_address",
+        "primary_address",
+        "mobile_no",
+        "email_id",
+        "tax_category",
+        "customer_group",
+        "_liked_by"
+      ]),
+      "filters": jsonEncode(filters),
+      "limit_page_length": pageLength,
+      "limit_start": start,
+    };
+
+    final response = await _dio.get(
+      "/resource/Customer",
+      queryParameters: queryParams,
+      options: Options(
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": cookies,
+        },
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      return CustomerList.fromJson(response.data);
+    }
+
+    return null;
+  }
   //customer name search
 
   Future<CustomerList?> customerNameSearchList(
@@ -5953,97 +6549,87 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   }
 
   //Item list
-// Future<ItemListResponse?> itemSearchList(
-//     String itemName, BuildContext context, bool isItemList) async {
-//   try {
-//     final cookies = await _sharedPrefService.getCookies();
-//
-//     // Fields to fetch
-//     final fields = Uri.encodeQueryComponent(
-//         '["item_code","item_name","valuation_rate","brand","item_group"]');
-//
-//     // OR filters: match either item_code or item_name
-//     final orFilters = Uri.encodeComponent(jsonEncode([
-//       ["Item", "item_code", "like", "%$itemName%"],
-//       ["Item", "item_name", "like", "%$itemName%"],
-//     ]));
-//
-//     // AND filters: must be stock item and published for customer
-//     final filters = Uri.encodeComponent(jsonEncode([
-//       ["Item", "is_stock_item", "=", "1"],
-//     ]));
-//
-//     final url =
-//         '/resource/Item?fields=$fields&or_filters=$orFilters&filters=$filters';
-//
-//     debugPrint('Fetching item search list from URL: ${baseUrl + url}');
-//
-//     final response = await _dio.get(
-//       url,
-//       options: Options(
-//         headers: {
-//           'Content-Type': 'application/json',
-//           'Cookie': cookies,
-//         },
-//         validateStatus: (status) => status! < 500,
-//       ),
-//     );
-//
-//     if (isItemList) Navigator.pop(context);
-//
-//     if (response.statusCode == 200) {
-//       final rawData = response.data['data'];
-//
-//       // Deduplicate by item_code
-//       final uniqueMap = {
-//         for (var item in rawData) item['item_code']: item
-//       };
-//       final uniqueList = uniqueMap.values.toList();
-//
-//       final dataList = uniqueList.map((e) => ItemData.fromJson(e)).toList();
-//       return ItemListResponse(data: dataList);
-//     } else {
-//       apiErrorHandler.handleHttpError(context, response);
-//       return null;
-//     }
-//   } catch (e) {
-//     debugPrint('Exception: $e');
-//     throw Exception('Failed to fetch item list');
-//   }
-// }
+
+  // Future<ItemListResponse?> itemSearchList(
+  //     String itemName, BuildContext context, bool isItemList) async {
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     // Fields to fetch (added normalized_item_code)
+  //     final fields = Uri.encodeQueryComponent(
+  //         // '["item_code","item_name","normalized_item_code","valuation_rate","brand","item_group"]');
+  //     '["item_code","item_name"]');
+  //
+  //     // OR filters: match item_code, item_name OR normalized_item_code
+  //     final orFilters = Uri.encodeComponent(jsonEncode([
+  //       ["Item", "item_code", "like", "%$itemName%"],
+  //       ["Item", "item_name", "like", "%$itemName%"],
+  //       // ["Item", "normalized_item_code", "like", "%$itemName%"],
+  //     ]));
+  //
+  //     // AND filters: must be stock item and published for customer
+  //     final filters = Uri.encodeComponent(jsonEncode([
+  //       ["Item", "is_stock_item", "=", "1"],
+  //     ]));
+  //
+  //     final url =
+  //         '/resource/Item?fields=$fields&or_filters=$orFilters&filters=$filters';
+  //
+  //     debugPrint('Fetching item search list from URL: ${baseUrl + url}');
+  //
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     if (isItemList) Navigator.pop(context);
+  //
+  //     if (response.statusCode == 200) {
+  //       final rawData = response.data['data'];
+  //
+  //       // Deduplicate by item_code
+  //       final uniqueMap = {
+  //         for (var item in rawData) item['item_code']: item
+  //       };
+  //       final uniqueList = uniqueMap.values.toList();
+  //
+  //       final dataList = uniqueList.map((e) => ItemData.fromJson(e)).toList();
+  //       return ItemListResponse(data: dataList);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //       return null;
+  //     }
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch item list');
+  //   }
+  // }
   Future<ItemListResponse?> itemSearchList(
       String itemName, BuildContext context, bool isItemList) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
-
-      // Fields to fetch (added normalized_item_code)
-      final fields = Uri.encodeQueryComponent(
-          '["item_code","item_name","normalized_item_code","valuation_rate","brand","item_group"]');
-
-      // OR filters: match item_code, item_name OR normalized_item_code
+      final fields = Uri.encodeQueryComponent('["item_code","item_name","normalized_item_code"]');
       final orFilters = Uri.encodeComponent(jsonEncode([
         ["Item", "item_code", "like", "%$itemName%"],
         ["Item", "item_name", "like", "%$itemName%"],
         ["Item", "normalized_item_code", "like", "%$itemName%"],
       ]));
-
-      // AND filters: must be stock item and published for customer
       final filters = Uri.encodeComponent(jsonEncode([
         ["Item", "is_stock_item", "=", "1"],
       ]));
 
-      final url =
-          '/resource/Item?fields=$fields&or_filters=$orFilters&filters=$filters';
-
-      debugPrint('Fetching item search list from URL: ${baseUrl + url}');
+      final url = '/resource/Item?fields=$fields&or_filters=$orFilters&filters=$filters';
 
       final response = await _dio.get(
         url,
         options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
           validateStatus: (status) => status! < 500,
         ),
       );
@@ -6052,14 +6638,23 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
       if (response.statusCode == 200) {
         final rawData = response.data['data'];
-
-        // Deduplicate by item_code
-        final uniqueMap = {
-          for (var item in rawData) item['item_code']: item
-        };
+        final uniqueMap = {for (var item in rawData) item['item_code']: item};
         final uniqueList = uniqueMap.values.toList();
 
-        final dataList = uniqueList.map((e) => ItemData.fromJson(e)).toList();
+        // ✅ Fetch actual qty for all items in parallel
+        final qtyFutures = uniqueList.map((e) =>
+            fetchItemActualQty(e['item_code']));
+        final qtyResults = await Future.wait(qtyFutures);
+
+        // ✅ Merge qty into each item
+        final mergedList = uniqueList.asMap().entries.map((entry) {
+          final item = Map<String, dynamic>.from(entry.value);
+          final qtyMap = qtyResults[entry.key];
+          item['actual_qty'] = qtyMap[item['item_code']] ?? 0.0;
+          return item;
+        }).toList();
+
+        final dataList = mergedList.map((e) => ItemData.fromJson(e)).toList();
         return ItemListResponse(data: dataList);
       } else {
         apiErrorHandler.handleHttpError(context, response);
@@ -6070,8 +6665,37 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       throw Exception('Failed to fetch item list');
     }
   }
+  Future<Map<String, double>> fetchItemActualQty(String itemCode) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+      final url = '/method/erpnext.stock.dashboard.item_dashboard.get_data'
+          '?item_code=$itemCode';
 
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
+          validateStatus: (status) => status! < 500,
+        ),
+      );
 
+      if (response.statusCode == 200) {
+        final List message = response.data['message'] ?? [];
+        // ✅ Sum actual_qty across all warehouses for this item
+        double total = 0;
+        for (final entry in message) {
+          if (entry['item_code'] == itemCode) {
+            total += (entry['actual_qty'] ?? 0).toDouble();
+          }
+        }
+        return {itemCode: total};
+      }
+      return {itemCode: 0};
+    } catch (e) {
+      debugPrint('Error fetching actual qty: $e');
+      return {itemCode: 0};
+    }
+  }
   //Item filter by brand
   Future<ItemListResponse?> itemByBrand(
       String brandName, BuildContext context) async {
@@ -6375,53 +6999,6 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     return "$year-${year + 1}";
   }
 
-  // Future<Map<String, dynamic>?> fetchSalesmanMonthlySales(
-  //     BuildContext context,
-  //     String salesPerson,
-  //     String fromDate,
-  //     String toDate,
-  //     ) async {
-  //   const url = "/method/frappe.desk.query_report.run";
-  //
-  //   try {
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     final filters = {
-  //       "sales_person": salesPerson,
-  //       "fiscal_year": "2025-2026",
-  //       "from_date": fromDate,
-  //       "to_date": toDate,
-  //     };
-  //
-  //
-  //     final queryParams = {
-  //       "report_name": "Salesman Monthly Sales",
-  //       "filters": jsonEncode(filters),
-  //     };
-  //
-  //     final response = await _dio.get(
-  //       url,
-  //       queryParameters: queryParams,
-  //       options: Options(
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Cookie': cookies,
-  //         },
-  //         validateStatus: (status) => status! < 500, // avoid exceptions
-  //       ),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       return response.data["message"];
-  //     } else {
-  //       debugPrint("Fetch Sales Error: ${response.data}");
-  //     }
-  //   } catch (e) {
-  //     debugPrint("fetchSalesmanMonthlySales Error: $e");
-  //   }
-  //
-  //   return null;
-  // }
   Future<Map<String, dynamic>?> fetchSalesmanMonthlySales(
       BuildContext context,
       String salesPerson,
@@ -6507,34 +7084,262 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   }
 
   //Sales person report
+// Site Visit
 
+// ── Add site visit row to EEM child table ─────────────────────────────
+  Future<bool> addSiteVisitToEEM({
+    required String eemName,
+    required String customer,
+    required String site,
+    required double siteLat,
+    required double siteLong,
+    required String remarks,
+    double? actualDistance,       // ← add this
+
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    try {
+      // First fetch existing site tracking rows
+      final detailResponse = await _dio.get(
+        "/resource/Executive Expense Manager/$eemName",
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (detailResponse.statusCode != 200) return false;
+
+      final existing = detailResponse.data["data"];
+      final List existingRows = existing["employee_site_tracking"] ?? [];
+      // final checkinTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+
+      // Append new row
+      final updatedRows = [
+        ...existingRows,
+        {
+          "customer": customer,
+          "site": site,             // ← add this
+          "site_lat": siteLat,
+          "site_long": siteLong,
+          "remarks": remarks,
+          "distance_travelled": 0,
+          "actual_distance": 0,
+          // "checkin_time": checkinTime,  // ← added
+
+        }
+      ];
+
+      final response = await _dio.put(
+        "/resource/Executive Expense Manager/$eemName",
+        data: {
+          "data": {
+            "employee_site_tracking": updatedRows,
+          }
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("addSiteVisitToEEM Error: $e");
+      return false;
+    }
+  }
+
+// ── Update existing site visit row in EEM child table ─────────────────
+  Future<bool> updateSiteVisitInEEM({
+    required String eemName,
+    required String rowName,
+    required String customer,
+    required String site,
+    required double siteLat,
+    required double siteLong,
+    required String remarks,
+    double? actualDistance,       // ← add this
+
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    try {
+      // Fetch existing rows
+      final detailResponse = await _dio.get(
+        "/resource/Executive Expense Manager/$eemName",
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (detailResponse.statusCode != 200) return false;
+
+      final existing = detailResponse.data["data"];
+      final List existingRows =
+      List.from(existing["employee_site_tracking"] ?? []);
+
+      // Find and update the matching row
+      final updatedRows = existingRows.map((row) {
+        if (row["name"] == rowName) {
+          return {
+            ...Map<String, dynamic>.from(row),
+            "customer": customer,
+            "site": site,           // ← add this
+            "site_lat": siteLat,
+            "site_long": siteLong,
+            "remarks": remarks,
+            if (actualDistance != null) "actual_distance": actualDistance,
+
+          };
+        }
+        return row;
+      }).toList();
+
+      final response = await _dio.put(
+        "/resource/Executive Expense Manager/$eemName",
+        data: {
+          "data": {
+            "employee_site_tracking": updatedRows,
+          }
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("updateSiteVisitInEEM Error: $e");
+      return false;
+    }
+  }
+
+// ── Fetch today's site visits from EEM child table ────────────────────
+  Future<List<Map<String, dynamic>>> fetchTodaySiteVisits(
+      String employee) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    try {
+      // Find today's unsubmitted EEM for this employee
+      final listResponse = await _dio.get(
+        "/resource/Executive Expense Manager",
+        queryParameters: {
+          "fields": jsonEncode(["name"]),
+          "filters": jsonEncode([
+            ["Executive Expense Manager", "employee", "=", employee],
+            ["Executive Expense Manager", "date", "=", today],
+            ["Executive Expense Manager", "docstatus", "=", 0],
+          ]),
+          "order_by": "creation desc",
+          "limit_page_length": 1,
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (listResponse.statusCode != 200) return [];
+      final list = listResponse.data["data"];
+      if (list is! List || list.isEmpty) return [];
+
+      final eemName = list.first["name"];
+
+      // Fetch full EEM to get child rows
+      final detailResponse = await _dio.get(
+        "/resource/Executive Expense Manager/$eemName",
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (detailResponse.statusCode == 200) {
+        final data = detailResponse.data["data"];
+        final List rows = data["employee_site_tracking"] ?? [];
+        // Inject eemName into each row so UI knows which EEM to update
+        return rows
+            .map((r) => {
+          ...Map<String, dynamic>.from(r),
+          "_eem_name": eemName,
+        })
+            .toList();
+      }
+    } catch (e) {
+      debugPrint("fetchTodaySiteVisits Error: $e");
+    }
+
+    return [];
+  }
+
+// ── Delete site visit row from EEM child table ────────────────────────
+  Future<bool> deleteSiteVisitFromEEM({
+    required String eemName,
+    required String rowName,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    try {
+      final detailResponse = await _dio.get(
+        "/resource/Executive Expense Manager/$eemName",
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (detailResponse.statusCode != 200) return false;
+
+      final existing = detailResponse.data["data"];
+      final List existingRows =
+      List.from(existing["employee_site_tracking"] ?? []);
+
+      // Remove the matching row
+      final updatedRows =
+      existingRows.where((r) => r["name"] != rowName).toList();
+
+      final response = await _dio.put(
+        "/resource/Executive Expense Manager/$eemName",
+        data: {
+          "data": {
+            "employee_site_tracking": updatedRows,
+          }
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("deleteSiteVisitFromEEM Error: $e");
+      return false;
+    }
+  }
+  //Site Visit
   //Expense Tracker
-  // Future<Map<String, dynamic>?> fetchLatestEEM(String employee) async {
-  //   try {
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     final response = await _dio.get(
-  //       "/resource/Executive Expense Manager",
-  //       queryParameters: {
-  //         "fields": '["name","date","start_time","end_lat","end_long"]',
-  //         "filters": '[["employee","=","$employee"]]',
-  //         "order_by": "name desc",
-  //         "limit_page_length": 1,
-  //       },
-  //       options: Options(headers: {'Cookie': cookies}),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = response.data["data"];
-  //       if (data is List && data.isNotEmpty) {
-  //         return data.first;
-  //       }
-  //     }
-  //   } catch (e) {
-  //     debugPrint("fetchLatestEEM Error: $e");
-  //   }
-  //   return null;
-  // }
 
   Future<Map<String, dynamic>?> fetchLatestEEM(String employee) async {
     try {
@@ -6613,180 +7418,56 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     return null;
   }
 
-  Future<bool> _updateEEM({
-    required Map<String, dynamic> eemData,
-    required List<Map<String, dynamic>> siteVisits,
-    required List<Map<String, dynamic>> expenses,
-    required int docstatus,
+
+  /// Upload file to ERPNext
+  Future<String?> uploadFile({
+    required File file,
+    required String expenseRowName, // child row name
   }) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
-      final eemName = eemData["name"];
+      final baseUrl = _dio.options.baseUrl;
 
-      final updatedSiteVisits = siteVisits.map((visit) {
-        return {
-          ...visit,
-          "actual_distance":
-          visit["actual_distance"] ?? visit["distance_travelled"] ?? 0.0,
-        };
-      }).toList();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/method/upload_file'),
+      );
 
-      final body = {
-        "data": {
-          "docstatus": docstatus,
+      request.headers['Cookie'] = cookies;
 
-          "employee": eemData["employee"],
-          "employee_name": eemData["employee_name"],
-          "date": eemData["date"],
+      final mimeType = lookupMimeType(file.path) ?? 'application/octet-stream';
+      final parts = mimeType.split('/');
 
-          "start_time": eemData["start_time"],
-          "start_lat": eemData["start_lat"],
-          "start_long": eemData["start_long"],
-
-          "end_time": eemData["end_time"],
-          "end_lat": eemData["end_lat"],
-          "end_long": eemData["end_long"],
-
-          "employee_expense_tracking": expenses,
-          "employee_site_tracking": updatedSiteVisits,
-        }
-      };
-
-      final response = await _dio.put(
-        "/resource/Executive Expense Manager/$eemName",
-        data: body,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          file.path,
+          contentType: MediaType(parts[0], parts[1]),
         ),
       );
 
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint("updateEEM Error: $e");
-      return false;
-    }
-  }
-  Future<bool> saveExecutiveExpenseTracking({
-    required Map<String, dynamic> eemData,
-    required List<Map<String, dynamic>> siteVisits,
-    required List<Map<String, dynamic>> expenses,
-  }) {
-    return _updateEEM(
-      eemData: eemData,
-      siteVisits: siteVisits,
-      expenses: expenses,
-      docstatus: 0, // SAVE
-    );
-  }
+      // 🔴 THESE FIELDS ARE REQUIRED
+      request.fields.addAll({
+        'is_private': '1',
+        'attached_to_doctype': 'Employee Expense Tracking',
+        'attached_to_name': expenseRowName,
+        'fieldname': 'attachment',
+      });
 
-  Future<bool> submitExecutiveExpenseTracking({
-    required Map<String, dynamic> eemData,
-    required List<Map<String, dynamic>> siteVisits,
-    required List<Map<String, dynamic>> expenses,
-  }) {
-    return _updateEEM(
-      eemData: eemData,
-      siteVisits: siteVisits,
-      expenses: expenses,
-      docstatus: 1, // SUBMIT
-    );
-  }
-
-  Future<String?> startExecutiveExpenseTracking({
-    required BuildContext context,
-    required String employee,
-    required String employeeName,
-    required String date,
-    required String startTime,
-    required double startLat,
-    required double startLong,
-  }) async {
-    const url = "/resource/Executive Expense Manager";
-    final cookies = await _sharedPrefService.getCookies();
-
-    final body = {
-      "data": {
-        "docstatus": 0,
-        "employee": employee,
-        "employee_name": employeeName,
-        "date": date,
-        "start_time": startTime,
-        "start_lat": startLat,
-        "start_long": startLong,
-      }
-    };
-
-    try {
-      final response = await _dio.post(
-        url,
-        data: body,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-        ),
-      );
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
 
       if (response.statusCode == 200) {
-        /// ERPNext returns created doc inside `data`
-        return response.data["data"]["name"];
+        final json = jsonDecode(response.body);
+        return json['message']['file_url'];
       }
+
+      debugPrint('Upload failed: ${response.statusCode} ${response.body}');
+      return null;
     } catch (e) {
-      debugPrint("startExecutiveExpenseTracking Error: $e");
+      debugPrint('uploadFile error: $e');
+      return null;
     }
-
-    return null;
-  }
- 
-  Future<List<Map<String, dynamic>>?> stopExecutiveExpenseTracking({
-    required String docName,
-    required String endTime,
-    required double endLat,
-    required double endLong,
-    required List<Map<String, dynamic>> expenses,
-  }) async {
-    final url = "/resource/Executive Expense Manager/$docName";
-    final cookies = await _sharedPrefService.getCookies();
-
-    final body = {
-      "data": {
-        "end_time": endTime,
-        "end_lat": endLat,
-        "end_long": endLong,
-        "employee_expense_tracking": expenses,
-      }
-    };
-
-    try {
-      final response = await _dio.put(
-        url,
-        data: body,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = response.data["data"] ?? response.data;
-
-        if (data["employee_site_tracking"] != null) {
-          return List<Map<String, dynamic>>.from(
-            data["employee_site_tracking"],
-          );
-        }
-        }
-    } catch (e) {
-      debugPrint("stopExecutiveExpenseTracking Error: $e");
-    }
-
-    return null;
   }
 
   Future<List<String>> searchExpenseClaimTypes(String query) async {
@@ -6815,16 +7496,24 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
     return [];
   }
+
   Future<String?> fetchLatestEmployeeLogType(String employee) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final todayStart = '$today 00:00:00';
+      final todayEnd = '$today 23:59:59';
 
       final response = await _dio.get(
         "/resource/Employee Checkin",
         queryParameters: {
-          "fields": '["name","log_type"]',
-          "filters": '[["employee","=","$employee"]]',
-          "order_by": "name desc",
+          "fields": '["name","log_type","time"]',
+          "filters": jsonEncode([
+            ["employee", "=", employee],
+            ["time", ">=", todayStart],
+            ["time", "<=", todayEnd],
+          ]),
+          "order_by": "time desc",
           "limit_page_length": 1,
         },
         options: Options(headers: {'Cookie': cookies}),
@@ -6839,59 +7528,390 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     } catch (e) {
       debugPrint("fetchLatestEmployeeLogType Error: $e");
     }
-    return null;
+    return null; // null means no checkin today at all
   }
+//claude
 
-
-  //Expense Tracker
-
-  //Checkin
-  Future<List<dynamic>?> fetchEmployeeCheckinsAfterStart({
-    required BuildContext context,
+  Future<String?> createExecutiveExpenseManager({
     required String employee,
-    required String eemDate,     // YYYY-MM-DD
-    required String eemStartTime // HH:mm:ss
+    required String employeeName,
+    required String date,
+    double? startLat,
+    double? startLong,
+    double? startOdometer,
   }) async {
+    const url = "/resource/Executive Expense Manager";
+    final cookies = await _sharedPrefService.getCookies();
 
-    // Combine date + time into ERPNext-compatible datetime
-    final startDateTime = '$eemDate $eemStartTime';
-
-    final url =
-        '/resource/Employee Checkin'
-        '?fields=["name","employee","employee_name","log_type","time","latitude","longitude"]'
-        '&filters='
-        '[["employee","=","$employee"],'
-        '["time",">=","$startDateTime"]]';
-
-    debugPrint('CHECKIN FILTER URL => $url');
+    final body = {
+      "data": {
+        "docstatus": 0,
+        "employee": employee,
+        "employee_name": employeeName,
+        "date": date,
+        if (startLat != null) "start_lat": startLat,
+        if (startLong != null) "start_long": startLong,
+        if (startOdometer != null) "start_odometerkm": startOdometer,
+      }
+    };
 
     try {
-      final cookies = await _sharedPrefService.getCookies();
-
-      final response = await _dio.get(
+      final response = await _dio.post(
         url,
+        data: body,
         options: Options(
           headers: {
             'Content-Type': 'application/json',
             'Cookie': cookies,
           },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data["data"]["name"];
+      }
+    } catch (e) {
+      debugPrint("createExecutiveExpenseManager Error: $e");
+    }
+    return null;
+  }
+  Future<bool> updateEEMEndDetails({
+    required String eemName,
+    required String endTime,
+    required double endLat,
+    required double endLong,
+    required double endOdometer,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    final body = {
+      "data": {
+        "end_time": endTime,
+        "end_lat": endLat,
+        "end_long": endLong,
+        "end_odometerkm": endOdometer,
+      }
+    };
+
+    try {
+      final response = await _dio.put(
+        "/resource/Executive Expense Manager/$eemName",
+        data: body,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("updateEEMEndDetails Error: $e");
+      return false;
+    }
+  }
+// ── SAVE EEM (docstatus = 0, PUT) ────────────────────────────────────
+  Future<bool> saveEEMWithExpenses({
+    required String eemName,
+    required String employee,
+    required String employeeName,
+    required String date,
+    required List<Map<String, dynamic>> expenses,
+    double? startOdometer,
+    double? endOdometer,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    final body = {
+      "data": {
+        "docstatus": 0,
+        "employee": employee,
+        "employee_name": employeeName,
+        "date": date,
+        "employee_expense_tracking": expenses,
+        if (startOdometer != null) "start_odometerkm": startOdometer,
+        if (endOdometer != null) "end_odometerkm": endOdometer,
+      }
+    };
+
+    try {
+      final response = await _dio.put(
+        "/resource/Executive Expense Manager/$eemName",
+        data: body,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("saveEEMWithExpenses Error: $e");
+      return false;
+    }
+  }
+
+// ── SUBMIT EEM (docstatus = 1, PUT) ──────────────────────────────────
+  Future<bool> submitEEMWithExpenses({
+    required String eemName,
+    required String employee,
+    required String employeeName,
+    required String date,
+    required List<Map<String, dynamic>> expenses,
+    double? startOdometer,
+    double? endOdometer,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+
+    final body = {
+      "data": {
+        "docstatus": 1,
+        "employee": employee,
+        "employee_name": employeeName,
+        "date": date,
+        "employee_expense_tracking": expenses,
+        if (startOdometer != null) "start_odometerkm": startOdometer,
+        if (endOdometer != null) "end_odometerkm": endOdometer,
+      }
+    };
+
+    try {
+      final response = await _dio.put(
+        "/resource/Executive Expense Manager/$eemName",
+        data: body,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("submitEEMWithExpenses Error: $e");
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchLatestUnsubmittedEEM(
+      String employee) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    try {
+      final listResponse = await _dio.get(
+        "/resource/Executive Expense Manager",
+        queryParameters: {
+          "fields": jsonEncode(["name", "employee", "employee_name", "date"]),
+          "filters": jsonEncode([
+            ["Executive Expense Manager", "employee", "=", employee],
+            ["Executive Expense Manager", "docstatus", "=", 0],
+            ["Executive Expense Manager", "date", "=", today],
+          ]),
+          "order_by": "creation desc",
+          "limit_page_length": 1,
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (listResponse.statusCode == 200) {
+        final list = listResponse.data["data"];
+        if (list is List && list.isNotEmpty) {
+          final eemName = list.first["name"];
+
+          final detailResponse = await _dio.get(
+            "/resource/Executive Expense Manager/$eemName",
+            options: Options(
+              headers: {
+                'Content-Type': 'application/json',
+                'Cookie': cookies,
+              },
+            ),
+          );
+
+          if (detailResponse.statusCode == 200) {
+            return detailResponse.data["data"];
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("fetchLatestUnsubmittedEEM Error: $e");
+    }
+    return null;
+  }
+  //claude
+
+  // Performance Report
+  Future<Map<String, dynamic>?> fetchSalesPersonDashboard({
+    required String salesperson,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        '/method/tqerp_bd.api.get_sales_person_dashboard',
+        queryParameters: {
+          'from_date': fromDate,
+          'to_date': toDate,
+          'salesperson': salesperson,
+        },
+        options: Options(
+          headers: {'Cookie': cookies},
           validateStatus: (status) => status! < 500,
         ),
       );
 
-      debugPrint('CHECKIN STATUS => ${response.statusCode}');
-      debugPrint('CHECKIN RAW RESPONSE => ${response.data}');
-
       if (response.statusCode == 200) {
-        return List<dynamic>.from(response.data['data']);
+        final msg = response.data['message'];
+        if (msg['status'] == 'success') {
+          return msg['data'] as Map<String, dynamic>;
+        }
       } else {
-        apiErrorHandler.handleHttpError(context, response);
+        debugPrint('fetchSalesPersonDashboard Error: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('fetchEmployeeCheckinsAfterStart Error => $e');
+      debugPrint('fetchSalesPersonDashboard Exception: $e');
+    }
+    return null;
+  }
+
+  Future<String?> downloadPerformanceReportPdf({
+    required String html,
+    required String savePath,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.post(
+        '/method/frappe.utils.print_format.report_to_pdf',
+        data: FormData.fromMap({'html': html}),
+        options: Options(
+          headers: {
+            'Cookie': cookies,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          responseType: ResponseType.bytes,
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final file = File(savePath);
+        await file.writeAsBytes(response.data);
+        return savePath;
+      } else {
+        debugPrint('downloadPerformanceReportPdf Error: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('downloadPerformanceReportPdf Exception: $e');
+    }
+    return null;
+  }
+
+  //Expense Tracker
+
+  //Checkin
+  // Future<List<dynamic>?> fetchEmployeeCheckinsAfterStart({
+  //   required BuildContext context,
+  //   required String employee,
+  //   required String eemDate,     // YYYY-MM-DD
+  //   required String eemStartTime // HH:mm:ss
+  // }) async {
+  //
+  //   // Combine date + time into ERPNext-compatible datetime
+  //   final startDateTime = '$eemDate $eemStartTime';
+  //
+  //   final url =
+  //       '/resource/Employee Checkin'
+  //       '?fields=["name","employee","employee_name","log_type","time","latitude","longitude","customer","remarks"]'
+  //       '&filters='
+  //       '[["employee","=","$employee"],'
+  //       '["time",">=","$startDateTime"]]';
+  //
+  //   debugPrint('CHECKIN FILTER URL => $url');
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     debugPrint('CHECKIN STATUS => ${response.statusCode}');
+  //     debugPrint('CHECKIN RAW RESPONSE => ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       return List<dynamic>.from(response.data['data']);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //     }
+  //   } catch (e) {
+  //     debugPrint('fetchEmployeeCheckinsAfterStart Error => $e');
+  //   }
+  //
+  //   return null;
+  // }
+  Future<List<dynamic>> fetchTodayEmployeeCheckins(
+      String employee) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final todayStart = '$today 00:00:00';
+    final todayEnd = '$today 23:59:59';
+
+    try {
+      final response = await _dio.get(
+        '/resource/Employee Checkin',
+        queryParameters: {
+          'fields': jsonEncode([
+            'name',
+            'employee',
+            'employee_name',
+            'log_type',
+            'time',
+            'latitude',
+            'longitude',
+            'customer',
+            'remarks',
+          ]),
+          'filters': jsonEncode([
+            ['employee', '=', employee],
+            ['time', '>=', todayStart],
+            ['time', '<=', todayEnd],
+          ]),
+          'order_by': 'time asc',
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return List<dynamic>.from(response.data['data'] ?? []);
+      }
+    } catch (e) {
+      debugPrint('fetchTodayEmployeeCheckins Error => $e');
     }
 
-    return null;
+    return [];
   }
 
   //checkin
@@ -6964,36 +7984,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 // EEM LIst
   // ToDo List
 
-  // Future<List<Map<String, dynamic>>> fetchToDoList() async {
-  //   try {
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     final response = await _dio.get(
-  //       "/resource/ToDo",
-  //       queryParameters: {
-  //         "fields": jsonEncode([
-  //           "description",
-  //           "status",
-  //           "priority",
-  //           "date",
-  //         ]),
-  //         "order_by": "date desc",
-  //       },
-  //       options: Options(headers: {'Cookie': cookies}),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = response.data["data"];
-  //       if (data is List) {
-  //         return List<Map<String, dynamic>>.from(data);
-  //       }
-  //     }
-  //   } catch (e) {
-  //     debugPrint("fetchToDoList Error: $e");
-  //   }
-  //
-  //   return [];
-  // }
+
   Future<List<Map<String, dynamic>>> fetchToDoList() async {
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -7002,11 +7993,13 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
         "/resource/ToDo",
         queryParameters: {
           "fields": jsonEncode([
-            "name",        // REQUIRED for update
+            "name",
             "description",
             "status",
             "priority",
             "date",
+            "reference_type",   // ✅ ADD
+            "reference_name",   // ✅ ADD
           ]),
           "order_by": "date desc",
         },
@@ -7047,9 +8040,1428 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     }
   }
 
+  Future<String?> fetchMaintenanceVisitStatusForSalesOrder(
+      String salesOrderName) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        '/resource/Maintenance Visit',
+        queryParameters: {
+          'fields': jsonEncode([
+            "name",
+            "completion_status",
+            "creation",
+          ]),
+          'filters': jsonEncode([
+            [
+              "Maintenance Visit Purpose",
+              "prevdoc_docname",
+              "=",
+              salesOrderName
+            ]
+          ]),
+          'order_by': "creation desc", // 🔥 latest first
+          'limit_page_length': 1,
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return null;
+
+      final data = response.data["data"];
+
+      if (data == null || data.isEmpty) return null;
+
+      return data.first["completion_status"];
+
+    } catch (e) {
+      debugPrint("fetchMaintenanceVisitStatus Error: $e");
+      return null;
+    }
+  }
 
   // ToDo List
 
+  //Task List
+
+  Future<List<Map<String, dynamic>>> fetchTaskList() async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // ✅ Get logged-in user
+      final loggedInUser = await getLoggedInUserIdentifier();
+      if (loggedInUser == null) {
+        debugPrint("No logged-in user found");
+        return [];
+      }
+
+      // ✅ Get selected company from SharedPreferences
+      final company = await _sharedPrefService.getCompany();
+
+      // ✅ Build filters dynamically
+      List<List<dynamic>> filters = [
+        ["Task", "_assign", "like", "%$loggedInUser%"]
+      ];
+
+      if (company != null && company.isNotEmpty) {
+        filters.add(["Task", "company", "=", company]);
+      }
+
+      // ✅ Fetch Tasks (Assignment + Company filter)
+      final taskResponse = await _dio.get(
+        "/resource/Task",
+        queryParameters: {
+          "fields": jsonEncode([
+            "name",
+            "subject",
+            "status",
+            "priority",
+            "exp_start_date",
+            "exp_end_date",
+            "progress",
+            "project",
+            "parent_task",
+            "type",
+            "task_weight",
+            "issue",
+            "expected_time",
+            "company",
+            "description",
+            "project",
+          ]),
+          "filters": jsonEncode(filters),
+          "order_by": "modified desc",
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (taskResponse.statusCode != 200) return [];
+
+      final data = taskResponse.data["data"];
+      if (data is! List) return [];
+
+      List<Map<String, dynamic>> tasks =
+      List<Map<String, dynamic>>.from(data);
+// ✅ Batch check which tasks have attachments
+      final taskNames = tasks.map((e) => e["name"].toString()).toList();
+
+      if (taskNames.isNotEmpty) {
+        try {
+          final attachmentResponse = await _dio.get(
+            "/resource/File",
+            queryParameters: {
+              "fields": jsonEncode(["name", "attached_to_name"]),
+              "filters": jsonEncode([
+                ["File", "attached_to_doctype", "=", "Task"],
+                ["File", "attached_to_name", "in", taskNames],
+              ]),
+            },
+            options: Options(headers: {'Cookie': cookies}),
+          );
+
+          if (attachmentResponse.statusCode == 200) {
+            final attachData = attachmentResponse.data["data"];
+            if (attachData is List) {
+              final attachedTaskNames =
+              attachData.map((e) => e["attached_to_name"].toString()).toSet();
+              for (var task in tasks) {
+                task["has_attachment"] =
+                    attachedTaskNames.contains(task["name"].toString());
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint("Attachment check error: $e");
+          for (var task in tasks) {
+            task["has_attachment"] = false;
+          }
+        }
+      }
+      if (tasks.isEmpty) return tasks;
+
+      // ✅ Collect unique project IDs
+      final projectIds = tasks
+          .map((e) => e["project"])
+          .where((e) => e != null && e.toString().isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (projectIds.isEmpty) {
+        for (var task in tasks) {
+          task["project_name"] = "No Project";
+        }
+        return tasks;
+      }
+
+      // ✅ Batch fetch project names (SINGLE CALL)
+      final projectResponse = await _dio.get(
+        "/resource/Project",
+        queryParameters: {
+          "fields": jsonEncode(["name", "project_name"]),
+          "filters": jsonEncode([
+            ["Project", "name", "in", projectIds]
+          ]),
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      Map<String, String> projectMap = {};
+
+      if (projectResponse.statusCode == 200) {
+        final projectData = projectResponse.data["data"];
+        if (projectData is List) {
+          for (var project in projectData) {
+            projectMap[project["name"]] =
+                project["project_name"] ?? project["name"];
+          }
+        }
+      }
+
+      // ✅ Attach project_name to each task
+      for (var task in tasks) {
+        final projectId = task["project"];
+        task["project_name"] =
+            projectMap[projectId] ?? "No Project";
+      }
+
+      return tasks;
+    } catch (e) {
+      debugPrint("fetchTaskList Error: $e");
+    }
+
+    return [];
+  }
+  Future<List<Map<String, String>>> fetchProjectList({
+    String searchText = "",
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/frappe.desk.search.search_link",
+        queryParameters: {
+          "txt": searchText,
+          "doctype": "Project",
+          "reference_doctype": "Task",
+          "page_length": 50,
+        },
+        options: Options(headers: {"Cookie": cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data["message"];
+        if (data is List) {
+          return data.map<Map<String, String>>((e) {
+            return {
+              "value": e["value"].toString(),  // PROJ-0001
+              "label": e["label"].toString(),  // Add Modules
+            };
+          }).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint("fetchProjectList Error: $e");
+    }
+
+    return [];
+  }
+
+  Future<bool> updateTask({
+    required String taskName,
+    String? status,
+    double? progress,
+    String? completedBy,
+    String? completedOn,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      Map<String, dynamic> updateData = {};
+
+      if (status != null) {
+        updateData["status"] = status;
+      }
+
+      if (progress != null) {
+        updateData["progress"] = progress;
+      }
+
+      if (completedBy != null) {
+        updateData["completed_by"] = completedBy;
+      }
+
+      if (completedOn != null) {
+        updateData["completed_on"] = completedOn;
+      }
+
+      final response = await _dio.put(
+        "/resource/Task/$taskName",
+        data: updateData,
+        options: Options(
+          headers: {
+            'Cookie': cookies,
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("updateTask Error: $e");
+    }
+
+    return false;
+  }
+
+  Future<bool> uploadTaskAttachment({
+    required String taskName,
+    required String filePath,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+      final fileName = filePath.split('/').last;
+
+      // STEP 1️⃣ Upload File
+      FormData formData = FormData();
+      formData.files.add(
+        MapEntry(
+          "file",
+          await MultipartFile.fromFile(
+            filePath,
+            filename: fileName,
+          ),
+        ),
+      );
+
+      formData.fields.add(MapEntry("is_private", "1"));
+
+      final uploadResponse = await _dio.post(
+        "/method/upload_file",
+        data: formData,
+        options: Options(headers: {"Cookie": cookies}),
+      );
+
+      if (uploadResponse.statusCode != 200) return false;
+
+      final uploadedFileName =
+      uploadResponse.data["message"]?["name"];
+
+      if (uploadedFileName == null) {
+        debugPrint("File upload failed: No file name returned");
+        return false;
+      }
+
+      // STEP 2️⃣ Fetch file_url from File doctype
+      final fileResponse = await _dio.get(
+        "/resource/File/$uploadedFileName",
+        options: Options(headers: {"Cookie": cookies}),
+      );
+
+      if (fileResponse.statusCode != 200) return false;
+
+      final fileUrl = fileResponse.data["data"]?["file_url"];
+
+      if (fileUrl == null) {
+        debugPrint("File URL not found");
+        return false;
+      }
+
+      // STEP 3️⃣ Attach file to Task
+      final attachResponse = await _dio.post(
+        "/method/upload_file",
+        queryParameters: {
+          "docname": taskName,
+          "doctype": "Task",
+          "is_private": "1",
+          "folder": "Home/Attachments",
+          "file_url": fileUrl,
+        },
+        options: Options(headers: {"Cookie": cookies}),
+      );
+
+      if (attachResponse.statusCode == 200) {
+        debugPrint("File successfully attached to Task");
+        return true;
+      }
+
+    } catch (e) {
+      debugPrint("uploadTaskAttachment Error: $e");
+    }
+
+    return false;
+  }
+  /// Fetch all attachments for a given task
+  Future<List<Map<String, dynamic>>> fetchTaskAttachments({
+    required String taskName,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/File",
+        queryParameters: {
+          "fields": jsonEncode([
+            "name",
+            "file_name",
+            "file_url",
+            "file_type",
+            "file_size",
+            "is_private",
+            "creation",
+          ]),
+          "filters": jsonEncode([
+            ["File", "attached_to_doctype", "=", "Task"],
+            ["File", "attached_to_name", "=", taskName],
+          ]),
+          "order_by": "creation desc",
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data["data"];
+        if (data is List) return List<Map<String, dynamic>>.from(data);
+      }
+    } catch (e) {
+      debugPrint("fetchTaskAttachments Error: $e");
+    }
+    return [];
+  }
+
+  /// Download a private file (returns raw bytes)
+  Future<Uint8List?> downloadPrivateFile(String fileUrl) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // Extract just the filename from the file_url
+      // e.g. "/private/files/IMG-20260215-WA0006b0e5d0.jpg" → "IMG-20260215-WA0006b0e5d0.jpg"
+      final fileName = fileUrl.split('/').last;
+
+      // ERPNext serves private files through this endpoint
+      final response = await _dio.get(
+        "/method/frappe.utils.file_manager.download_file",
+        queryParameters: {
+          "file_url": fileUrl,
+        },
+        options: Options(
+          headers: {'Cookie': cookies},
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      debugPrint("downloadPrivateFile status: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        return Uint8List.fromList(response.data);
+      }
+
+      // Fallback: try the direct baseUrl + file_url approach
+      if (response.statusCode == 404) {
+        debugPrint("Trying fallback download via baseUrl...");
+        final fallbackResponse = await _dio.get(
+          "$baseUrl$fileUrl",
+          options: Options(
+            headers: {'Cookie': cookies},
+            responseType: ResponseType.bytes,
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+
+        if (fallbackResponse.statusCode == 200) {
+          return Uint8List.fromList(fallbackResponse.data);
+        }
+
+        debugPrint("Fallback also failed: ${fallbackResponse.statusCode}");
+      }
+
+    } catch (e) {
+      debugPrint("downloadPrivateFile Error: $e");
+    }
+    return null;
+  }
+  Future<bool> deleteTaskAttachment(String fileName) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.delete(
+        "/resource/File/$fileName",
+        options: Options(
+          headers: {'Cookie': cookies},
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      debugPrint("deleteTaskAttachment status: ${response.statusCode}");
+
+      if (response.statusCode == 202) return true;
+
+      debugPrint("deleteTaskAttachment response: ${response.data}");
+      return false;
+
+    } catch (e) {
+      debugPrint("deleteTaskAttachment Error: $e");
+      return false;
+    }
+  }
+  //Task List
+
+  // Project list
+
+  Future<List<Map<String, dynamic>>> fetchProjectsList() async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // ✅ Get logged-in user
+      final loggedInUser = await getLoggedInUserIdentifier();
+      if (loggedInUser == null) {
+        debugPrint("No logged-in user found");
+        return [];
+      }
+
+      // ✅ Get selected company
+      final company = await _sharedPrefService.getCompany();
+
+      // ✅ Build filters dynamically (same pattern as Task)
+      List<List<dynamic>> filters = [
+        ["Project", "_assign", "like", "%$loggedInUser%"]
+      ];
+
+      if (company != null && company.isNotEmpty) {
+        filters.add(["Project", "company", "=", company]);
+      }
+
+      // ✅ Fetch Projects
+      final response = await _dio.get(
+        "/resource/Project",
+        queryParameters: {
+          "fields": jsonEncode([
+            "name",
+            "project_name",
+            "status",
+            "priority",
+            "expected_start_date",
+            "expected_end_date",
+            "project_type",
+            "department",
+            "is_active",
+            "percent_complete_method",
+            "percent_complete",
+            "customer",
+            "company", // good to include if filtering
+          ]),
+          "filters": jsonEncode(filters),
+          "order_by": "modified desc",
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final data = response.data["data"];
+      if (data is! List) return [];
+
+      return List<Map<String, dynamic>>.from(data);
+
+    } catch (e) {
+      debugPrint("fetchProjectsList Error: $e");
+      return [];
+    }
+  }
+  Future<List<String>> fetchProjectTypes({
+    String searchText = "",
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/frappe.desk.search.search_link",
+        queryParameters: {
+          "txt": searchText,
+          "doctype": "Project Type",
+          "reference_doctype": "Project",
+          "page_length": 20,
+        },
+        options: Options(headers: {"Cookie": cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data["message"];
+
+        if (data is List) {
+          // Return only the "value" field
+          return data
+              .map<String>((e) => e["value"].toString())
+              .toList();
+        }
+      }
+    } catch (e) {
+      debugPrint("fetchProjectTypes Error: $e");
+    }
+
+    return [];
+  }
+
+  //Project
+
+  //maintenance visit
+
+  Future<Map<String, dynamic>?> fetchCustomerDetaill({
+    required String customer,
+    required String company,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/erpnext.accounts.party.get_party_details",
+        queryParameters: {
+          "party": customer,
+          "party_type": "Customer",
+          "company": company,
+          "doctype": "Maintenance Visit",
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return null;
+
+      final data = response.data["message"];
+      if (data == null) return null;
+
+      return {
+        "customer_address": data["customer_address"],
+        "territory": data["territory"],
+        "contact_person": data["contact_person"],
+        "customer_group": data["customer_group"],
+      };
+    } catch (e) {
+      debugPrint("fetchCustomerDetails Error: $e");
+      return null;
+    }
+  }
+
+  Future<bool> createMaintenanceVisit({
+    required String customer,
+    required String customerName,
+    required String mntcDate,
+    required String mntcTime,
+    required String completionStatus,
+    required String maintenanceType,
+    required String company,
+    required List<Map<String, dynamic>> purposes,
+    required String customerFeedback,
+    String? prevDocName,
+    String? prevDocType,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // 🔹 Step 1: Fetch customer details first
+      final customerDetails = await fetchCustomerDetaill(
+        customer: customer,
+        company: company,
+      );
+
+      if (customerDetails == null) {
+        debugPrint("Customer details not found");
+        return false;
+      }
+
+      // 🔹 Step 2: Build request body
+      final body = {
+        "data": {
+          "docstatus": 0,
+          "customer": customer,
+          "customer_name": customerName,
+          "mntc_date": mntcDate,
+          "mntc_time": mntcTime,
+          "completion_status": completionStatus,
+          "maintenance_type": maintenanceType,
+          "company": company,
+          "customer_address": customerDetails["customer_address"],
+          "territory": customerDetails["territory"],
+          "contact_person": customerDetails["contact_person"],
+          "customer_group": customerDetails["customer_group"],
+          "customer_feedback": customerFeedback,
+
+          // "purposes": purposes,
+          "purposes": purposes.map((row) {
+            final newRow = Map<String, dynamic>.from(row);
+
+            if (prevDocName != null && prevDocType != null) {
+              newRow["prevdoc_docname"] = prevDocName;
+              newRow["prevdoc_doctype"] = prevDocType;
+            }
+
+            return newRow;
+          }).toList(),
+        }
+      };
+
+      // 🔹 Step 3: POST request
+      final response = await _dio.post(
+        "/resource/Maintenance Visit",
+        data: body,
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      return response.statusCode == 200 || response.statusCode == 201;
+
+    } on DioException catch (e) {
+      debugPrint("Status Code: ${e.response?.statusCode}");
+      debugPrint("Response Data: ${e.response?.data}");
+      return false;
+    }
+  }
+  Future<bool> updateMaintenanceVisit({
+    required String name,
+    required String customer,
+    required String customerName,
+    required String mntcDate,
+    required String mntcTime,
+    required String completionStatus,
+    required String maintenanceType,
+    required String company,
+    required String customerFeedback,
+    required List<Map<String, dynamic>> purposes,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final body = {
+        "docstatus": 1,
+        "customer": customer,
+        "customer_name": customerName,
+        "mntc_date": mntcDate,
+        "mntc_time": mntcTime,
+        "completion_status": completionStatus,
+        "maintenance_type": maintenanceType,
+        "company": company,
+        "customer_feedback": customerFeedback,
+        "purposes": purposes,
+      };
+
+      final response = await _dio.put(
+        "/resource/Maintenance Visit/$name",
+        data: body,
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      debugPrint("Update Status Code: ${e.response?.statusCode}");
+      debugPrint("Update Response Data: ${e.response?.data}");
+      return false;
+    }
+  }
+  Future<List<String>> searchCustomers(String query) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/frappe.desk.search.search_link",
+        queryParameters: {
+          "doctype": "Customer",
+          "reference_doctype": "Maintenance Visit",
+          "txt": query,
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final List data = response.data["message"] ?? [];
+
+      return data.map<String>((e) => e["value"].toString()).toList();
+    } catch (e) {
+      debugPrint("searchCustomers Error: $e");
+      return [];
+    }
+  }
+
+  Future<List<Map<String, String>>> searchItemm(String query) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/frappe.desk.search.search_link",
+        queryParameters: {
+          "doctype": "Item",
+          "reference_doctype": "Maintenance Visit Purpose",
+          "txt": query,
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final List data = response.data["message"] ?? [];
+
+      return data.map<Map<String, String>>((e) {
+        return {
+          "item_code": e["value"].toString(),
+          "item_name": e["description"]
+              .toString()
+              .split(",")
+              .first
+              .trim(),
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint("searchItemm Error: $e");
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchSalesOrderByName(String name) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/Sales Order/$name",
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data["data"];
+      }
+    } catch (e) {
+      debugPrint("fetchSalesOrderByName Error: $e");
+    }
+
+    return null;
+  }
+
+  Future<List<String>> fetchSerialNumbers({
+    required String itemCode,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/frappe.desk.search.search_link",
+        queryParameters: {
+          "doctype": "Serial No",
+          "reference_doctype": "Maintenance Visit Purpose",
+          "txt": "", // empty search
+          "filters": jsonEncode({
+            "item_code": itemCode,
+          }),
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final List data = response.data["message"] ?? [];
+
+      return data.map<String>((e) => e["value"].toString()).toList();
+    } catch (e) {
+      debugPrint("fetchSerialNumbers Error: $e");
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMaintenanceVisitList({
+    required String salesPerson,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        '/resource/Maintenance Visit',
+        queryParameters: {
+          'fields':
+          '["name","customer","status","completion_status","maintenance_type","mntc_time","mntc_date","creation"]',
+
+          // ✅ Child filter
+          'filters': jsonEncode([
+            ["Maintenance Visit Purpose", "service_person", "=", salesPerson]
+          ]),
+
+          // ✅ Remove duplicates
+          'group_by': 'name',
+
+          // ✅ Latest first
+          'order_by': 'creation desc',
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final data = response.data["data"];
+      if (data == null) return [];
+
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint("fetchMaintenanceVisitList Error: $e");
+      return [];
+    }
+  }
+  Future<Map<String, dynamic>?> fetchMaintenanceVisitByName(String name) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/Maintenance Visit/$name",
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data["data"];
+      }
+    } catch (e) {
+      debugPrint("fetchMaintenanceVisitByName Error: $e");
+    }
+
+    return null;
+  }
+  //maintenance visit
+
+  //estimate preparation
+
+  Future<Map<String, dynamic>> createEstimate({
+    required BuildContext context,
+    required String customer,
+    required String company,
+    required String date,
+    required String contact,
+    required String validTill,
+    required String itemCode,
+    required String itemName,
+    required String itemDescription,
+    required double rate,
+    required double gstPerc,
+    required double gstAmount,
+    required double totalAmount,
+    required String message,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final headers = {
+      'Content-Type': 'application/json',
+      'Cookie': cookies,
+    };
+
+    try {
+      // ── Step 1: Save (docstatus: 0) ──────────────────────────
+      final saveBody = {
+        "docstatus": 0,
+        "customer": customer,
+        "company": company,
+        "Date": date,
+        "contact": contact,
+        "valid_till": validTill,
+        "item_code": itemCode,
+        "gst_perc": gstPerc.toString(),
+        "gst_amount": gstAmount,
+        "item_name": itemName,
+        "rate": rate,
+        "total_amount": totalAmount,
+        "item_description": itemDescription,
+        "message": "<div class=\"ql-editor read-mode\"><p>$message</p></div>",
+      };
+
+      final saveResponse = await _dio.post(
+        "/resource/Tq Estimate",
+        data: saveBody,
+        options: Options(headers: headers),
+      );
+
+      if (saveResponse.statusCode != 200) {
+        debugPrint("Save failed: ${saveResponse.data}");
+        return {"success": false, "error": "Failed to save estimate"};
+      }
+
+      final docname = saveResponse.data["data"]["name"]?.toString();
+      if (docname == null || docname.isEmpty) {
+        return {"success": false, "error": "Docname not found in response"};
+      }
+      debugPrint("Estimate saved. Docname: $docname");
+
+      // ── Step 2: Submit (docstatus: 1) ────────────────────────
+      final submitResponse = await _dio.put(
+        "/resource/Tq Estimate/$docname",
+        data: {"docstatus": 1},
+        options: Options(headers: headers),
+      );
+
+      if (submitResponse.statusCode != 200) {
+        debugPrint("Submit failed: ${submitResponse.data}");
+        return {
+          "success": false,
+          "error": "Saved (${docname}) but submission failed"
+        };
+      }
+      debugPrint("Estimate submitted: $docname");
+
+      // ── Step 3: Send WhatsApp ─────────────────────────────────
+      final phone = "91$contact";
+      final whatsappResponse = await _dio.post(
+        "/method/tqerp_bd.api.send_whatsapp_estimate",
+        queryParameters: {
+          "docname": docname,
+          "phone": phone,
+        },
+        options: Options(headers: headers),
+      );
+
+      if (whatsappResponse.statusCode == 200) {
+        debugPrint("WhatsApp sent to $phone for $docname");
+      } else {
+        debugPrint("WhatsApp failed (non-critical): ${whatsappResponse.data}");
+      }
+
+      return {"success": true, "docname": docname};
+    } catch (e) {
+      debugPrint("createEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    }
+  }
+
+  Future<String?> getCustomerContact(String customer) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/Contact",
+        queryParameters: {
+          "fields": jsonEncode(["phone", "mobile_no"]),
+          "filters": jsonEncode([["company_name", "=", customer]]),
+        },
+        options: Options(
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final List data = response.data["data"] ?? [];
+        if (data.isNotEmpty) {
+          final contact = data[0];
+          final phone = contact["phone"]?.toString() ?? '';
+          final mobileNo = contact["mobile_no"]?.toString() ?? '';
+
+          // ✅ Phone takes priority, fallback to mobile_no
+          if (phone.isNotEmpty) return phone;
+          if (mobileNo.isNotEmpty) return mobileNo;
+        }
+      }
+    } catch (e) {
+      debugPrint("getCustomerContact Error: $e");
+    }
+    return null;
+  }
+  Future<double?> getItemGstPerc(String itemCode, String company) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final args = jsonEncode({
+        "item_code": itemCode,
+        "company": company,
+      });
+
+      final response = await _dio.get(
+        "/method/erpnext.stock.get_item_details.get_item_tax_template",
+        queryParameters: {"args": args},
+        options: Options(
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final String message = response.data["message"] ?? "";
+        // Extract number from strings like "GST 18% - BDA" or "GST 5% - BDA"
+        final match = RegExp(r'(\d+(\.\d+)?)%').firstMatch(message);
+        if (match != null) {
+          return double.tryParse(match.group(1)!);
+        }
+      }
+    } catch (e) {
+      debugPrint("getItemGstPerc Error: $e");
+    }
+    return null;
+  }
+  Future<double?> getItemRate(String itemCode) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/method/frappe.client.get",
+        queryParameters: {
+          "doctype": "Item",
+          "name": itemCode,
+        },
+        options: Options(
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final message = response.data["message"];
+        final rate = message?["standard_rate"];
+        if (rate != null) {
+          return double.tryParse(rate.toString());
+        }
+      }
+    } catch (e) {
+      debugPrint("getItemRate Error: $e");
+    }
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchEstimateList({
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      // 🔹 Fetch logged in user
+      final loggedInUser = await getLoggedInUserIdentifier();
+      if (loggedInUser == null) {
+        debugPrint("fetchEstimateList: Could not get logged in user");
+        return [];
+      }
+
+      final toDateInclusive = toDate.add(const Duration(days: 1));
+
+      final response = await _dio.get(
+        "/resource/Tq Estimate",
+        queryParameters: {
+          "fields": jsonEncode([
+            "name", "customer", "contact", "docstatus", "valid_till",
+            "item_code", "item_name", "item_description", "message",
+            "Date", "gst_perc", "gst_amount", "rate", "total_amount"
+          ]),
+          "filters": jsonEncode([
+            ["docstatus", "!=", 2],
+            ["Date", ">=", DateFormat('yyyy-MM-dd').format(fromDate)],
+            ["Date", "<",  DateFormat('yyyy-MM-dd').format(toDateInclusive)],
+            ["Tq Estimate", "owner", "=", loggedInUser],  // 🔹 owner filter
+          ]),
+          "order_by": "creation desc",
+        },
+        options: Options(
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final List data = response.data["data"] ?? [];
+        return data.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (e) {
+      debugPrint("fetchEstimateList Error: $e");
+    }
+    return [];
+  }
+  Future<Map<String, dynamic>> updateEstimate({
+    required BuildContext context,
+    required String docname,
+    required String customer,
+    required String company,
+    required String date,
+    required String contact,
+    required String validTill,
+    required String itemCode,
+    required String itemName,
+    required String itemDescription,
+    required double rate,
+    required double gstPerc,
+    required double gstAmount,
+    required double totalAmount,
+    required String message,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final headers = {
+      'Content-Type': 'application/json',
+      'Cookie': cookies,
+    };
+
+    try {
+      // ── Step 1: Update (PUT with docstatus: 0) ───────────────
+      final updateBody = {
+        "docstatus": 0,
+        "customer": customer,
+        "company": company,
+        "Date": date,
+        "contact": contact,
+        "valid_till": validTill,
+        "item_code": itemCode,
+        "gst_perc": gstPerc.toString(),
+        "gst_amount": gstAmount,
+        "item_name": itemName,
+        "rate": rate,
+        "total_amount": totalAmount,
+        "item_description": itemDescription,
+        "message": "<div class=\"ql-editor read-mode\"><p>$message</p></div>",
+      };
+
+      final updateResponse = await _dio.put(
+        "/resource/Tq Estimate/$docname",
+        data: updateBody,
+        options: Options(headers: headers),
+      );
+
+      if (updateResponse.statusCode != 200) {
+        return {"success": false, "error": "Failed to update estimate"};
+      }
+      debugPrint("Estimate updated: $docname");
+
+      // ── Step 2: Submit (docstatus: 1) ────────────────────────
+      final submitResponse = await _dio.put(
+        "/resource/Tq Estimate/$docname",
+        data: {"docstatus": 1},
+        options: Options(headers: headers),
+      );
+
+      if (submitResponse.statusCode != 200) {
+        return {
+          "success": false,
+          "error": "Updated ($docname) but submission failed"
+        };
+      }
+      debugPrint("Estimate submitted: $docname");
+
+      // ── Step 3: Send WhatsApp ─────────────────────────────────
+      final phone = "91$contact";
+      await _dio.post(
+        "/method/tqerp_bd.api.send_whatsapp_estimate",
+        queryParameters: {"docname": docname, "phone": phone},
+        options: Options(headers: headers),
+      );
+      debugPrint("WhatsApp sent to $phone for $docname");
+
+      return {"success": true, "docname": docname};
+    } catch (e) {
+      debugPrint("updateEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    }
+  }
+  // Save draft — POST (new) or PUT (existing)
+  Future<Map<String, dynamic>> saveDraftEstimate({
+    required BuildContext context,
+    required String? docname,
+    required String customer,
+    required String company,
+    required String date,
+    required String contact,
+    required String validTill,
+    required String itemCode,
+    required String itemName,
+    required String itemDescription,
+    required double rate,
+    required double gstPerc,
+    required double gstAmount,
+    required double totalAmount,
+    required String message,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final headers = {
+      'Content-Type': 'application/json',
+      'Cookie': cookies,
+    };
+
+    final body = {
+      "docstatus": 0,
+      "customer": customer,
+      "company": company,
+      "Date": date,
+      "contact": contact,
+      "valid_till": validTill,
+      "item_code": itemCode,
+      "gst_perc": gstPerc.toString(),
+      "gst_amount": gstAmount,
+      "item_name": itemName,
+      "rate": rate,
+      "total_amount": totalAmount,
+      "item_description": itemDescription,
+      "message": "<div class=\"ql-editor read-mode\"><p>$message</p></div>",
+    };
+
+    try {
+      final response = docname == null
+          ? await _dio.post(
+        "/resource/Tq Estimate",
+        data: body,
+        options: Options(headers: headers),
+      )
+          : await _dio.put(
+        "/resource/Tq Estimate/$docname",
+        data: body,
+        options: Options(headers: headers),
+      );
+
+      if (response.statusCode == 200) {
+        final name = response.data["data"]["name"]?.toString() ?? docname ?? '';
+        debugPrint("Draft saved: $name");
+        return {"success": true, "docname": name};
+      }
+
+      return {"success": false, "error": "Failed to save draft"};
+    } catch (e) {
+      debugPrint("saveDraftEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    }
+  }
+
+// Submit + WhatsApp
+//   Future<Map<String, dynamic>> submitEstimate({
+//     required String docname,
+//     required String contact,
+//   }) async {
+//     final cookies = await _sharedPrefService.getCookies();
+//     final headers = {
+//       'Content-Type': 'application/json',
+//       'Cookie': cookies,
+//     };
+//
+//     try {
+//       // Submit
+//       final submitResponse = await _dio.put(
+//         "/resource/Tq Estimate/$docname",
+//         data: {"docstatus": 1},
+//         options: Options(headers: headers),
+//       );
+//
+//       if (submitResponse.statusCode != 200) {
+//         return {"success": false, "error": "Submission failed"};
+//       }
+//       debugPrint("Submitted: $docname");
+//
+//       // WhatsApp
+//       final phone = "91$contact";
+//       await _dio.post(
+//         "/method/tqerp_bd.api.send_whatsapp_estimate",
+//         queryParameters: {"docname": docname, "phone": phone},
+//         options: Options(headers: headers),
+//       );
+//       debugPrint("WhatsApp sent to $phone");
+//
+//       return {"success": true, "docname": docname};
+//     } catch (e) {
+//       debugPrint("submitEstimate Error: $e");
+//       return {"success": false, "error": e.toString()};
+//     }
+//   }
+
+  Future<Map<String, dynamic>> submitEstimate({
+    required String docname,
+    required String contact,
+  }) async {
+    final cookies = await _sharedPrefService.getCookies();
+    final headers = {
+      'Content-Type': 'application/json',
+      'Cookie': cookies,
+    };
+
+    try {
+      // ── Submit ────────────────────────────────────────────
+      final submitResponse = await _dio.put(
+        "/resource/Tq Estimate/$docname",
+        data: {"docstatus": 1},
+        options: Options(
+          headers: headers,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (submitResponse.statusCode != 200) {
+        return {
+          "success": false,
+          "error": "Submission failed (${submitResponse.statusCode})"
+        };
+      }
+      debugPrint("Submitted: $docname");
+
+      // ── WhatsApp (non-critical) ───────────────────────────
+      try {
+        final phone = "91$contact";
+        final whatsappResponse = await _dio.post(
+          "/method/tqerp_bd.api.send_whatsapp_estimate",
+          queryParameters: {"docname": docname, "phone": phone},
+          options: Options(
+            headers: headers,
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+
+        if (whatsappResponse.statusCode == 200) {
+          debugPrint("WhatsApp sent to $phone");
+        } else {
+          debugPrint(
+              "WhatsApp failed with ${whatsappResponse.statusCode} (non-critical)");
+        }
+      } catch (e) {
+        // ✅ WhatsApp failure must never block the success result
+        debugPrint("WhatsApp error (non-critical): $e");
+      }
+
+      return {"success": true, "docname": docname};
+    } catch (e) {
+      debugPrint("submitEstimate Error: $e");
+      return {"success": false, "error": e.toString()};
+    }
+  }
+  //estimate preparation
+
+// appointments
+
+  Future<List<Map<String, dynamic>>> fetchAppointments() async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        "/resource/Patient Appointment",
+        queryParameters: {
+          "fields": jsonEncode([
+            "name",
+            "title",
+            "status",
+            "patient",
+            "patient_name",
+            "patient_sex",
+            "appointment_type",
+            "duration",
+            "practitioner_name",
+            "service_unit",
+            "appointment_date",
+            "appointment_time",
+          ]),
+          "order_by": "appointment_date desc, appointment_time desc",
+        },
+        options: Options(headers: {'Cookie': cookies}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data["data"];
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        }
+      }
+    } catch (e) {
+      debugPrint("fetchAppointments Error: $e");
+    }
+    return [];
+  }
+
+
+  //appointments
   //current stock list
   Future<CurrentStockResponse?> currentStockList(context) async {
     final url =
@@ -7271,120 +9683,447 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   }
 
   //Search customer
-//   Future<CustomerList?> customerSearch(String customer, context) async {
-//   final encodedCustomer = Uri.encodeComponent(customer); // Important!
-//
-//   final url =
-//       '/resource/Customer?fields=["name","customer_name","tax_id","gstin","territory","customer_primary_contact","customer_primary_address","primary_address","mobile_no","email_id","tax_category","customer_group"]&filters=[["Customer","name","like","$encodedCustomer%"]]';
-//
-//   try {
-//     final cookies = await _sharedPrefService.getCookies();
-//
-//     debugPrint('Requesting data from URL: ${baseUrl + url}');
-//     final response = await _dio.get(
-//       url,
-//       options: Options(
-//         headers: {
-//           'Content-Type': 'application/json',
-//           'Cookie': cookies,
-//         },
-//         validateStatus: (status) => status != null && status < 500,
-//       ),
-//     );
-//
-//     debugPrint('Response status: ${response.statusCode}');
-//     debugPrint('Response data: ${response.data}');
-//
-//     if (response.statusCode == 200) {
-//       return CustomerList.fromJson(response.data);
-//     } else {
-//       apiErrorHandler.handleHttpError(context, response);
-//       throw Exception('API Error: ${response.statusCode}');
-//     }
-//   } on DioException catch (e) {
-//     debugPrint('DioException: ${e.message}');
-//     if (e.response != null) {
-//       debugPrint('Response data: ${e.response?.data}');
-//     }
-//     throw Exception('Failed to fetch data');
-//   } catch (e) {
-//     debugPrint('Exception: $e');
-//     throw Exception('Failed to fetch data');
-//   }
-// }
 
-  Future<CustomerList?> customerSearch(String customer, BuildContext context) async {
+  // Future<CustomerList?> customerSearch(
+  //     String customer,
+  //     BuildContext context,
+  //     ) async {
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final filterBySalesPerson =
+  //     await _sharedPrefService.getCustomerFilterBySalesPerson();
+  //
+  //     String? salesPerson;
+  //     if (filterBySalesPerson) {
+  //       salesPerson = await getSalesPersonWithCache();
+  //       debugPrint("Sales Person for filtering: $salesPerson");
+  //     }
+  //
+  //     // ✅ Normalize: lowercase + remove special chars (matches ERPNext normalization)
+  //     final normalizedSearch = customer
+  //         .toLowerCase()
+  //         .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+  //         .trim();
+  //
+  //     debugPrint("Search raw       : $customer");
+  //     debugPrint("Search normalized: $normalizedSearch");
+  //
+  //     final fields = jsonEncode([
+  //       "name",
+  //       "customer_name",
+  //       "normalized_customer_name",
+  //       "tax_id",
+  //       "gstin",
+  //       "territory",
+  //       "customer_primary_contact",
+  //       "customer_primary_address",
+  //       "primary_address",
+  //       "mobile_no",
+  //       "email_id",
+  //       "tax_category",
+  //       "customer_group",
+  //       "_liked_by",
+  //     ]);
+  //
+  //     final options = Options(
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         "Cookie": cookies,
+  //       },
+  //       validateStatus: (status) => status != null && status < 500,
+  //     );
+  //
+  //     // ✅ Sales person base filter (shared by both calls)
+  //     List salesPersonFilter = [];
+  //     if (filterBySalesPerson && salesPerson != null) {
+  //       salesPersonFilter = [["Sales Team", "sales_person", "=", salesPerson]];
+  //     }
+  //
+  //     // ✅ Two parallel calls: one by name, one by normalized_customer_name
+  //     final results = await Future.wait([
+  //       _dio.get(
+  //         "/resource/Customer",
+  //         queryParameters: {
+  //           "fields": fields,
+  //           "filters": jsonEncode([
+  //             ...salesPersonFilter,
+  //             ["Customer", "name", "like", "%$customer%"],
+  //           ]),
+  //         },
+  //         options: options,
+  //       ),
+  //       _dio.get(
+  //         "/resource/Customer",
+  //         queryParameters: {
+  //           "fields": fields,
+  //           "filters": jsonEncode([
+  //             ...salesPersonFilter,
+  //             ["Customer", "normalized_customer_name", "like", "%$normalizedSearch%"],
+  //           ]),
+  //         },
+  //         options: options,
+  //       ),
+  //     ]);
+  //
+  //     final nameResponse = results[0];
+  //     final normalizedResponse = results[1];
+  //
+  //     debugPrint("Name search status      : ${nameResponse.statusCode}");
+  //     debugPrint("Normalized search status: ${normalizedResponse.statusCode}");
+  //     debugPrint("Name search data        : ${nameResponse.data}");
+  //     debugPrint("Normalized search data  : ${normalizedResponse.data}");
+  //
+  //     // ✅ Merge both lists and deduplicate by 'name' field
+  //     final List<dynamic> nameResults =
+  //     nameResponse.statusCode == 200 ? (nameResponse.data['data'] ?? []) : [];
+  //     final List<dynamic> normalizedResults =
+  //     normalizedResponse.statusCode == 200 ? (normalizedResponse.data['data'] ?? []) : [];
+  //
+  //     final seen = <String>{};
+  //     final merged = [...nameResults, ...normalizedResults]
+  //         .where((c) => seen.add(c['name'] as String))
+  //         .toList();
+  //
+  //     debugPrint("Name results count      : ${nameResults.length}");
+  //     debugPrint("Normalized results count: ${normalizedResults.length}");
+  //     debugPrint("Merged unique count     : ${merged.length}");
+  //
+  //     // ✅ Wrap merged list into the same shape CustomerList.fromJson expects
+  //     return CustomerList.fromJson({"data": merged});
+  //   } catch (e) {
+  //     debugPrint("Customer Search Error: $e");
+  //     throw Exception("Failed to search customer");
+  //   }
+  // }
+  // Future<CustomerList?> customerSearch(
+  //     String customer,
+  //     BuildContext context,
+  //     ) async {
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final filterBySalesPerson =
+  //     await _sharedPrefService.getCustomerFilterBySalesPerson();
+  //
+  //     String? salesPerson;
+  //     if (filterBySalesPerson) {
+  //       salesPerson = await getSalesPersonWithCache();
+  //       debugPrint("Sales Person for filtering: $salesPerson");
+  //     }
+  //
+  //     final normalizedSearch = customer
+  //         .toLowerCase()
+  //         .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+  //         .trim();
+  //
+  //     debugPrint("Search raw       : $customer");
+  //     debugPrint("Search normalized: $normalizedSearch");
+  //
+  //     // ✅ Fields without normalized_customer_name (base, always safe)
+  //     final baseFields = [
+  //       "name",
+  //       "customer_name",
+  //       "tax_id",
+  //       "gstin",
+  //       "territory",
+  //       "customer_primary_contact",
+  //       "customer_primary_address",
+  //       "primary_address",
+  //       "mobile_no",
+  //       "email_id",
+  //       "tax_category",
+  //       "customer_group",
+  //       "_liked_by",
+  //     ];
+  //
+  //     final options = Options(
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         "Cookie": cookies,
+  //       },
+  //       validateStatus: (status) => status != null && status < 500,
+  //     );
+  //
+  //     List salesPersonFilter = [];
+  //     if (filterBySalesPerson && salesPerson != null) {
+  //       salesPersonFilter = [["Sales Team", "sales_person", "=", salesPerson]];
+  //     }
+  //
+  //     // ── Call 1: search by name (always runs) ────────────────────────────
+  //     final nameResponse = await _dio.get(
+  //       "/resource/Customer",
+  //       queryParameters: {
+  //         "fields": jsonEncode(baseFields),
+  //         "filters": jsonEncode([
+  //           ...salesPersonFilter,
+  //           ["Customer", "name", "like", "%$customer%"],
+  //         ]),
+  //       },
+  //       options: options,
+  //     );
+  //
+  //     debugPrint("Name search status: ${nameResponse.statusCode}");
+  //     debugPrint("Name search data  : ${nameResponse.data}");
+  //
+  //     final List<dynamic> nameResults =
+  //     nameResponse.statusCode == 200
+  //         ? (nameResponse.data['data'] ?? [])
+  //         : [];
+  //
+  //     // ── Call 2: search by normalized_customer_name (optional) ────────────
+  //     List<dynamic> normalizedResults = [];
+  //
+  //     try {
+  //       final normalizedResponse = await _dio.get(
+  //         "/resource/Customer",
+  //         queryParameters: {
+  //           "fields": jsonEncode([...baseFields, "normalized_customer_name"]),
+  //           "filters": jsonEncode([
+  //             ...salesPersonFilter,
+  //             ["Customer", "normalized_customer_name", "like", "%$normalizedSearch%"],
+  //           ]),
+  //         },
+  //         options: options,
+  //       );
+  //
+  //       debugPrint("Normalized search status: ${normalizedResponse.statusCode}");
+  //       debugPrint("Normalized search data  : ${normalizedResponse.data}");
+  //
+  //       // ✅ Check if ERPNext returned a field error — treat as unsupported
+  //       final isFieldError = normalizedResponse.data is Map &&
+  //           (normalizedResponse.data['exc_type'] == 'DataError' ||
+  //               (normalizedResponse.data['exception']
+  //                   ?.toString()
+  //                   .contains('normalized_customer_name') ??
+  //                   false));
+  //
+  //       if (normalizedResponse.statusCode == 200 && !isFieldError) {
+  //         normalizedResults = normalizedResponse.data['data'] ?? [];
+  //         debugPrint("Normalized results count: ${normalizedResults.length}");
+  //       } else {
+  //         debugPrint(
+  //             "normalized_customer_name not available on this ERPNext instance — skipping");
+  //       }
+  //     } catch (e) {
+  //       // ✅ Field not supported — silently skip, name search result is enough
+  //       debugPrint("normalized_customer_name search skipped: $e");
+  //     }
+  //
+  //     // ── Merge & deduplicate ──────────────────────────────────────────────
+  //     final seen = <String>{};
+  //     final merged = [...nameResults, ...normalizedResults]
+  //         .where((c) => seen.add(c['name'] as String))
+  //         .toList();
+  //
+  //     debugPrint("Name results count : ${nameResults.length}");
+  //     debugPrint("Normalized count   : ${normalizedResults.length}");
+  //     debugPrint("Merged unique count: ${merged.length}");
+  //
+  //     return CustomerList.fromJson({"data": merged});
+  //   } catch (e) {
+  //     debugPrint("Customer Search Error: $e");
+  //     throw Exception("Failed to search customer");
+  //   }
+  // }
+  // ✅ Cache allowed fields so we only probe once per app session
+  static Set<String>? _allowedCustomerFields;
+
+  Future<Set<String>> _getAllowedCustomerFields(
+      String cookies, List<String> candidates) async {
+    if (_allowedCustomerFields != null) {
+      debugPrint("Using cached allowed fields: $_allowedCustomerFields");
+      return _allowedCustomerFields!;
+    }
+
+    final allowed = <String>{};
+
+    for (final field in candidates) {
+      try {
+        final response = await _dio.get(
+          "/resource/Customer",
+          queryParameters: {
+            "fields": jsonEncode([field]),
+            "filters": jsonEncode([["Customer", "name", "=", "__probe__"]]),
+            "limit": "1",
+          },
+          options: Options(
+            headers: {
+              "Content-Type": "application/json",
+              "Cookie": cookies,
+            },
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+
+        final isError = response.data is Map &&
+            (response.data['exc_type'] == 'DataError' ||
+                response.data['exception']?.toString().contains(field) == true);
+
+        if (!isError) {
+          allowed.add(field);
+          debugPrint("Field allowed  : $field");
+        } else {
+          debugPrint("Field rejected : $field");
+        }
+      } catch (e) {
+        debugPrint("Field probe error for $field: $e");
+      }
+    }
+
+    _allowedCustomerFields = allowed;
+    debugPrint("Allowed customer fields cached: $allowed");
+    return allowed;
+  }
+
+  Future<CustomerList?> customerSearch(
+      String customer,
+      BuildContext context,
+      ) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      // STEP 1: Logged-in user email
-      final email = await getLoggedInUserIdentifier();
-      if (email == null) throw Exception("Unable to fetch logged-in user email");
+      final filterBySalesPerson =
+      await _sharedPrefService.getCustomerFilterBySalesPerson();
 
-      // STEP 2: First name
-      final firstName = await fetchUserFirstName(email);
-      if (firstName == null) throw Exception("Unable to fetch user first name");
+      String? salesPerson;
+      if (filterBySalesPerson) {
+        salesPerson = await getSalesPersonWithCache();
+        debugPrint("Sales Person for filtering: $salesPerson");
+      }
 
-      // STEP 3: Employee ID
-      final employeeId = await fetchEmployeeByFirstName(firstName);
-      if (employeeId == null) throw Exception("Unable to fetch employee");
+      final normalizedSearch = customer
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+          .trim();
 
-      // STEP 4: Sales Person
-      final salesPerson = await fetchSalesPersonByEmployee(employeeId);
-      if (salesPerson == null) throw Exception("Unable to fetch sales person");
+      debugPrint("Search raw       : $customer");
+      debugPrint("Search normalized: $normalizedSearch");
 
-      debugPrint("Sales Person for filtering: $salesPerson");
+      // ✅ All fields we want — probe once to see which are permitted
+      final candidates = [
+        "name",
+        "customer_name",
+        "normalized_customer_name",
+        "tax_id",
+        "gstin",
+        "territory",
+        "customer_primary_contact",
+        "customer_primary_address",
+        "primary_address",
+        "mobile_no",
+        "email_id",
+        "tax_category",
+        "customer_group",
+        "_liked_by",
+      ];
 
-      // STEP 5: Customer name search + Sales Person filter
-      final queryParams = {
-        "fields": jsonEncode([
-          "name",
-          "customer_name",
-          "tax_id",
-          "gstin",
-          "territory",
-          "customer_primary_contact",
-          "customer_primary_address",
-          "primary_address",
-          "mobile_no",
-          "email_id",
-          "tax_category",
-          "customer_group",
-        ]),
-        "filters": jsonEncode([
-          ["Sales Team", "sales_person", "=", salesPerson],
-          ["Customer", "name", "like", "$customer%"]
-        ]),
-      };
+      final allowedFields = await _getAllowedCustomerFields(cookies, candidates);
 
-      final response = await _dio.get(
-        "/resource/Customer",
-        queryParameters: queryParams,
-        options: Options(
-          headers: {
-            "Content-Type": "application/json",
-            "Cookie": cookies,
-          },
-          validateStatus: (status) => status != null && status < 500,
-        ),
+      // ✅ Always keep these core fields regardless
+      final requiredFields = {"name", "customer_name"};
+      final safeFields = [
+        ...requiredFields,
+        ...allowedFields.where((f) => !requiredFields.contains(f)),
+      ].toList();
+
+      final hasNormalized = allowedFields.contains("normalized_customer_name");
+
+      debugPrint("Safe fields      : $safeFields");
+      debugPrint("Has normalized   : $hasNormalized");
+
+      final options = Options(
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": cookies,
+        },
+        validateStatus: (status) => status != null && status < 500,
       );
 
-      debugPrint("Customer Search Status: ${response.statusCode}");
-      debugPrint("Customer Search Response: ${response.data}");
-
-      if (response.statusCode == 200) {
-        return CustomerList.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-        return null;
+      List salesPersonFilter = [];
+      if (filterBySalesPerson && salesPerson != null) {
+        salesPersonFilter = [["Sales Team", "sales_person", "=", salesPerson]];
       }
+
+      // ── Call 1: search by name (always runs) ────────────────────────────
+      final nameResponse = await _dio.get(
+        "/resource/Customer",
+        queryParameters: {
+          "fields": jsonEncode(safeFields),
+          "filters": jsonEncode([
+            ...salesPersonFilter,
+            ["Customer", "name", "like", "%$customer%"],
+          ]),
+        },
+        options: options,
+      );
+
+      debugPrint("Name search status: ${nameResponse.statusCode}");
+
+      final isNameError = nameResponse.data is Map &&
+          nameResponse.data['exc_type'] != null;
+
+      final List<dynamic> nameResults =
+      nameResponse.statusCode == 200 && !isNameError
+          ? (nameResponse.data['data'] ?? [])
+          : [];
+
+      debugPrint("Name results count: ${nameResults.length}");
+
+      // ── Call 2: normalized search (only if field exists) ─────────────────
+      List<dynamic> normalizedResults = [];
+
+      if (hasNormalized) {
+        try {
+          final normalizedResponse = await _dio.get(
+            "/resource/Customer",
+            queryParameters: {
+              "fields": jsonEncode(safeFields),
+              "filters": jsonEncode([
+                ...salesPersonFilter,
+                ["Customer", "normalized_customer_name", "like",
+                  "%$normalizedSearch%"],
+              ]),
+            },
+            options: options,
+          );
+
+          debugPrint(
+              "Normalized search status: ${normalizedResponse.statusCode}");
+
+          final isNormError = normalizedResponse.data is Map &&
+              normalizedResponse.data['exc_type'] != null;
+
+          if (normalizedResponse.statusCode == 200 && !isNormError) {
+            normalizedResults = normalizedResponse.data['data'] ?? [];
+            debugPrint(
+                "Normalized results count: ${normalizedResults.length}");
+          } else {
+            // ✅ Field became unavailable — clear cache so next search re-probes
+            _allowedCustomerFields = null;
+            debugPrint("Normalized search failed — cache cleared");
+          }
+        } catch (e) {
+          debugPrint("Normalized search skipped: $e");
+        }
+      } else {
+        debugPrint("normalized_customer_name not available — skipping");
+      }
+
+      // ── Merge & deduplicate ──────────────────────────────────────────────
+      final seen = <String>{};
+      final merged = [...nameResults, ...normalizedResults]
+          .where((c) => seen.add(c['name'] as String))
+          .toList();
+
+      debugPrint("Merged unique count: ${merged.length}");
+
+      return CustomerList.fromJson({"data": merged});
     } catch (e) {
       debugPrint("Customer Search Error: $e");
       throw Exception("Failed to search customer");
     }
   }
-
-
   Future<CustomerList?> searchCustomerId(String customerName, context) async {
     final url =
         '/resource/Customer?filters=[["Customer", "customer_name","=", "$customerName"]]';
@@ -7583,75 +10322,32 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   }
 
   // sales Order
-  // Future<SalesOrderResponse?> salesOrder(
-  //     String customerName,
-  //     String deliveryDate,
-  //     List item,
-  //     BuildContext context, {
-  //       Map<String, dynamic>? customerDetails,
-  //       String? setWarehouse, // 🆕
-  //     }) async {
-  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //
-  //   const url = '/resource/Sales Order';
-  //   var request = {
-  //     "customer": customerName,
-  //     "delivery_date": deliveryDate,
-  //     "items": item,
-  //     if (setWarehouse != null) "set_warehouse": setWarehouse, // 🆕
-  //     if (customerDetails != null) ...customerDetails,
-  //   };
-  //
-  //   try {
-  //     final cookies = await _sharedPrefService.getCookies();
-  //
-  //     debugPrint('Requesting data from URL: ${baseUrl + url}');
-  //     final response = await _dio.post(
-  //       url,
-  //       data: request,
-  //       options: Options(
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Cookie': cookies,
-  //         },
-  //         validateStatus: (status) => status! < 500,
-  //       ),
-  //     );
-  //
-  //     debugPrint('Response status: ${response.statusCode}');
-  //     debugPrint('Response data: ${response.data}');
-  //     debugPrint('Request data: $request');
-  //
-  //     if (response.statusCode == 200) {
-  //       provider.clearItem();
-  //       return SalesOrderResponse.fromJson(response.data);
-  //     } else {
-  //       // 🔹 Extract ERP error
-  //       final data = response.data;
-  //       if (data is Map && data.containsKey('exception')) {
-  //         final rawMessage = data['exception'] as String;
-  //         final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
-  //         throw Exception(formattedMessage);
-  //       }
-  //       throw Exception('Failed to create sales order');
-  //     }
-  //   } on DioException catch (e) {
-  //     debugPrint('DioException: ${e.message}');
-  //     if (e.response != null) {
-  //       final data = e.response?.data;
-  //       debugPrint('Response data: $data');
-  //       if (data is Map && data.containsKey('exception')) {
-  //         final rawMessage = data['exception'] as String;
-  //         final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
-  //         throw Exception(formattedMessage);
-  //       }
-  //     }
-  //     throw Exception('Failed to create sales order');
-  //   } catch (e) {
-  //     debugPrint('Exception: $e');
-  //     throw Exception(e.toString());
-  //   }
-  // }
+
+
+  Future<String?> fetchDefaultSalesTaxTemplate(String company) async {
+    final url =
+        '/resource/Sales Taxes and Charges Template'
+        '?filters=[["company","=","$company"],["is_default","=",1]]'
+        '&fields=["name"]'
+        '&limit=1';
+
+    final cookies = await _sharedPrefService.getCookies();
+
+    final response = await _dio.get(
+      url,
+      options: Options(headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookies,
+      }),
+    );
+
+    final data = response.data['data'];
+    if (data != null && data.isNotEmpty) {
+      return data.first['name'];
+    }
+    return null;
+  }
+
   Future<SalesOrderResponse?> salesOrder(
       String customerName,
       String deliveryDate,
@@ -7659,35 +10355,50 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       BuildContext context, {
         Map<String, dynamic>? customerDetails,
         String? setWarehouse,
+        // String? quotation,
       }) async {
-
     const url = '/resource/Sales Order';
 
-    // 🔹 Fetch branch + default warehouse of logged-in user
+    // 🔹 Fetch user branch + warehouse (may be null)
     final userBranchData = await fetchUserBranch(context);
 
-    if (userBranchData == null || userBranchData['branch']!.isEmpty) {
-      throw Exception('Branch is mandatory but not configured for user.');
+    final String? branch = userBranchData?['branch'];
+    final String? defaultWarehouse = userBranchData?['default_warehouse'];
+    final company = await _sharedPrefService.getCompany();
+
+    if (company == null || company.isEmpty) {
+      throw Exception("Company not selected");
     }
-
-    final String branch = userBranchData['branch']!;
-    final String defaultWarehouse = userBranchData['default_warehouse'] ?? '';
-
-    // 🔹 Final request payload
-    final request = {
+    // 🔹 Build request payload safely
+    final Map<String, dynamic> request = {
+      "company": company,
       "customer": customerName,
       "delivery_date": deliveryDate,
-      "branch": branch, // ✅ REQUIRED
       "items": items,
-
-      // Priority: manually selected warehouse > user default
-      if (setWarehouse != null && setWarehouse.isNotEmpty)
-        "set_warehouse": setWarehouse
-      else if (defaultWarehouse.isNotEmpty)
-        "set_warehouse": defaultWarehouse,
-
-      if (customerDetails != null) ...customerDetails,
     };
+    // 🔹 Add branch ONLY if available
+    if (branch != null && branch.isNotEmpty) {
+      request["branch"] = branch;
+    }
+
+    // 🔹 Warehouse priority:
+    // 1. Explicit warehouse
+    // 2. User default warehouse
+    if (setWarehouse != null && setWarehouse.isNotEmpty) {
+      request["set_warehouse"] = setWarehouse;
+    } else if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
+      request["set_warehouse"] = defaultWarehouse;
+    }
+
+    // 🔹 Merge customer details last (optional)
+    if (customerDetails != null) {
+      request.addAll(customerDetails);
+    }
+    final taxTemplate = await fetchDefaultSalesTaxTemplate(company);
+
+    if (taxTemplate != null) {
+      request["taxes_and_charges"] = taxTemplate;
+    }
 
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -7706,14 +10417,15 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
       if (response.statusCode == 200) {
         return SalesOrderResponse.fromJson(response.data);
-      } else {
-        final data = response.data;
-        if (data is Map && data.containsKey('exception')) {
-          final raw = data['exception'];
-          throw Exception(raw.replaceAll(RegExp(r'<[^>]*>'), ''));
-        }
-        throw Exception('Failed to create Sales Order');
       }
+
+      final data = response.data;
+      if (data is Map && data.containsKey('exception')) {
+        final raw = data['exception'];
+        throw Exception(raw.replaceAll(RegExp(r'<[^>]*>'), ''));
+      }
+
+      throw Exception('Failed to create Sales Order');
     } catch (e) {
       rethrow;
     }
@@ -7723,6 +10435,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       String name,
       String customerName,
       String deliveryDate,
+      String? setWarehouse,
       List items,
       BuildContext context, {
         Map<String, dynamic>? customerDetails,
@@ -7735,10 +10448,9 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      // final request = {
-      //   "items": items,
-      // };
       final request = {
+        if (setWarehouse != null && setWarehouse.isNotEmpty)
+          "set_warehouse": setWarehouse,
         "delivery_date": deliveryDate,
         "items": items,
       };
@@ -7761,7 +10473,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       debugPrint('PUT Request data: $request');
 
       if (response.statusCode == 200) {
-        provider.clearItem();
+        // provider.clearItem();
         return SalesOrderResponse.fromJson(response.data);
       } else {
         final data = response.data;
@@ -7789,7 +10501,214 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       throw Exception(e.toString());
     }
   }
+  Future<bool> submitSalesOrder(String salesOrderName) async {
+    final url = '/resource/Sales Order/$salesOrderName';
+    final cookies = await _sharedPrefService.getCookies();
 
+    try {
+      final response = await _dio.put(
+        url,
+        data: {
+          "data": {
+            "docstatus": 1   // ✅ KEY FIELD
+          }
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      debugPrint("📤 SALES ORDER SUBMIT RESPONSE: ${response.data}");
+
+      if (response.statusCode == 200) {
+        debugPrint("✅ Sales Order submitted successfully");
+        return true;
+      } else {
+        debugPrint("❌ Failed to submit Sales Order: ${response.data}");
+        return false;
+      }
+    } catch (e) {
+      debugPrint("❌ Error submitting Sales Order: $e");
+      return false;
+    }
+  }
+  Future<Map<String, dynamic>?> createSalesOrderFromQuotation({
+    required String quotationName,
+  }) async {
+    final url =
+        '/method/frappe.model.mapper.make_mapped_doc'
+        '?method=erpnext.selling.doctype.quotation.quotation.make_sales_order'
+        '&source_name=$quotationName';
+
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      debugPrint("📦 Mapper Response: ${response.data}");
+
+      if (response.statusCode == 200) {
+        return response.data['message'];
+      } else {
+        throw Exception("Failed to map quotation to sales order");
+      }
+    } catch (e) {
+      debugPrint("❌ Mapper API Error: $e");
+      return null;
+    }
+  }
+  Future<List<String>> fetchPrintFormats() async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final url =
+          '/method/frappe.desk.search.search_link'
+          '?txt='
+          '&doctype=Print Format'
+          '&filters={"doc_type":"Sales Order"}';
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+
+        // 🔥 Extract only "value"
+        final List formats = data['message'];
+
+        return formats.map<String>((e) => e['value'].toString()).toList();
+      } else {
+        throw Exception("Failed to fetch print formats");
+      }
+    } catch (e) {
+      debugPrint("Fetch formats error: $e");
+      throw Exception("Error fetching print formats");
+    }
+  }
+  // Future<void> downloadSalesOrderPdf(
+  //     String salesOrderName,
+  //     String format,
+  //     BuildContext context,
+  //     ) async {
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final url =
+  //         '/method/frappe.utils.print_format.download_pdf'
+  //         '?doctype=Sales Order'
+  //         '&name=$salesOrderName'
+  //         '&format=$format';
+  //
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         responseType: ResponseType.bytes,
+  //         headers: {
+  //           'Cookie': cookies,
+  //         },
+  //       ),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       final bytes = response.data;
+  //
+  //       final dir = await getApplicationDocumentsDirectory();
+  //       final filePath = '${dir.path}/$salesOrderName-$format.pdf';
+  //       final file = File(filePath);
+  //
+  //       await file.writeAsBytes(bytes);
+  //
+  //       await OpenFilex.open(filePath);
+  //
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text("Opened $format")),
+  //       );
+  //     } else {
+  //       throw Exception("Download failed");
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error: $e");
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("Failed to open PDF")),
+  //     );
+  //   }
+  // }
+  Future<String?> downloadSalesOrderPdf(
+      String salesOrderName,
+      String format,
+      ) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final url =
+          '/method/frappe.utils.print_format.download_pdf'
+          '?doctype=Sales Order'
+          '&name=$salesOrderName'
+          '&format=$format';
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Cookie': cookies},
+        ),
+      );
+
+      debugPrint("Status: ${response.statusCode}");
+      debugPrint("Headers: ${response.headers}");
+
+      final contentType =
+          response.headers['content-type']?.toString() ?? '';
+
+      /// ✅ Validate PDF
+      if (!contentType.contains('pdf')) {
+        debugPrint("❌ Not a PDF response");
+
+        try {
+          final text = String.fromCharCodes(response.data);
+          debugPrint("Response: $text");
+        } catch (_) {}
+
+        return null;
+      }
+
+      final dir = await getApplicationDocumentsDirectory();
+
+      final safeName = salesOrderName.replaceAll('/', '_');
+      final safeFormat = format.replaceAll(' ', '_');
+
+      final filePath = '${dir.path}/${safeName}_$safeFormat.pdf';
+
+      final file = File(filePath);
+
+      await file.writeAsBytes(response.data, flush: true);
+
+      debugPrint("✅ Saved at: $filePath");
+
+      return filePath;
+    } catch (e) {
+      debugPrint("Error: $e");
+      return null;
+    }
+  }
   //payment recipt
   Future<GetPaymentEntryResponse?> getPaymentReecipt(context) async {
     final url =
@@ -7835,29 +10754,90 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
   //S Ord
   
+  // Future<Map<String, dynamic>> fetchCustomerDetails(
+  //     BuildContext context,
+  //     String customerName,
+  //     ) async {
+  //   try {
+  //     // Get company name from SharedPreferences
+  //     final company = await _sharedPrefService.getCompany();
+  //
+  //     if (company == null || company.isEmpty) {
+  //       throw Exception("Company not found in SharedPreferences");
+  //     }
+  //
+  //     final url =
+  //         '/method/erpnext.accounts.party.get_party_details?company=${Uri.encodeComponent(company)}&party=$customerName&doctype=Sales Order';
+  //
+  //     print("Fetching customer details with URL: $url");
+  //
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     // Debugging output
+  //     debugPrint('Requesting data from URL: ${baseUrl + url}');
+  //
+  //     // Sending POST request using Dio
+  //     final response = await _dio.post(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) {
+  //           return status! < 500; // Accepts status less than 500
+  //         },
+  //       ),
+  //     );
+  //
+  //     debugPrint('Response status: ${response.statusCode}');
+  //     debugPrint('Response data: ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       return response.data;
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //       throw Exception('Failed to fetch customer details');
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       debugPrint('Response data: ${e.response?.data}');
+  //     }
+  //     throw Exception('Failed to fetch customer details due to DioException');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch customer details');
+  //   }
+  // }
   Future<Map<String, dynamic>> fetchCustomerDetails(
       BuildContext context,
       String customerName,
       ) async {
     try {
-      // Get company name from SharedPreferences
       final company = await _sharedPrefService.getCompany();
 
       if (company == null || company.isEmpty) {
         throw Exception("Company not found in SharedPreferences");
       }
 
-      final url =
-          '/method/erpnext.accounts.party.get_party_details?company=${Uri.encodeComponent(company)}&party=$customerName&doctype=Sales Order';
+      // ✅ Encode both company and customerName to handle special chars like &
+      final encodedCompany = Uri.encodeComponent(company);
+      final encodedCustomer = Uri.encodeComponent(customerName);
 
-      print("Fetching customer details with URL: $url");
+      final url =
+          '/method/erpnext.accounts.party.get_party_details?company=$encodedCompany&party=$encodedCustomer&doctype=Sales Order';
+
+      debugPrint('┌─ [fetchCustomerDetails] REQUEST ───────────────');
+      debugPrint('│ raw customerName : $customerName');
+      debugPrint('│ encoded customer : $encodedCustomer');
+      debugPrint('│ raw company      : $company');
+      debugPrint('│ encoded company  : $encodedCompany');
+      debugPrint('│ full URL         : ${baseUrl + url}');
+      debugPrint('└────────────────────────────────────────────────');
 
       final cookies = await _sharedPrefService.getCookies();
 
-      // Debugging output
-      debugPrint('Requesting data from URL: ${baseUrl + url}');
-
-      // Sending POST request using Dio
       final response = await _dio.post(
         url,
         options: Options(
@@ -7866,32 +10846,39 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
             'Cookie': cookies,
           },
           validateStatus: (status) {
-            return status! < 500; // Accepts status less than 500
+            return status! < 500;
           },
         ),
       );
 
-      debugPrint('Response status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
+      debugPrint('┌─ [fetchCustomerDetails] RESPONSE ──────────────');
+      debugPrint('│ status : ${response.statusCode}');
+      debugPrint('│ data   : ${response.data}');
+      debugPrint('└────────────────────────────────────────────────');
 
       if (response.statusCode == 200) {
         return response.data;
       } else {
+        debugPrint('[fetchCustomerDetails] ❌ status ${response.statusCode}');
         apiErrorHandler.handleHttpError(context, response);
         throw Exception('Failed to fetch customer details');
       }
     } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        debugPrint('Response data: ${e.response?.data}');
-      }
+      debugPrint('┌─ [fetchCustomerDetails] DIO ERROR ─────────────');
+      debugPrint('│ type    : ${e.type}');
+      debugPrint('│ status  : ${e.response?.statusCode}');
+      debugPrint('│ message : ${e.message}');
+      debugPrint('│ response: ${e.response?.data}');
+      debugPrint('└────────────────────────────────────────────────');
       throw Exception('Failed to fetch customer details due to DioException');
-    } catch (e) {
-      debugPrint('Exception: $e');
+    } catch (e, stack) {
+      debugPrint('┌─ [fetchCustomerDetails] ERROR ─────────────────');
+      debugPrint('│ error : $e');
+      debugPrint('│ stack : $stack');
+      debugPrint('└────────────────────────────────────────────────');
       throw Exception('Failed to fetch customer details');
     }
   }
-
   Future<String> _getSellingPriceList(String customerName) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -8043,13 +11030,6 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       throw Exception("Unable to resolve logged-in Sales Person");
     }
 
-    // final url =
-    //     '/resource/Sales Order'
-    //     '?fields=["name","customer_name","customer","delivery_date","creation","grand_total","status","transaction_date"]'
-    //     '&filters=[["Sales Team","sales_person","=","$salesPerson"]]'
-    //     '&limit_start=$limitStart'
-    //     '&limit_page_length=$pageLength'
-    //     '&order_by=transaction_date desc';
     final url =
         '/resource/Sales Order'
         '?fields=["name","customer_name","customer","delivery_date","creation","grand_total","rounded_total","status","transaction_date"]'
@@ -8275,20 +11255,22 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
           // ✅ Items with item-level info
           "items": items.map((i) {
-            final matchingItem = itemDetails?.firstWhere(
-                  (d) => d["item_code"] == i["item_code"],
-              orElse: () => {},
-            );
+            final uiDiscount = (i["discount_percentage"] ?? 0).toDouble();
+
             return {
-              ...i,
-              if (matchingItem != null && matchingItem.isNotEmpty) ...{
-                "rate": matchingItem["data"]?["price_list_rate"],
-                "base_rate": matchingItem["data"]?["base_price_list_rate"],
-                "discount_percentage": matchingItem["data"]?["discount_percentage"],
-                "uom": matchingItem["data"]?["uom"],
-              },
+              "item_code": i["item_code"],
+              "qty": i["qty"],
+              "uom": i["uom"] ?? "Nos",
+
+              /// 🔑 SEND BOTH
+              "price_list_rate": i["price_list_rate"],
+              "rate": i["rate"],
+
+              if (uiDiscount > 0)
+                "discount_percentage": uiDiscount,
             };
           }).toList(),
+
         }
       };
 
@@ -8440,6 +11422,38 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       return null;
     }
   }
+
+  Future<double?> getLastPurchaseRate({
+    required String itemCode,
+  }) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final encodedItemCode = Uri.encodeComponent(itemCode);
+
+      final response = await _dio.get(
+        '/resource/Item/$encodedItemCode',
+        queryParameters: {
+          "fields": jsonEncode(["last_purchase_rate"]),
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'];
+        return (data['last_purchase_rate'] as num?)?.toDouble() ?? 0.0;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching last purchase rate: $e');
+      return null;
+    }
+  }
   Future<Map<String, dynamic>?> getQuotationDetails(String quotationName, BuildContext context) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -8489,18 +11503,23 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
           "transaction_date": transactionDate,
           "valid_till": validTill,
           "items": items.map((i) {
-            final matchingItem = itemDetails?.firstWhere(
-                  (d) => d["item_code"] == i["item_code"],
-              orElse: () => {},
-            );
+            final discount = (i["discount_percentage"] ?? 0).toDouble();
+
             return {
-              ...i,
-              if (matchingItem != null && matchingItem.isNotEmpty) ...{
-                "rate": matchingItem["data"]?["price_list_rate"],
-                "discount_percentage": matchingItem["data"]?["discount_percentage"],
-              },
+              "name": i["name"],            // REQUIRED
+              "item_code": i["item_code"],  // REQUIRED
+              "qty": i["qty"],
+
+              /// 🔑 SEND BOTH
+              "price_list_rate": i["price_list_rate"],
+              "rate": i["rate"],
+
+              if (discount > 0)
+                "discount_percentage": discount,
             };
           }).toList(),
+
+
         }
       };
 

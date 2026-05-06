@@ -10,17 +10,23 @@ String BuildLedgerHtml(
     String toDate,
     {String? fallbackCustomerName}) {
 
-  // final results = (ledgerJson["message"]?["result"] as List<dynamic>?) ?? [];
   final results = (ledgerJson["message"]?["data"] as List<dynamic>?) ?? [];
 
-// TRIM FIRST 2 ROWS AND LAST 3 ROWS
-  List<dynamic> trimmedResults = [];
-  if (results.length > 5) {
-    trimmedResults = results.sublist(2, results.length - 3);
-  } else {
-    // If not enough rows, produce empty list
-    trimmedResults = [];
+// Remove completely empty rows only
+  final trimmedResults = results.where((row) {
+    final hasAmount = (row["debit"] ?? 0) != 0 ||
+        (row["credit"] ?? 0) != 0 ||
+        (row["balance"] ?? 0) != 0;
+    final hasAccount = row["account"] != null;
+    return hasAmount || hasAccount;
+  }).toList();
+  // List<dynamic> reportRows = [];
+  List<dynamic> reportRows = trimmedResults;
+
+  if (trimmedResults.length > 3) {
+    reportRows = trimmedResults.sublist(1, trimmedResults.length - 2);
   }
+
   final printedOn = DateFormat("dd-MM-yyyy HH:mm").format(DateTime.now());
 
   // Format incoming fromDate & toDate
@@ -36,21 +42,19 @@ String BuildLedgerHtml(
   final formattedFrom = formatDate(fromDate);
   final formattedTo = formatDate(toDate);
 
-  // Party Name: from ledger JSON or fallback to customer list
   String customerName = fallbackCustomerName ?? "";
-  for (var row in trimmedResults) {
-    if (row["party"] != null && row["party"].toString().isNotEmpty) {
-      customerName = row["party"];
-      break;
-    }
-  }
 
   final rows = StringBuffer();
 
 // Use a Set to keep track of unique entries
   final seen = <String>{};
 
-  for (var entry in trimmedResults) {
+  // for (var entry in trimmedResults) {
+  // for (int i = 0; i < trimmedResults.length; i++) {
+  //   final entry = trimmedResults[i];
+  for (int i = 0; i < reportRows.length; i++) {
+    final entry = reportRows[i];
+
     // Build a unique key for each row (based on account + debit + credit + balance)
     // You can add more fields if needed to make uniqueness stricter
     final uniqueKey = jsonEncode({
@@ -59,10 +63,6 @@ String BuildLedgerHtml(
       "credit": entry["credit"],
       "balance": entry["balance"],
     });
-
-    // Skip if this row was already seen
-    // if (seen.contains(uniqueKey)) continue;
-    // seen.add(uniqueKey);
 
     // Format date
     final rawDate = entry["posting_date"] ?? "";
@@ -76,17 +76,58 @@ String BuildLedgerHtml(
       }
     }
 
-    // Reference: voucher_type first, then voucher_no
+// Reference: voucher_type first, then voucher_no
     final voucherType = entry["voucher_type"] ?? "";
     final reference = entry["voucher_no"] ?? "";
     final displayReference =
     voucherType.isNotEmpty ? "$voucherType - $reference" : reference;
 
+// Remarks (to be shown under Reference)
     final rawAccount = entry["account"]?.toString() ?? "";
     final accountsToSkip = {"Debtors - CENT", "Receivable - Institutions - KSHPDC"};
 
     String remarks = accountsToSkip.contains(rawAccount) ? "" : rawAccount;
     remarks = remarks.replaceAll("'", "");
+
+    // final isTopRow = i == 0;
+    // final isLastTwoRows = i >= trimmedResults.length - 2;
+    // final isBoldReference = isTopRow || isLastTwoRows;
+    final accountName = entry["account"]?.toString().replaceAll("'", "") ?? "";
+
+    final isSummaryRow =
+        accountName == "Opening" ||
+            accountName == "Total" ||
+            accountName.startsWith("Closing");
+
+    final isBoldReference = isSummaryRow;
+
+// Combine Reference + Remarks
+    final combinedReference = remarks.isNotEmpty
+        ? '''
+      <div style="
+        font-weight: ${isBoldReference ? 'bold' : 'normal'};
+        color: ${isBoldReference ? '#000' : '#333'};
+      ">
+        $displayReference
+      </div>
+      <div style="
+        font-size: 11px;
+        font-weight: ${isBoldReference ? 'bold' : 'normal'};
+        color: ${isBoldReference ? '#000' : '#666'};
+        margin-top: 2px;
+      ">
+        $remarks
+      </div>
+    '''
+        : '''
+      <div style="
+        font-weight: ${isBoldReference ? 'bold' : 'normal'};
+        color: ${isBoldReference ? '#000' : '#333'};
+      ">
+        $displayReference
+      </div>
+    ''';
+
 
     // Amounts
     final debit = (entry["debit"] ?? 0).toDouble();
@@ -94,15 +135,15 @@ String BuildLedgerHtml(
     final balance = (entry["balance"] ?? 0).toDouble();
 
     rows.writeln('''
-  <tr>
-    <td>$formattedDate</td>
-    <td>$displayReference</td>
-    <td><b>$remarks</b></td>
-    <td class="amount">₹ ${debit.toStringAsFixed(2)}</td>
-    <td class="amount">₹ ${credit.toStringAsFixed(2)}</td>
-    <td class="amount">₹ ${balance.toStringAsFixed(2)}</td>
-  </tr>
-  ''');
+<tr>
+  <td>$formattedDate</td>
+  <td>$combinedReference</td>
+  <td class="amount">₹ ${debit.toStringAsFixed(2)}</td>
+  <td class="amount">₹ ${credit.toStringAsFixed(2)}</td>
+  <td class="amount">₹ ${balance.toStringAsFixed(2)}</td>
+</tr>
+''');
+
   }
 
   return '''
@@ -167,16 +208,16 @@ String BuildLedgerHtml(
     <h5>Period: $formattedFrom to $formattedTo</h5>
     <hr>
     <table>
-      <thead>
-        <tr>
-          <th style="width: 12%">Date</th>
-          <th style="width: 15%">Reference</th>
-          <th style="width: 25%">Remarks</th>
-          <th style="width: 15%">Debit</th>
-          <th style="width: 15%">Credit</th>
-          <th style="width: 18%">Balance</th>
-        </tr>
-      </thead>
+<thead>
+  <tr>
+    <th style="width: 12%">Date</th>
+    <th style="width: 40%">Reference</th>
+    <th style="width: 16%">Debit</th>
+    <th style="width: 16%">Credit</th>
+    <th style="width: 16%">Balance</th>
+  </tr>
+</thead>
+
       <tbody>
         ${rows.toString()}
       </tbody>
@@ -195,7 +236,8 @@ String buildAccountsReceivableHtml(
     String customerName,
     String postingDate,
     String rangeLabel, // <-- NEW (example: "0–30, 31–60, 61-Above")
-
+    String companyName,
+    String fullName,
     String? letterhead,
     String baseDomain,
     ) {
@@ -205,6 +247,7 @@ String buildAccountsReceivableHtml(
     final number = (value ?? 0).toDouble();
     return _inrFormatter.format(number);
   }
+
   final rows = report["data"] as List<dynamic>;
   if (rows.isEmpty) {
     return """
@@ -236,11 +279,7 @@ String buildAccountsReceivableHtml(
   for (var col in rangeColumns) {
     rangeHeaders += "<th>${col["label"]}</th>";
   }
-  String rangeCells(Map<String, dynamic> row) {
-    return rangeColumns
-        .map((c) => "<td style='text-align:right'>₹ ${row[c["fieldname"]] ?? 0}</td>")
-        .join();
-  }
+
   String rangeTotals = "";
   for (var col in rangeColumns) {
     final total = rows.fold<double>(
@@ -264,25 +303,57 @@ String buildAccountsReceivableHtml(
 
   for (var row in rows) {
     tableRows += """
-      <tr>
-        <td>${formatDate(row["posting_date"] ?? "")}</td>
-        <td style="text-align:right">${row["age"] ?? ""}</td>
-        <td>${row["voucher_type"] ?? ""}<br>${row["voucher_no"] ?? ""}</td>
-        <td>${row["remarks"] ?? ""}</td>
-        <td style="text-align:right">₹ ${row["invoiced"] ?? 0}</td>
-        <td style="text-align:right">₹ ${row["paid"] ?? 0}</td>
-        <td style="text-align:right">₹ ${row["credit_note"] ?? 0}</td>
-        <td style="text-align:right">₹ ${row["outstanding"] ?? 0}</td>
-${rangeCells(row)}
-      </tr>
-    """;
+  <tr>
+    <td>${formatDate(row["posting_date"] ?? "")}</td>
+    <td>
+      ${row["voucher_type"] ?? ""}<br>
+      ${row["voucher_no"] ?? ""}
+    </td>
+    <td>${formatDate(row["due_date"] ?? "")}</td>
+    <td style="text-align:right">₹ ${formatAmount(row["outstanding"] ?? 0)}</td>
+    <td style="text-align:right">${row["age"] ?? ""}</td>
+  </tr>
+  """;
   }
 
+
   // Add totals
-  double totalInv = rows.fold(0.0, (sum, r) => sum + (r["invoiced"] ?? 0));
-  double totalPaid = rows.fold(0.0, (sum, r) => sum + (r["paid"] ?? 0));
-  double totalCN = rows.fold(0.0, (sum, r) => sum + (r["credit_note"] ?? 0));
-  double totalOut = rows.fold(0.0, (sum, r) => sum + (r["outstanding"] ?? 0));
+  double totalOutstanding =
+  rows.fold(0.0, (sum, r) => sum + (r["outstanding"] ?? 0));
+  final String overdueDate = formatDate(postingDate);
+
+  String reminderHtml = """
+<div style="
+  border: 1px solid #999;
+  padding: 10px;
+  margin: 12px 0;
+  font-size: 11pt;
+  background-color: #f9f9f9;
+">
+  Hello! This is a reminder that your account balance of
+  <b>₹ ${formatAmount(totalOutstanding)}</b>
+  was overdue as of
+  <b>$overdueDate</b>.
+  Please find the Receivable for your reference.
+  If you have any queries regarding this account,
+  please contact our office as soon as possible.
+</div>
+""";
+  String footerHtml = """
+<div style="
+  margin-top: 40px;
+  font-size: 11pt;
+  text-align: left;
+">
+  Regards,<br>
+  
+  <div style="height: 10px;"></div>
+
+  <b>$fullName</b><br>
+  <b>$companyName</b><br><br>
+</div>
+""";
+
 
   return """
 <!DOCTYPE html>
@@ -314,47 +385,43 @@ ${letterHeadHtml.isNotEmpty ? """
 <h2 style="text-align:center;">Accounts Receivable</h2>
 <div style="text-align:center; font-size:12px; margin-bottom:10px;">
   <b>Customer:</b> $customerName<br>
-<b>Due Date Until:</b> ${formatDate(postingDate)}
-<b>Aging Range:</b> $rangeLabel
+<b>Date:</b> ${formatDate(postingDate)}
 </div>
-
+$reminderHtml
 <table>
+<colgroup>
+  <col style="width:12%">   <!-- Date -->
+  <col style="width:38%">   <!-- Reference (WIDER) -->
+  <col style="width:15%">   <!-- Due Date -->
+  <col style="width:20%">   <!-- Outstanding -->
+  <col style="width:8%">    <!-- Overdue by days (NARROWER) -->
+</colgroup>
 <thead>
 <tr>
-<th>Date</th>
-<th>Age</th>
-<th>Reference</th>
-<th>Remarks</th>
-<th>Invoiced</th>
-<th>Paid</th>
-<th>Credit Note</th>
-<th>Outstanding</th>
-$rangeHeaders
-
+  <th>Date</th>
+  <th>Reference</th>
+  <th>Due Date</th>
+  <th style="text-align:right">Outstanding</th>
+  <th style="text-align:right">Overdue by days</th>
 </tr>
 </thead>
+
+
 
 <tbody>
 $tableRows
 
 <tr>
+  <td colspan="3" style="text-align:right"><b>Total</b></td>
+  <td style="text-align:right"><b>₹ ${formatAmount(totalOutstanding)}</b></td>
   <td></td>
-  <td></td>
-  <td></td>
-  <td style="text-align:right"><b>Total</b></td>
-<td style="text-align:right">₹ ${formatAmount(totalInv)}</td>
-<td style="text-align:right">₹ ${formatAmount(totalPaid)}</td>
-<td style="text-align:right">₹ ${formatAmount(totalCN)}</td>
-<td style="text-align:right">₹ ${formatAmount(totalOut)}</td>
-
-$rangeTotals
-
-
-
 </tr>
+
+
 
 </tbody>
 </table>
+$footerHtml
 
 </body>
 </html>

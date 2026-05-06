@@ -2,8 +2,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:sales_ordering_app/utils/app_colors.dart';
 import 'package:sales_ordering_app/utils/common/common_widgets.dart';
+import 'package:sales_ordering_app/view/sales_manager/performance/salesperson_performance_screen.dart';
 
 import 'executive_report/ExecutiveReportScreen.dart';
+import 'expense_tracker/ExecutiveTrackerScreen.dart';
 import 'expense_tracker/ExpenseTrackerScreen.dart';
 
 class SalesManagerScreen extends StatelessWidget {
@@ -22,21 +24,6 @@ class SalesManagerScreen extends StatelessWidget {
           children: [
 
             // ---- Graph / Dashboard section ----
-            // Expanded(
-            //   child: Container(
-            //     width: double.infinity,
-            //     decoration: BoxDecoration(
-            //       color: Colors.blue.withOpacity(0.1),
-            //       borderRadius: BorderRadius.circular(12),
-            //     ),
-            //     child: const Center(
-            //       child: Text(
-            //         "Dashboard Graphs & Stats",
-            //         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            //       ),
-            //     ),
-            //   ),
-            // ),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -159,12 +146,12 @@ class SalesManagerScreen extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const ExpenseTrackerScreen(),
+                                builder: (_) => const ExecutiveTrackerScreen(),
                               ),
                             );
                           },
                         ),
-                        const Text("Expense Tracker", style: TextStyle(fontSize: 12)),
+                        const Text("Visit Log", style: TextStyle(fontSize: 12)),
                       ],
                     ),
 
@@ -185,6 +172,27 @@ class SalesManagerScreen extends StatelessWidget {
                           },
                         ),
                         const Text("Executive Report", style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+
+                    // Performance Report Button
+                    Column(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.bar_chart_rounded, size: 36),
+                          color: AppColors.primaryColor,
+                          tooltip: "Performance",
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SalesPersonPerformanceScreen(
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const Text("Performance", style: TextStyle(fontSize: 12)),
                       ],
                     ),
                   ],
