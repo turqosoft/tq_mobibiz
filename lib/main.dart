@@ -20,9 +20,18 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidInit);
 
-  // await flutterLocalNotificationsPlugin.initialize(initSettings);
+  const iosInit = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+
+  const initSettings = InitializationSettings(
+    android: androidInit,
+    iOS: iosInit,
+  );
+
   await flutterLocalNotificationsPlugin.initialize(
     initSettings,
     onDidReceiveNotificationResponse: (NotificationResponse response) {
@@ -33,15 +42,18 @@ void main() async {
       }
     },
   );
-  // ✅ Request Notification Permission (Android 13+)
+
+  // Android 13+ notification permission
   await _requestNotificationPermission();
 
-  runApp(MultiProvider(
-    providers: [
-      ChangeNotifierProvider(create: (_) => SalesOrderProvider()),
-    ],
-    child: const MyApp(),
-  ));
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => SalesOrderProvider()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 Future<void> _requestNotificationPermission() async {
   var status = await Permission.notification.status;
