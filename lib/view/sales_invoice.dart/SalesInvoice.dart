@@ -23,7 +23,7 @@ class _SalesInvoicePageState extends State<SalesInvoicePage>
 
   late TabController _tabController;
   Future<void> Function()? _onSave;
-
+  bool _isSubmitting = false;
   @override
   void initState() {
     super.initState();
@@ -42,61 +42,178 @@ class _SalesInvoicePageState extends State<SalesInvoicePage>
     _tabController.dispose();
     super.dispose();
   }
-
+  //
+  // @override
+  // Widget build(BuildContext context) {
+  //   return DefaultTabController(
+  //     length: 2,
+  //     child: Scaffold(
+  //       appBar: AppBar(
+  //         backgroundColor: AppColors.primaryColor,
+  //         leading: IconButton(
+  //           icon: const Icon(Icons.arrow_back, color: Colors.white),
+  //           onPressed: () => Navigator.pop(context),
+  //         ),
+  //         title: const Text(
+  //           'Sales Invoice',
+  //           style: TextStyle(color: Colors.white),
+  //         ),
+  //
+  //         /// 🔥 SHOW SAVE ONLY ON CREATE TAB
+  //         actions: _tabController.index == 0
+  //             ? [
+  //           IconButton(
+  //             icon: const Icon(Icons.save, color: Colors.white),
+  //             onPressed: () async {
+  //               if (_onSave != null) {
+  //                 await _onSave!();
+  //               }
+  //             },
+  //           ),
+  //         ]
+  //             : null,
+  //
+  //         bottom: TabBar(
+  //           controller: _tabController,
+  //           tabs: const [
+  //             Tab(text: 'Sales Invoice'),
+  //             Tab(text: 'Sales Invoice List'),
+  //           ],
+  //         ),
+  //       ),
+  //
+  //       body: TabBarView(
+  //         controller: _tabController,
+  //         children: [
+  //           SalesInvoiceCreateScreen(
+  //             onSave: (saveFn) {
+  //               _onSave = saveFn;
+  //             },
+  //           ),
+  //           // SalesInvoiceScreen(),
+  //           SalesInvoiceScreen(
+  //             highlightInvoice: widget.initialInvoice, // 👈 pass it down
+  //           ),
+  //         ],
+  //       ),
+  //
+  //     ),
+  //   );
+  // }
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: AppColors.primaryColor,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: const Text(
-            'Sales Invoice',
-            style: TextStyle(color: Colors.white),
-          ),
+      child: Stack(
+        children: [
+          Scaffold(
+            appBar: AppBar(
+              backgroundColor: AppColors.primaryColor,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                // 👇 Block back navigation during save
+                onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+              ),
+              title: const Text(
+                'Sales Invoice',
+                style: TextStyle(color: Colors.white),
+              ),
 
-          /// 🔥 SHOW SAVE ONLY ON CREATE TAB
-          actions: _tabController.index == 0
-              ? [
-            IconButton(
-              icon: const Icon(Icons.save, color: Colors.white),
-              onPressed: () async {
-                if (_onSave != null) {
-                  await _onSave!();
-                }
-              },
+              /// 🔥 SHOW SAVE ONLY ON CREATE TAB
+              actions: _tabController.index == 0
+                  ? [
+                IconButton(
+                  icon: const Icon(Icons.save, color: Colors.white),
+                  // 👇 Disable save button during submission
+                  onPressed: _isSubmitting
+                      ? null
+                      : () async {
+                    if (_onSave != null) {
+                      await _onSave!();
+                    }
+                  },
+                ),
+              ]
+                  : null,
+
+              bottom: TabBar(
+                controller: _tabController,
+                // 👇 Disable tab switching during save
+                onTap: _isSubmitting ? (_) {} : null,
+                tabs: const [
+                  Tab(text: 'Sales Invoice'),
+                  Tab(text: 'Sales Invoice List'),
+                ],
+              ),
             ),
-          ]
-              : null,
 
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'Sales Invoice'),
-              Tab(text: 'Sales Invoice List'),
-            ],
+            body: TabBarView(
+              controller: _tabController,
+              // 👇 Disable swipe between tabs during save
+              physics: _isSubmitting
+                  ? const NeverScrollableScrollPhysics()
+                  : const AlwaysScrollableScrollPhysics(),
+              children: [
+                SalesInvoiceCreateScreen(
+                  onSave: (saveFn) {
+                    _onSave = saveFn;
+                  },
+                  // 👇 Pass callbacks so child can control parent's overlay
+                  onSubmitStart: () {
+                    if (mounted) setState(() => _isSubmitting = true);
+                  },
+                  onSubmitEnd: () {
+                    if (mounted) setState(() => _isSubmitting = false);
+                  },
+                ),
+                SalesInvoiceScreen(
+                  highlightInvoice: widget.initialInvoice,
+                ),
+              ],
+            ),
           ),
-        ),
 
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            SalesInvoiceCreateScreen(
-              onSave: (saveFn) {
-                _onSave = saveFn;
-              },
+          // 👇 Full-screen overlay — covers AppBar + TabBar + body
+          if (_isSubmitting)
+            Container(
+              color: Colors.black.withOpacity(0.4),
+              child: Center(
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(
+                        strokeWidth: 3,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primaryColor,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Creating Invoice...',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Please wait',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            // SalesInvoiceScreen(),
-            SalesInvoiceScreen(
-              highlightInvoice: widget.initialInvoice, // 👈 pass it down
-            ),
-          ],
-        ),
-
+        ],
       ),
     );
   }

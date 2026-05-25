@@ -1480,24 +1480,59 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
 
                     if (!provider.eemCreated) {
                       final pos = await _getCurrentPosition();
+                      // After successful save, refresh expense rows to get server-assigned names
                       final ok = await provider.saveEEMExpenses(
                         expenses,
-                        startOdometer: startOdometer,
+                        startOdometer: _startOdometer,
                         endOdometer: _endOdometer,
                         startLat: pos?.latitude,
                         startLong: pos?.longitude,
                       );
+
+                      if (ok) {
+                        // ── Fetch saved rows to get ERPNext-assigned row names ──
+                        final eem = await provider.apiService
+                            ?.fetchLatestUnsubmittedEEM(provider.eemEmployee!);
+                        if (eem != null) {
+                          final savedRows = List<Map<String, dynamic>>.from(
+                              eem["employee_expense_tracking"] ?? []);
+                          setState(() {
+                            for (int i = 0; i < savedRows.length && i < expenseRows.length; i++) {
+                              expenseRows[i]["name"] = savedRows[i]["name"];
+                            }
+                          });
+                        }
+                      }
+
                       Fluttertoast.showToast(
                         msg: ok
                             ? "Expenses saved successfully!"
                             : "Failed to save expenses.",
                       );
                     } else {
+                      // After successful save, refresh expense rows to get server-assigned names
                       final ok = await provider.saveEEMExpenses(
                         expenses,
-                        startOdometer: startOdometer,
-                        endOdometer: _endOdometer
+                        startOdometer: _startOdometer,
+                        endOdometer: _endOdometer,
+
                       );
+
+                      if (ok) {
+                        // ── Fetch saved rows to get ERPNext-assigned row names ──
+                        final eem = await provider.apiService
+                            ?.fetchLatestUnsubmittedEEM(provider.eemEmployee!);
+                        if (eem != null) {
+                          final savedRows = List<Map<String, dynamic>>.from(
+                              eem["employee_expense_tracking"] ?? []);
+                          setState(() {
+                            for (int i = 0; i < savedRows.length && i < expenseRows.length; i++) {
+                              expenseRows[i]["name"] = savedRows[i]["name"];
+                            }
+                          });
+                        }
+                      }
+
                       Fluttertoast.showToast(
                         msg: ok
                             ? "Expenses saved successfully!"
@@ -1528,87 +1563,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                   IconButton(
                     tooltip: "Submit Expenses",
 
-                    // onPressed: provider.isEEMSubmitLoading || provider.isEEMSaveLoading
-                    //     ? null
-                    //     : () async {
-                    //   // ── Checkout validation ───────────────────────
-                    //   showDialog(
-                    //     context: context,
-                    //     barrierDismissible: false,
-                    //     builder: (_) =>
-                    //     const Center(child: CircularProgressIndicator()),
-                    //   );
-                    //
-                    //   final canStop = await provider.canStopTracking();
-                    //
-                    //   if (mounted)
-                    //     Navigator.of(context, rootNavigator: true).pop();
-                    //
-                    //   if (!canStop) {
-                    //     Fluttertoast.showToast(
-                    //       msg: "Please checkout before submitting.",
-                    //       toastLength: Toast.LENGTH_LONG,
-                    //       backgroundColor: Colors.red.shade600,
-                    //       textColor: Colors.white,
-                    //     );
-                    //     return;
-                    //   }
-                    //
-                    //   // ── End odometer validation ───────────────────
-                    //   final endOdometer = _endOdometer;
-                    //   if (endOdometer == null) {
-                    //     Fluttertoast.showToast(
-                    //       msg: "Please enter end odometer reading before submitting.",
-                    //       toastLength: Toast.LENGTH_LONG,
-                    //       backgroundColor: Colors.red.shade600,
-                    //       textColor: Colors.white,
-                    //     );
-                    //     return;
-                    //   }
-                    //
-                    //   // ── Start odometer sanity check ───────────────
-                    //   final startOdometer = _startOdometer;
-                    //   if (startOdometer != null && endOdometer <= startOdometer) {
-                    //     Fluttertoast.showToast(
-                    //       msg: "End odometer must be greater than start odometer.",
-                    //       toastLength: Toast.LENGTH_LONG,
-                    //       backgroundColor: Colors.red.shade600,
-                    //       textColor: Colors.white,
-                    //     );
-                    //     return;
-                    //   }
-                    //
-                    //   // ── Confirm dialog ────────────────────────────
-                    //   final confirm = await _showConfirmDialog(
-                    //     context: context,
-                    //     title: "Submit Expenses",
-                    //     message:
-                    //     "Once submitted, this cannot be edited.\n\nDo you want to continue?",
-                    //     confirmText: "Submit",
-                    //     cancelText: "Cancel",
-                    //   );
-                    //   if (!confirm) return;
-                    //
-                    //   final expenses = _collectExpenses();
-                    //   final ok = await provider.submitEEMExpenses(
-                    //     expenses,
-                    //     startOdometer: startOdometer,
-                    //     endOdometer: endOdometer,
-                    //   );
-                    //
-                    //   if (ok) {
-                    //     setState(() {
-                    //       expenseRows.clear();
-                    //       _addExpenseRow();
-                    //       _startOdometer = null;
-                    //       _endOdometer = null;
-                    //     });
-                    //     Fluttertoast.showToast(
-                    //         msg: "Expenses submitted successfully!");
-                    //   } else {
-                    //     Fluttertoast.showToast(msg: "Failed to submit expenses.");
-                    //   }
-                    // },
                     onPressed: provider.isEEMSubmitLoading || provider.isEEMSaveLoading
                         ? null
                         : () async {
@@ -1710,39 +1664,39 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                   ),
 
                 // ── Create Site Visit ───────────────────────────
-                IconButton(
-                  icon: const Icon(Icons.add_location_alt, color: Colors.white),
-                  tooltip: "Create Site Visit",
-                  onPressed: () async {
-                    final provider =
-                    Provider.of<SalesOrderProvider>(context, listen: false);
-
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (_) =>
-                      const Center(child: CircularProgressIndicator()),
-                    );
-
-                    final canCreate = await provider.canCreateSiteVisit();
-
-                    if (mounted)
-                      Navigator.of(context, rootNavigator: true).pop();
-
-                    if (!canCreate) {
-                      Fluttertoast.showToast(
-                        msg:
-                        "Please check in today before creating a site visit.",
-                        toastLength: Toast.LENGTH_LONG,
-                        backgroundColor: Colors.red.shade600,
-                        textColor: Colors.white,
-                      );
-                      return;
-                    }
-
-                    _showCreateSiteVisitDialog();
-                  },
-                ),
+                // IconButton(
+                //   icon: const Icon(Icons.add_location_alt, color: Colors.white),
+                //   tooltip: "Create Site Visit",
+                //   onPressed: () async {
+                //     final provider =
+                //     Provider.of<SalesOrderProvider>(context, listen: false);
+                //
+                //     showDialog(
+                //       context: context,
+                //       barrierDismissible: false,
+                //       builder: (_) =>
+                //       const Center(child: CircularProgressIndicator()),
+                //     );
+                //
+                //     final canCreate = await provider.canCreateSiteVisit();
+                //
+                //     if (mounted)
+                //       Navigator.of(context, rootNavigator: true).pop();
+                //
+                //     if (!canCreate) {
+                //       Fluttertoast.showToast(
+                //         msg:
+                //         "Please check in today before creating a site visit.",
+                //         toastLength: Toast.LENGTH_LONG,
+                //         backgroundColor: Colors.red.shade600,
+                //         textColor: Colors.white,
+                //       );
+                //       return;
+                //     }
+                //
+                //     _showCreateSiteVisitDialog();
+                //   },
+                // ),
               ],
             );
           },
@@ -2219,21 +2173,91 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                   ),
                   const Spacer(),
                   // Refresh button — existing code unchanged
-                  Consumer<SalesOrderProvider>(
-                    builder: (context, provider, _) =>
-                    provider.isSiteVisitsLoading
-                        ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : IconButton(
-                      icon: Icon(Icons.refresh,
-                          size: 20, color: AppColors.primaryColor),
-                      onPressed: () => provider.fetchTodaySiteVisits(),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
+                  // Consumer<SalesOrderProvider>(
+                  //   builder: (context, provider, _) =>
+                  //   provider.isSiteVisitsLoading
+                  //       ? const SizedBox(
+                  //     width: 18,
+                  //     height: 18,
+                  //     child: CircularProgressIndicator(strokeWidth: 2),
+                  //   )
+                  //       : IconButton(
+                  //     icon: Icon(Icons.refresh,
+                  //         size: 20, color: AppColors.primaryColor),
+                  //     onPressed: () => provider.fetchTodaySiteVisits(),
+                  //     padding: EdgeInsets.zero,
+                  //     constraints: const BoxConstraints(),
+                  //   ),
+                  // ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+
+                      // ── Create Site Visit ─────────────────────
+                      IconButton(
+                        icon: Icon(
+                          Icons.add_location_alt,
+                          size: 22,
+                          color: AppColors.primaryColor,
+                        ),
+                        tooltip: "Create Site Visit",
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () async {
+                          final provider =
+                          Provider.of<SalesOrderProvider>(context, listen: false);
+
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) =>
+                            const Center(child: CircularProgressIndicator()),
+                          );
+
+                          final canCreate = await provider.canCreateSiteVisit();
+
+                          if (mounted) {
+                            Navigator.of(context, rootNavigator: true).pop();
+                          }
+
+                          if (!canCreate) {
+                            Fluttertoast.showToast(
+                              msg:
+                              "Please check in today before creating a site visit.",
+                              toastLength: Toast.LENGTH_LONG,
+                              backgroundColor: Colors.red.shade600,
+                              textColor: Colors.white,
+                            );
+                            return;
+                          }
+
+                          _showCreateSiteVisitDialog();
+                        },
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // ── Refresh Button ────────────────────────
+                      Consumer<SalesOrderProvider>(
+                        builder: (context, provider, _) =>
+                        provider.isSiteVisitsLoading
+                            ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                            : IconButton(
+                          icon: Icon(
+                            Icons.refresh,
+                            size: 20,
+                            color: AppColors.primaryColor,
+                          ),
+                          onPressed: () => provider.fetchTodaySiteVisits(),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ),
+                    ],
                   ),
                   if (widget.isEditMode && eemDate != null)
                     Text(

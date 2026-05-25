@@ -1036,15 +1036,16 @@ Padding(
       ),
     ];
 
-    /// ✅ Discount Amount
-    if (discountAmount > 0) {
+    /// ✅ Additional Discount % LAST (RIGHT)
+    if (additionalDiscount > 0) {
       cells.add(
         cell(
-          "Discount Amount",
-          discountAmount.toStringAsFixed(2),
+          "Additional Discount %",
+          "${additionalDiscount.toStringAsFixed(2)} %",
         ),
       );
     }
+
 
     /// ✅ Outstanding FIRST (LEFT)
     cells.add(
@@ -1054,12 +1055,13 @@ Padding(
       ),
     );
 
-    /// ✅ Additional Discount % LAST (RIGHT)
-    if (additionalDiscount > 0) {
+
+    /// ✅ Discount Amount
+    if (discountAmount > 0) {
       cells.add(
         cell(
-          "Additional Discount %",
-          "${additionalDiscount.toStringAsFixed(2)} %",
+          "Discount Amount",
+          discountAmount.toStringAsFixed(2),
         ),
       );
     }

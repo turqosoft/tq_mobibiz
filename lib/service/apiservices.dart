@@ -62,6 +62,10 @@ class ApiService {
   final apiErrorHandler = ApiErrorHandler();
   ApiService({required this.baseUrl})
       : _dio = Dio(BaseOptions(baseUrl: baseUrl));
+  // Strips /api to get the root server URL for file paths
+  String get serverUrl => baseUrl.endsWith('/api')
+      ? baseUrl.substring(0, baseUrl.length - 4)
+      : baseUrl;
 
   Future<String> getAppVersion() async {
     final PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -5449,7 +5453,89 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       throw Exception("Failed to fetch item details");
     }
   }
-
+  //
+  // Future<void> createSalesInvoice({
+  //   required BuildContext context,
+  //   required String customerName,
+  //   required String dueDate,
+  //   required String postingDate,
+  //   required List<Map<String, dynamic>> item,
+  //   required Map<String, dynamic> customerDetails,
+  // }) async {
+  //   const url = '/resource/Sales Invoice';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     // 🔹 Fetch user data (may be null or partial)
+  //     final userData = await fetchUserBranch(context);
+  //
+  //     final String? branch = userData?["branch"];
+  //     final String? defaultWarehouse = userData?["default_warehouse"];
+  //
+  //     // 🔹 Set warehouse only if available
+  //     final updatedItems = item.map((itm) {
+  //       final updated = Map<String, dynamic>.from(itm);
+  //       if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
+  //         updated["warehouse"] = defaultWarehouse;
+  //       }
+  //       return updated;
+  //     }).toList();
+  //
+  //     // 🔹 Build invoice payload
+  //     final Map<String, dynamic> invoiceData = {
+  //       "customer": customerName,
+  //       ...customerDetails,
+  //       "due_date": dueDate,
+  //       "posting_date": postingDate,
+  //       "set_posting_time": 1,
+  //       "items": updatedItems,
+  //     };
+  //
+  //     // 🔹 Add branch ONLY if present
+  //     if (branch != null && branch.isNotEmpty) {
+  //       invoiceData["branch"] = branch;
+  //     }
+  //
+  //     // 🔹 Add warehouse ONLY if present
+  //     if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
+  //       invoiceData["set_warehouse"] = defaultWarehouse;
+  //     }
+  //
+  //     final response = await _dio.post(
+  //       url,
+  //       data: {"data": invoiceData},
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //       ),
+  //     );
+  //
+  //     if (response.statusCode != 200) {
+  //       debugPrint('❌ Failed to create Sales Invoice');
+  //       debugPrint('Status: ${response.statusCode}');
+  //       debugPrint('Response: ${response.data}');
+  //       throw Exception('Failed to create Sales Invoice');
+  //     }
+  //
+  //     debugPrint('✅ Sales Invoice created successfully');
+  //     debugPrint('Response: ${response.data}');
+  //   } on DioError catch (dioError) {
+  //     debugPrint('❌ DioError while creating Sales Invoice');
+  //     debugPrint('Message: ${dioError.message}');
+  //     if (dioError.response != null) {
+  //       debugPrint('Status: ${dioError.response?.statusCode}');
+  //       debugPrint('Response: ${dioError.response?.data}');
+  //     }
+  //     rethrow;
+  //   } catch (e, stackTrace) {
+  //     debugPrint('❌ Exception while creating Sales Invoice: $e');
+  //     debugPrint('StackTrace: $stackTrace');
+  //     rethrow;
+  //   }
+  // }
   Future<void> createSalesInvoice({
     required BuildContext context,
     required String customerName,
@@ -5457,19 +5543,19 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     required String postingDate,
     required List<Map<String, dynamic>> item,
     required Map<String, dynamic> customerDetails,
+    String applyDiscountOn = 'Net Total',       // 👇 new
+    double additionalDiscountPercentage = 0.0,    // 👇 new
+    double discountAmount = 0.0,                  // 👇 new
   }) async {
     const url = '/resource/Sales Invoice';
 
     try {
       final cookies = await _sharedPrefService.getCookies();
-
-      // 🔹 Fetch user data (may be null or partial)
       final userData = await fetchUserBranch(context);
 
       final String? branch = userData?["branch"];
       final String? defaultWarehouse = userData?["default_warehouse"];
 
-      // 🔹 Set warehouse only if available
       final updatedItems = item.map((itm) {
         final updated = Map<String, dynamic>.from(itm);
         if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
@@ -5478,7 +5564,6 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
         return updated;
       }).toList();
 
-      // 🔹 Build invoice payload
       final Map<String, dynamic> invoiceData = {
         "customer": customerName,
         ...customerDetails,
@@ -5486,14 +5571,18 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
         "posting_date": postingDate,
         "set_posting_time": 1,
         "items": updatedItems,
+        // 👇 Discount fields — only include non-zero values to keep payload clean
+        "apply_discount_on": applyDiscountOn,
+        if (additionalDiscountPercentage > 0)
+          "additional_discount_percentage": additionalDiscountPercentage,
+        if (discountAmount > 0)
+          "discount_amount": discountAmount,
       };
 
-      // 🔹 Add branch ONLY if present
       if (branch != null && branch.isNotEmpty) {
         invoiceData["branch"] = branch;
       }
 
-      // 🔹 Add warehouse ONLY if present
       if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
         invoiceData["set_warehouse"] = defaultWarehouse;
       }
@@ -5532,7 +5621,81 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       rethrow;
     }
   }
+  // Future<bool> fetchDiscountSettings(BuildContext context) async {
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final response = await _dio.get(
+  //       '/method/frappe.client.get_single_value',
+  //       queryParameters: {
+  //         'doctype': 'Accounts Settings',
+  //         'field': 'enable_discounts_and_margin',
+  //       },
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //       ),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       final message = response.data['message'];
+  //       // message can come back as int (1/0) or string ("1"/"0")
+  //       return message == 1 || message == '1';
+  //     }
+  //
+  //     return false;
+  //   } catch (e) {
+  //     debugPrint('❌ Error fetching discount settings: $e');
+  //     return false;
+  //   }
+  // }
+  Future<bool> fetchDiscountSettings(BuildContext context) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
 
+      final response = await _dio.get(
+        '/method/frappe.client.get_single_value',
+        queryParameters: {
+          'doctype': 'Accounts Settings',
+          'field': 'enable_discounts_and_margin',
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          // 👇 Don't throw on 4xx/5xx — we handle all responses manually
+          validateStatus: (status) => status! < 600,
+        ),
+      );
+
+      final data = response.data;
+
+      // 👇 If the field doesn't exist on Accounts Settings, show the section
+      if (data is Map && data.containsKey('exception')) {
+        final exception = data['exception'] as String? ?? '';
+        if (exception.contains('does not exist')) {
+          debugPrint('ℹ️ enable_discounts_and_margin field not found — showing discount section by default');
+          return true;
+        }
+      }
+
+      // 👇 Only hide if message is explicitly 0
+      if (response.statusCode == 200 && data is Map) {
+        final message = data['message'];
+        if (message == 0 || message == '0') return false;
+      }
+
+      // 👇 Default: show the section (covers message == 1, null, or any other value)
+      return true;
+    } catch (e) {
+      // 👇 On any network/parse error, default to showing the section
+      debugPrint('❌ Error fetching discount settings — defaulting to visible: $e');
+      return true;
+    }
+  }
   Future<List<String>> fetchInvoicePrintFormats() async {
     const url =
         '/resource/Print Format?filters=[["doc_type","=","Sales Invoice"],["disabled","=","0"]]&fields=["name"]';
@@ -6506,77 +6669,14 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   }
 
   //Item list
-  Future<ItemListResponse?> itemList(context) async {
-    final url =
-        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group"]';
-
-    try {
-      final cookies = await _sharedPrefService.getCookies();
-
-      debugPrint('Requesting  data from URL: ${baseUrl + url}');
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-          validateStatus: (status) {
-            return status! < 500;
-          },
-        ),
-      );
-
-      debugPrint('Response  status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
-
-      if (response.statusCode == 200) {
-        // print("Response details :::::${response.data[0].itemCode}");
-        return ItemListResponse.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-      }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        debugPrint('Response data: ${e.response?.data}');
-      }
-      throw Exception('Failed to fetch  data');
-    } catch (e) {
-      debugPrint('Exception: $e');
-      throw Exception('Failed to fetch  data');
-    }
-  }
-
-  //Item list
-
-  // Future<ItemListResponse?> itemSearchList(
-  //     String itemName, BuildContext context, bool isItemList) async {
+  // Future<ItemListResponse?> itemList(context) async {
+  //   final url =
+  //       '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group"]';
+  //
   //   try {
   //     final cookies = await _sharedPrefService.getCookies();
   //
-  //     // Fields to fetch (added normalized_item_code)
-  //     final fields = Uri.encodeQueryComponent(
-  //         // '["item_code","item_name","normalized_item_code","valuation_rate","brand","item_group"]');
-  //     '["item_code","item_name"]');
-  //
-  //     // OR filters: match item_code, item_name OR normalized_item_code
-  //     final orFilters = Uri.encodeComponent(jsonEncode([
-  //       ["Item", "item_code", "like", "%$itemName%"],
-  //       ["Item", "item_name", "like", "%$itemName%"],
-  //       // ["Item", "normalized_item_code", "like", "%$itemName%"],
-  //     ]));
-  //
-  //     // AND filters: must be stock item and published for customer
-  //     final filters = Uri.encodeComponent(jsonEncode([
-  //       ["Item", "is_stock_item", "=", "1"],
-  //     ]));
-  //
-  //     final url =
-  //         '/resource/Item?fields=$fields&or_filters=$orFilters&filters=$filters';
-  //
-  //     debugPrint('Fetching item search list from URL: ${baseUrl + url}');
-  //
+  //     debugPrint('Requesting  data from URL: ${baseUrl + url}');
   //     final response = await _dio.get(
   //       url,
   //       options: Options(
@@ -6584,37 +6684,136 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   //           'Content-Type': 'application/json',
   //           'Cookie': cookies,
   //         },
-  //         validateStatus: (status) => status! < 500,
+  //         validateStatus: (status) {
+  //           return status! < 500;
+  //         },
   //       ),
   //     );
   //
-  //     if (isItemList) Navigator.pop(context);
+  //     debugPrint('Response  status: ${response.statusCode}');
+  //     debugPrint('Response data: ${response.data}');
   //
   //     if (response.statusCode == 200) {
-  //       final rawData = response.data['data'];
-  //
-  //       // Deduplicate by item_code
-  //       final uniqueMap = {
-  //         for (var item in rawData) item['item_code']: item
-  //       };
-  //       final uniqueList = uniqueMap.values.toList();
-  //
-  //       final dataList = uniqueList.map((e) => ItemData.fromJson(e)).toList();
-  //       return ItemListResponse(data: dataList);
+  //       // print("Response details :::::${response.data[0].itemCode}");
+  //       return ItemListResponse.fromJson(response.data);
   //     } else {
   //       apiErrorHandler.handleHttpError(context, response);
-  //       return null;
   //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       debugPrint('Response data: ${e.response?.data}');
+  //     }
+  //     throw Exception('Failed to fetch  data');
   //   } catch (e) {
   //     debugPrint('Exception: $e');
-  //     throw Exception('Failed to fetch item list');
+  //     throw Exception('Failed to fetch  data');
   //   }
   // }
+
+  Future<ItemListResponse?> itemList(context, {int limit = 20, int offset = 0}) async {
+    // final url =
+        // '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group"]'
+        // '&filters=[["Item","disabled","=",0]]'
+        // '&limit=$limit&limit_start=$offset';
+    final url =
+        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group","product_brochure"]'
+        '&filters=[["Item","disabled","=",0]]'
+        '&limit=$limit&limit_start=$offset';
+
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      debugPrint('Requesting data from URL: ${baseUrl + url}');
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+          },
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      debugPrint('Response status: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        return ItemListResponse.fromJson(response.data);
+      } else {
+        apiErrorHandler.handleHttpError(context, response);
+      }
+    } on DioException catch (e) {
+      debugPrint('DioException: ${e.message}');
+      throw Exception('Failed to fetch data');
+    } catch (e) {
+      debugPrint('Exception: $e');
+      throw Exception('Failed to fetch data');
+    }
+    return null;
+  }
+  //Item list
+  Future<ItemListResponse?> itemSearchListProducts(
+      String itemName, BuildContext context) async {
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+
+      final filters = Uri.encodeComponent(jsonEncode([
+        ["Item", "disabled", "=", 0],
+      ]));
+
+      final orFilters = Uri.encodeComponent(jsonEncode([
+        ["Item", "item_name", "like", "%$itemName%"],
+        ["Item", "item_code", "like", "%$itemName%"],
+        ["Item", "normalized_item_code", "like", "%$itemName%"],
+      ]));
+
+      final fields = Uri.encodeComponent(jsonEncode([
+        "item_code", "item_name", "valuation_rate", "image",
+        "brand", "item_group", "product_brochure"
+      ]));
+
+      final url =
+          '/method/frappe.desk.reportview.get?doctype=Item&filters=$filters&or_filters=$orFilters&fields=$fields';
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final message = response.data['message'];
+        final List<String> keys = List<String>.from(message['keys']);
+        final List<dynamic> values = message['values'];
+
+        final List<ItemData> dataList = values.map((row) {
+          final Map<String, dynamic> map = {};
+          for (int i = 0; i < keys.length; i++) {
+            map[keys[i]] = row[i];
+          }
+          return ItemData.fromJson(map);
+        }).toList();
+
+        return ItemListResponse(data: dataList);
+      } else {
+        apiErrorHandler.handleHttpError(context, response);
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Exception: $e');
+      throw Exception('Failed to fetch item list');
+    }
+  }
+
   Future<ItemListResponse?> itemSearchList(
       String itemName, BuildContext context, bool isItemList) async {
     try {
       final cookies = await _sharedPrefService.getCookies();
       final fields = Uri.encodeQueryComponent('["item_code","item_name","normalized_item_code"]');
+      // final fields = Uri.encodeQueryComponent('["item_code","item_name"]');
+
       final orFilters = Uri.encodeComponent(jsonEncode([
         ["Item", "item_code", "like", "%$itemName%"],
         ["Item", "item_name", "like", "%$itemName%"],
@@ -6697,53 +6896,53 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     }
   }
   //Item filter by brand
-  Future<ItemListResponse?> itemByBrand(
-      String brandName, BuildContext context) async {
-    print("test brand 3");
-
-    final url =
-        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group"]&filters=[["Item", "brand","=", "$brandName"]]';
-
-    try {
-      final cookies = await _sharedPrefService.getCookies();
-
-      debugPrint('Requesting  data from URL: ${baseUrl + url}');
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-          validateStatus: (status) {
-            return status! < 500;
-          },
-        ),
-      );
-
-      debugPrint('Response  status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
-
-      if (response.statusCode == 200) {
-        print("test brand 4");
-
-        //print("Response details :::::${response.data[0].}");
-        Navigator.pop(context);
-        return ItemListResponse.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-      }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        debugPrint('Response data: ${e.response?.data}');
-      }
-      throw Exception('Failed to fetch  data');
-    } catch (e) {
-      debugPrint('Exception: $e');
-      throw Exception('Failed to fetch  data');
-    }
-  }
+  // Future<ItemListResponse?> itemByBrand(
+  //     String brandName, BuildContext context) async {
+  //   print("test brand 3");
+  //
+  //   final url =
+  //       '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group"]&filters=[["Item", "brand","=", "$brandName"]]';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     debugPrint('Requesting  data from URL: ${baseUrl + url}');
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) {
+  //           return status! < 500;
+  //         },
+  //       ),
+  //     );
+  //
+  //     debugPrint('Response  status: ${response.statusCode}');
+  //     debugPrint('Response data: ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       print("test brand 4");
+  //
+  //       //print("Response details :::::${response.data[0].}");
+  //       Navigator.pop(context);
+  //       return ItemListResponse.fromJson(response.data);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       debugPrint('Response data: ${e.response?.data}');
+  //     }
+  //     throw Exception('Failed to fetch  data');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch  data');
+  //   }
+  // }
 
   //brand list
   Future<BrandListResponse?> brandList(context) async {
@@ -6788,13 +6987,53 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
   }
 
   //brand list
+  // Future<CategoryListRespose?> categoryList(context) async {
+  //   final url = '/resource/Item Group';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     debugPrint('Requesting  data from URL: ${baseUrl + url}');
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) {
+  //           return status! < 500;
+  //         },
+  //       ),
+  //     );
+  //
+  //     debugPrint('Response  status: ${response.statusCode}');
+  //     debugPrint('Response data: ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       // print("Response details :::::${response.data[0].itemCode}");
+  //       return CategoryListRespose.fromJson(response.data);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       debugPrint('Response data: ${e.response?.data}');
+  //     }
+  //     throw Exception('Failed to fetch  data');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch  data');
+  //   }
+  // }
   Future<CategoryListRespose?> categoryList(context) async {
-    final url = '/resource/Item Group';
+    final url = '/resource/Item Group?limit=0';  // limit=0 returns all records
 
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      debugPrint('Requesting  data from URL: ${baseUrl + url}');
+      debugPrint('Requesting data from URL: ${baseUrl + url}');
       final response = await _dio.get(
         url,
         options: Options(
@@ -6802,17 +7041,13 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
             'Content-Type': 'application/json',
             'Cookie': cookies,
           },
-          validateStatus: (status) {
-            return status! < 500;
-          },
+          validateStatus: (status) => status! < 500,
         ),
       );
 
-      debugPrint('Response  status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
+      debugPrint('Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        // print("Response details :::::${response.data[0].itemCode}");
         return CategoryListRespose.fromJson(response.data);
       } else {
         apiErrorHandler.handleHttpError(context, response);
@@ -6822,18 +7057,17 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       if (e.response != null) {
         debugPrint('Response data: ${e.response?.data}');
       }
-      throw Exception('Failed to fetch  data');
+      throw Exception('Failed to fetch categories');
     } catch (e) {
       debugPrint('Exception: $e');
-      throw Exception('Failed to fetch  data');
+      throw Exception('Failed to fetch categories');
     }
   }
-
   //item category filter
   Future<ItemListResponse?> categoryItemFilter(
       String category, BuildContext context) async {
     final url =
-        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","item_group","brand"]&filters=[["Item","item_group","=","$category"]]';
+        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","item_group","brand","product_brochure"]&filters=[["Item","item_group","=","$category"]]';
 
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -6857,7 +7091,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
       if (response.statusCode == 200) {
         // print("Response details :::::${response.data[0].itemCode}");
-        Navigator.pop(context);
+        // Navigator.pop(context);
         return ItemListResponse.fromJson(response.data);
       } else {
         apiErrorHandler.handleHttpError(context, response);
@@ -6873,51 +7107,156 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       throw Exception('Failed to fetch  data');
     }
   }
+// 1. Fetch variant list
+  Future<List<String>> variantList(BuildContext context) async {
+    const url =
+        '/method/frappe.desk.search.search_link?txt=&doctype=Item&page_length=0&link_fieldname=variant_of';
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+      if (response.statusCode == 200) {
+        final List data = response.data['message'] ?? [];
+        return data.map((e) => e['value'].toString()).toList();
+      } else {
+        apiErrorHandler.handleHttpError(context, response);
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Exception fetching variants: $e');
+      return [];
+    }
+  }
 
-  //item category and Brand filter
-  Future<ItemListResponse?> categoryAndBrandItemFilter(
-      String brand, String category, context) async {
+// 2. Filter items by variant
+  Future<ItemListResponse?> itemByVariant(
+      String variantOf, BuildContext context) async {
     final url =
-        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","item_group","brand"]&filters=[["Item","item_group","=","$category","brand","=", "$brand"]]';
-
+        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group","product_brochure"]'
+        '&filters=[["Item","disabled","=",0],["Item","variant_of","=","$variantOf"]]';
     try {
       final cookies = await _sharedPrefService.getCookies();
-
-      debugPrint('Requesting  data from URL: ${baseUrl + url}');
       final response = await _dio.get(
         url,
         options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-          validateStatus: (status) {
-            return status! < 500;
-          },
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
+          validateStatus: (status) => status! < 500,
         ),
       );
-
-      debugPrint('Response  status: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
-
       if (response.statusCode == 200) {
-        // print("Response details :::::${response.data[0].itemCode}");
         return ItemListResponse.fromJson(response.data);
       } else {
         apiErrorHandler.handleHttpError(context, response);
+        return null;
       }
     } on DioException catch (e) {
       debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        debugPrint('Response data: ${e.response?.data}');
+      throw Exception('Failed to fetch items by variant');
+    }
+  }
+  // //item category and Brand filter
+  // Future<ItemListResponse?> categoryAndBrandItemFilter(
+  //     String brand, String category, context) async {
+  //   final url =
+  //       '/resource/Item?fields=["item_code","item_name","valuation_rate","image","item_group","brand"]&filters=[["Item","item_group","=","$category","brand","=", "$brand"]]';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     debugPrint('Requesting  data from URL: ${baseUrl + url}');
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) {
+  //           return status! < 500;
+  //         },
+  //       ),
+  //     );
+  //
+  //     debugPrint('Response  status: ${response.statusCode}');
+  //     debugPrint('Response data: ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       // print("Response details :::::${response.data[0].itemCode}");
+  //       return ItemListResponse.fromJson(response.data);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       debugPrint('Response data: ${e.response?.data}');
+  //     }
+  //     throw Exception('Failed to fetch  data');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch  data');
+  //   }
+  // }
+
+// 3. Fix categoryAndBrandItemFilter — filters array was malformed
+  Future<ItemListResponse?> categoryAndBrandItemFilter(
+      String brand, String category, BuildContext context) async {
+    final url =
+        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","item_group","brand","product_brochure"]'
+        '&filters=[["Item","disabled","=",0],["Item","item_group","=","$category"],["Item","brand","=","$brand"]]';
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+      if (response.statusCode == 200) {
+        return ItemListResponse.fromJson(response.data);
+      } else {
+        apiErrorHandler.handleHttpError(context, response);
+        return null;
       }
-      throw Exception('Failed to fetch  data');
-    } catch (e) {
-      debugPrint('Exception: $e');
-      throw Exception('Failed to fetch  data');
+    } on DioException catch (e) {
+      debugPrint('DioException: ${e.message}');
+      throw Exception('Failed to fetch filtered items');
     }
   }
 
+// 4. itemByBrand — remove Navigator.pop, add disabled filter
+  Future<ItemListResponse?> itemByBrand(
+      String brandName, BuildContext context) async {
+    final url =
+        '/resource/Item?fields=["item_code","item_name","valuation_rate","image","brand","item_group","product_brochure"]'
+        '&filters=[["Item","disabled","=",0],["Item","brand","=","$brandName"]]';
+    try {
+      final cookies = await _sharedPrefService.getCookies();
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {'Content-Type': 'application/json', 'Cookie': cookies},
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+      if (response.statusCode == 200) {
+        // ❌ Navigator.pop(context) removed
+        return ItemListResponse.fromJson(response.data);
+      } else {
+        apiErrorHandler.handleHttpError(context, response);
+        return null;
+      }
+    } on DioException catch (e) {
+      debugPrint('DioException: ${e.message}');
+      throw Exception('Failed to fetch items by brand');
+    }
+  }
   //Sales person report
   Future<String?> fetchUserFirstName(String email) async {
     try {
@@ -10347,7 +10686,89 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     }
     return null;
   }
-
+  //
+  // Future<SalesOrderResponse?> salesOrder(
+  //     String customerName,
+  //     String deliveryDate,
+  //     List items,
+  //     BuildContext context, {
+  //       Map<String, dynamic>? customerDetails,
+  //       String? setWarehouse,
+  //       // String? quotation,
+  //     }) async {
+  //   const url = '/resource/Sales Order';
+  //
+  //   // 🔹 Fetch user branch + warehouse (may be null)
+  //   final userBranchData = await fetchUserBranch(context);
+  //
+  //   final String? branch = userBranchData?['branch'];
+  //   final String? defaultWarehouse = userBranchData?['default_warehouse'];
+  //   final company = await _sharedPrefService.getCompany();
+  //
+  //   if (company == null || company.isEmpty) {
+  //     throw Exception("Company not selected");
+  //   }
+  //   // 🔹 Build request payload safely
+  //   final Map<String, dynamic> request = {
+  //     "company": company,
+  //     "customer": customerName,
+  //     "delivery_date": deliveryDate,
+  //     "items": items,
+  //   };
+  //   // 🔹 Add branch ONLY if available
+  //   if (branch != null && branch.isNotEmpty) {
+  //     request["branch"] = branch;
+  //   }
+  //
+  //   // 🔹 Warehouse priority:
+  //   // 1. Explicit warehouse
+  //   // 2. User default warehouse
+  //   if (setWarehouse != null && setWarehouse.isNotEmpty) {
+  //     request["set_warehouse"] = setWarehouse;
+  //   } else if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
+  //     request["set_warehouse"] = defaultWarehouse;
+  //   }
+  //
+  //   // 🔹 Merge customer details last (optional)
+  //   if (customerDetails != null) {
+  //     request.addAll(customerDetails);
+  //   }
+  //   final taxTemplate = await fetchDefaultSalesTaxTemplate(company);
+  //
+  //   if (taxTemplate != null) {
+  //     request["taxes_and_charges"] = taxTemplate;
+  //   }
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final response = await _dio.post(
+  //       url,
+  //       data: request,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       return SalesOrderResponse.fromJson(response.data);
+  //     }
+  //
+  //     final data = response.data;
+  //     if (data is Map && data.containsKey('exception')) {
+  //       final raw = data['exception'];
+  //       throw Exception(raw.replaceAll(RegExp(r'<[^>]*>'), ''));
+  //     }
+  //
+  //     throw Exception('Failed to create Sales Order');
+  //   } catch (e) {
+  //     rethrow;
+  //   }
+  // }
   Future<SalesOrderResponse?> salesOrder(
       String customerName,
       String deliveryDate,
@@ -10355,13 +10776,13 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       BuildContext context, {
         Map<String, dynamic>? customerDetails,
         String? setWarehouse,
-        // String? quotation,
+        String applyDiscountOn = 'Net Total',       // 👇 new
+        double additionalDiscountPercentage = 0.0,    // 👇 new
+        double discountAmount = 0.0,                  // 👇 new
       }) async {
     const url = '/resource/Sales Order';
 
-    // 🔹 Fetch user branch + warehouse (may be null)
     final userBranchData = await fetchUserBranch(context);
-
     final String? branch = userBranchData?['branch'];
     final String? defaultWarehouse = userBranchData?['default_warehouse'];
     final company = await _sharedPrefService.getCompany();
@@ -10369,40 +10790,34 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     if (company == null || company.isEmpty) {
       throw Exception("Company not selected");
     }
-    // 🔹 Build request payload safely
+
     final Map<String, dynamic> request = {
       "company": company,
       "customer": customerName,
       "delivery_date": deliveryDate,
       "items": items,
+      // 👇 Always send apply_discount_on; ERPNext needs it to interpret the others
+      "apply_discount_on": applyDiscountOn,
+      if (additionalDiscountPercentage > 0)
+        "additional_discount_percentage": additionalDiscountPercentage,
+      if (discountAmount > 0) "discount_amount": discountAmount,
     };
-    // 🔹 Add branch ONLY if available
-    if (branch != null && branch.isNotEmpty) {
-      request["branch"] = branch;
-    }
 
-    // 🔹 Warehouse priority:
-    // 1. Explicit warehouse
-    // 2. User default warehouse
+    if (branch != null && branch.isNotEmpty) request["branch"] = branch;
+
     if (setWarehouse != null && setWarehouse.isNotEmpty) {
       request["set_warehouse"] = setWarehouse;
     } else if (defaultWarehouse != null && defaultWarehouse.isNotEmpty) {
       request["set_warehouse"] = defaultWarehouse;
     }
 
-    // 🔹 Merge customer details last (optional)
-    if (customerDetails != null) {
-      request.addAll(customerDetails);
-    }
-    final taxTemplate = await fetchDefaultSalesTaxTemplate(company);
+    if (customerDetails != null) request.addAll(customerDetails);
 
-    if (taxTemplate != null) {
-      request["taxes_and_charges"] = taxTemplate;
-    }
+    final taxTemplate = await fetchDefaultSalesTaxTemplate(company);
+    if (taxTemplate != null) request["taxes_and_charges"] = taxTemplate;
 
     try {
       final cookies = await _sharedPrefService.getCookies();
-
       final response = await _dio.post(
         url,
         data: request,
@@ -10439,11 +10854,11 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       List items,
       BuildContext context, {
         Map<String, dynamic>? customerDetails,
+        String applyDiscountOn = 'Net Total',       // 👇 new
+        double additionalDiscountPercentage = 0.0,    // 👇 new
+        double discountAmount = 0.0,                  // 👇 new
       }) async {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-
-    const baseUrlPath = '/resource/Sales Order/';
-    final url = '$baseUrlPath$name';
+    final url = '/resource/Sales Order/$name';
 
     try {
       final cookies = await _sharedPrefService.getCookies();
@@ -10453,9 +10868,14 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
           "set_warehouse": setWarehouse,
         "delivery_date": deliveryDate,
         "items": items,
+        // 👇 Include discount fields in update payload
+        "apply_discount_on": applyDiscountOn,
+        if (additionalDiscountPercentage > 0)
+          "additional_discount_percentage": additionalDiscountPercentage,
+        if (discountAmount > 0) "discount_amount": discountAmount,
       };
 
-      debugPrint('Updating sales order at: ${baseUrl + url}');
+      debugPrint('Updating sales order at: $name');
       final response = await _dio.put(
         url,
         data: request,
@@ -10470,37 +10890,100 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
       debugPrint('PUT Response status: ${response.statusCode}');
       debugPrint('PUT Response data: ${response.data}');
-      debugPrint('PUT Request data: $request');
 
       if (response.statusCode == 200) {
-        // provider.clearItem();
         return SalesOrderResponse.fromJson(response.data);
-      } else {
-        final data = response.data;
-        if (data is Map && data.containsKey('exception')) {
-          final rawMessage = data['exception'] as String;
-          final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
-          throw Exception(formattedMessage);
-        }
-        throw Exception('Failed to update sales order');
       }
+
+      final data = response.data;
+      if (data is Map && data.containsKey('exception')) {
+        throw Exception(
+            (data['exception'] as String).replaceAll(RegExp(r'<[^>]*>'), ''));
+      }
+      throw Exception('Failed to update sales order');
     } on DioException catch (e) {
       debugPrint('DioException (PUT): ${e.message}');
-      if (e.response != null) {
-        final data = e.response?.data;
-        debugPrint('Response data: $data');
-        if (data is Map && data.containsKey('exception')) {
-          final rawMessage = data['exception'] as String;
-          final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
-          throw Exception(formattedMessage);
-        }
+      final data = e.response?.data;
+      if (data is Map && data.containsKey('exception')) {
+        throw Exception(
+            (data['exception'] as String).replaceAll(RegExp(r'<[^>]*>'), ''));
       }
       throw Exception('Failed to update sales order');
     } catch (e) {
-      debugPrint('Exception: $e');
       throw Exception(e.toString());
     }
   }
+  //
+  // Future<SalesOrderResponse?> updateSalesOrder(
+  //     String name,
+  //     String customerName,
+  //     String deliveryDate,
+  //     String? setWarehouse,
+  //     List items,
+  //     BuildContext context, {
+  //       Map<String, dynamic>? customerDetails,
+  //     }) async {
+  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //   const baseUrlPath = '/resource/Sales Order/';
+  //   final url = '$baseUrlPath$name';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     final request = {
+  //       if (setWarehouse != null && setWarehouse.isNotEmpty)
+  //         "set_warehouse": setWarehouse,
+  //       "delivery_date": deliveryDate,
+  //       "items": items,
+  //     };
+  //
+  //     debugPrint('Updating sales order at: ${baseUrl + url}');
+  //     final response = await _dio.put(
+  //       url,
+  //       data: request,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     debugPrint('PUT Response status: ${response.statusCode}');
+  //     debugPrint('PUT Response data: ${response.data}');
+  //     debugPrint('PUT Request data: $request');
+  //
+  //     if (response.statusCode == 200) {
+  //       // provider.clearItem();
+  //       return SalesOrderResponse.fromJson(response.data);
+  //     } else {
+  //       final data = response.data;
+  //       if (data is Map && data.containsKey('exception')) {
+  //         final rawMessage = data['exception'] as String;
+  //         final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
+  //         throw Exception(formattedMessage);
+  //       }
+  //       throw Exception('Failed to update sales order');
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException (PUT): ${e.message}');
+  //     if (e.response != null) {
+  //       final data = e.response?.data;
+  //       debugPrint('Response data: $data');
+  //       if (data is Map && data.containsKey('exception')) {
+  //         final rawMessage = data['exception'] as String;
+  //         final formattedMessage = rawMessage.replaceAll(RegExp(r'<[^>]*>'), '');
+  //         throw Exception(formattedMessage);
+  //       }
+  //     }
+  //     throw Exception('Failed to update sales order');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception(e.toString());
+  //   }
+  // }
   Future<bool> submitSalesOrder(String salesOrderName) async {
     final url = '/resource/Sales Order/$salesOrderName';
     final cookies = await _sharedPrefService.getCookies();
@@ -11166,53 +11649,105 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
 
 //S ordr
   // Sales Quotation
+  // Future<GetQuotationResponse?> getQuotationList(
+  //     BuildContext context,
+  //     int limitStart,
+  //     int pageLength,
+  //     ) async {
+  //   final url =
+  //       '/resource/Quotation'
+  //       '?fields=["name","title","transaction_date","valid_till","status"]'
+  //       '&limit_start=$limitStart'
+  //       '&limit_page_length=$pageLength'
+  //       '&order_by=creation desc';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     debugPrint('Requesting Quotation data from URL: ${baseUrl + url}');
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) {
+  //           return status! < 500;
+  //         },
+  //       ),
+  //     );
+  //
+  //     debugPrint('Quotation Response status: ${response.statusCode}');
+  //     debugPrint('Quotation Response data: ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       return GetQuotationResponse.fromJson(response.data);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //       return null;
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     if (e.response != null) {
+  //       debugPrint('Response data: ${e.response?.data}');
+  //     }
+  //     throw Exception('Failed to fetch Quotation list');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch Quotation list');
+  //   }
+  // }
   Future<GetQuotationResponse?> getQuotationList(
       BuildContext context,
       int limitStart,
       int pageLength,
       ) async {
-    final url =
-        '/resource/Quotation'
-        '?fields=["name","title","transaction_date","valid_till","status"]'
-        '&limit_start=$limitStart'
-        '&limit_page_length=$pageLength'
-        '&order_by=creation desc';
-
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      debugPrint('Requesting Quotation data from URL: ${baseUrl + url}');
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-          validateStatus: (status) {
-            return status! < 500;
-          },
-        ),
-      );
+      Future<Response> fetchQuotation(bool includeTitle) {
+        final fields = includeTitle
+            ? '["name","title","transaction_date","valid_till","status"]'
+            : '["name","transaction_date","valid_till","status"]';
 
-      debugPrint('Quotation Response status: ${response.statusCode}');
-      debugPrint('Quotation Response data: ${response.data}');
+        final url =
+            '/resource/Quotation'
+            '?fields=$fields'
+            '&limit_start=$limitStart'
+            '&limit_page_length=$pageLength'
+            '&order_by=creation desc';
+
+        return _dio.get(
+          url,
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+              'Cookie': cookies,
+            },
+            validateStatus: (status) => status! < 500,
+          ),
+        );
+      }
+
+      Response response = await fetchQuotation(true);
+
+      /// Retry without title field
+      if (response.data.toString().contains(
+          'Field not permitted in query: title')) {
+        debugPrint('Removing title field and retrying...');
+        response = await fetchQuotation(false);
+      }
 
       if (response.statusCode == 200) {
         return GetQuotationResponse.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-        return null;
       }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      if (e.response != null) {
-        debugPrint('Response data: ${e.response?.data}');
-      }
-      throw Exception('Failed to fetch Quotation list');
+
+      apiErrorHandler.handleHttpError(context, response);
+      return null;
     } catch (e) {
       debugPrint('Exception: $e');
-      throw Exception('Failed to fetch Quotation list');
+      throw Exception('Failed to fetch quotation list');
     }
   }
 
@@ -11369,6 +11904,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       return null;
     }
   }
+
   Future<Map<String, dynamic>?> getItemDetails({
     required BuildContext context,
     required String itemCode,
@@ -11383,7 +11919,10 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       final url = '/method/erpnext.stock.get_item_details.get_item_details';
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-      final body = {
+      /// -----------------------------
+      /// FIRST TRY -> USING args
+      /// -----------------------------
+      final argsBody = {
         "args": {
           "item_code": itemCode,
           "company": company,
@@ -11391,31 +11930,84 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
           "currency": currency,
           "transaction_date": today,
           "qty": quantity,
-          "doctype": "Quotation"
+          "doctype": "Quotation",
         }
       };
 
-      debugPrint('Fetching item details: ${baseUrl + url}');
-      debugPrint('Request body: $body');
+      debugPrint('Fetching item details using args: ${baseUrl + url}');
+      debugPrint('Args Request Body: $argsBody');
 
-      final response = await _dio.post(
+      Response response;
+
+      try {
+        response = await _dio.post(
+          url,
+          data: argsBody,
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+              'Cookie': cookies,
+            },
+            /// Prevent Dio from throwing automatically on 500
+            validateStatus: (status) => status != null,
+          ),
+        );
+
+        /// SUCCESS WITH args
+        if (response.statusCode == 200 && response.data != null) {
+          debugPrint('Item Details Response (args): ${response.data}');
+          return response.data;
+        }
+
+        /// IF 500 -> FALLBACK TO ctx
+        if (response.statusCode != 500) {
+          apiErrorHandler.handleHttpError(context, response);
+          return null;
+        }
+
+        debugPrint(
+            'args method failed with 500. Retrying using ctx...');
+      } catch (e) {
+        debugPrint('args method exception: $e');
+        debugPrint('Retrying using ctx...');
+      }
+
+      /// -----------------------------
+      /// SECOND TRY -> USING ctx
+      /// -----------------------------
+      final ctxBody = {
+        "ctx": {
+          "item_code": itemCode,
+          "company": company,
+          "price_list": priceList,
+          "currency": currency,
+          "transaction_date": today,
+          "qty": quantity,
+          "doctype": "Quotation",
+        }
+      };
+
+      debugPrint('Fetching item details using ctx: ${baseUrl + url}');
+      debugPrint('Ctx Request Body: $ctxBody');
+
+      final ctxResponse = await _dio.post(
         url,
-        data: body,
+        data: ctxBody,
         options: Options(
           headers: {
             'Content-Type': 'application/json',
             'Cookie': cookies,
           },
+          validateStatus: (status) => status != null,
         ),
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        final data = response.data;
-        debugPrint('Item Details Response: $data');
-        return data;
+      if (ctxResponse.statusCode == 200 && ctxResponse.data != null) {
+        debugPrint('Item Details Response (ctx): ${ctxResponse.data}');
+        return ctxResponse.data;
       } else {
-        apiErrorHandler.handleHttpError(context, response);
-        throw Exception('Failed to fetch item details');
+        apiErrorHandler.handleHttpError(context, ctxResponse);
+        return null;
       }
     } catch (e) {
       debugPrint('Error fetching item details: $e');
@@ -11546,44 +12138,153 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       return false;
     }
   }
+  // Future<GetQuotationResponse?> getQuotationDateFilter(
+  //     BuildContext context,
+  //     String startDate,
+  //     String endDate,
+  //     ) async {
+  //   final url =
+  //       '/resource/Quotation?fields=["name","title","transaction_date","valid_till","status"]'
+  //       '&filters=[["transaction_date", ">=", "$startDate"], ["transaction_date", "<=", "$endDate"]]'
+  //       '&order_by=transaction_date desc';
+  //
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //     final response = await _dio.get(
+  //       url,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     debugPrint('Quotation Date Filter Response: ${response.data}');
+  //     if (response.statusCode == 200) {
+  //       return GetQuotationResponse.fromJson(response.data);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //       return null;
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     throw Exception('Failed to fetch quotation data');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch quotation data');
+  //   }
+  // }
   Future<GetQuotationResponse?> getQuotationDateFilter(
       BuildContext context,
       String startDate,
       String endDate,
       ) async {
-    final url =
-        '/resource/Quotation?fields=["name","title","transaction_date","valid_till","status"]'
-        '&filters=[["transaction_date", ">=", "$startDate"], ["transaction_date", "<=", "$endDate"]]'
-        '&order_by=transaction_date desc';
-
     try {
       final cookies = await _sharedPrefService.getCookies();
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
-          },
-          validateStatus: (status) => status! < 500,
-        ),
-      );
 
-      debugPrint('Quotation Date Filter Response: ${response.data}');
+      Future<Response> fetchQuotation(bool includeTitle) {
+        final fields = includeTitle
+            ? '["name","title","transaction_date","valid_till","status"]'
+            : '["name","transaction_date","valid_till","status"]';
+
+        final url =
+            '/resource/Quotation'
+            '?fields=$fields'
+            '&filters=[["transaction_date",">=","$startDate"],'
+            '["transaction_date","<=","$endDate"]]'
+            '&order_by=transaction_date desc';
+
+        return _dio.get(
+          url,
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+              'Cookie': cookies,
+            },
+            validateStatus: (status) => status! < 500,
+          ),
+        );
+      }
+
+      Response response = await fetchQuotation(true);
+
+      if (response.data.toString().contains(
+          'Field not permitted in query: title')) {
+        debugPrint('Retrying without title...');
+        response = await fetchQuotation(false);
+      }
+
       if (response.statusCode == 200) {
         return GetQuotationResponse.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-        return null;
       }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      throw Exception('Failed to fetch quotation data');
+
+      apiErrorHandler.handleHttpError(context, response);
+      return null;
     } catch (e) {
       debugPrint('Exception: $e');
       throw Exception('Failed to fetch quotation data');
     }
   }
+  // Future<GetQuotationResponse?> getSearchQuotation(
+  //     BuildContext context,
+  //     String quotationName,
+  //     String partyName,
+  //     ) async {
+  //   try {
+  //     final cookies = await _sharedPrefService.getCookies();
+  //
+  //     // 🧠 Build filters list
+  //     List<List<String>> filters = [];
+  //     if (quotationName.isNotEmpty) {
+  //       filters.add(["name", "like", "%$quotationName%"]);
+  //     }
+  //     if (partyName.isNotEmpty) {
+  //       filters.add(["party_name", "like", "%$partyName%"]);
+  //     }
+  //
+  //     if (filters.isEmpty) {
+  //       throw Exception("Please enter at least one search field.");
+  //     }
+  //
+  //     // 🧩 Build query parameters safely
+  //     final Map<String, dynamic> queryParams = {
+  //       "fields": '["name","title","transaction_date","valid_till","status","party_name"]',
+  //       "filters": jsonEncode(filters),
+  //       "order_by": "transaction_date desc"
+  //     };
+  //
+  //     final response = await _dio.get(
+  //       '/resource/Quotation',
+  //       queryParameters: queryParams,
+  //       options: Options(
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Cookie': cookies,
+  //         },
+  //         validateStatus: (status) => status! < 500,
+  //       ),
+  //     );
+  //
+  //     debugPrint('Quotation Search URL: /resource/Quotation');
+  //     debugPrint('Quotation Search Filters: ${jsonEncode(filters)}');
+  //     debugPrint('Quotation Search Response: ${response.data}');
+  //
+  //     if (response.statusCode == 200) {
+  //       return GetQuotationResponse.fromJson(response.data);
+  //     } else {
+  //       apiErrorHandler.handleHttpError(context, response);
+  //       return null;
+  //     }
+  //   } on DioException catch (e) {
+  //     debugPrint('DioException: ${e.message}');
+  //     throw Exception('Failed to fetch quotation search results');
+  //   } catch (e) {
+  //     debugPrint('Exception: $e');
+  //     throw Exception('Failed to fetch quotation search results');
+  //   }
+  // }
   Future<GetQuotationResponse?> getSearchQuotation(
       BuildContext context,
       String quotationName,
@@ -11592,54 +12293,61 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     try {
       final cookies = await _sharedPrefService.getCookies();
 
-      // 🧠 Build filters list
       List<List<String>> filters = [];
+
       if (quotationName.isNotEmpty) {
         filters.add(["name", "like", "%$quotationName%"]);
       }
+
       if (partyName.isNotEmpty) {
         filters.add(["party_name", "like", "%$partyName%"]);
       }
 
       if (filters.isEmpty) {
-        throw Exception("Please enter at least one search field.");
+        throw Exception(
+            "Please enter at least one search field.");
       }
 
-      // 🧩 Build query parameters safely
-      final Map<String, dynamic> queryParams = {
-        "fields": '["name","title","transaction_date","valid_till","status","party_name"]',
-        "filters": jsonEncode(filters),
-        "order_by": "transaction_date desc"
-      };
+      Future<Response> fetchQuotation(bool includeTitle) {
+        final fields = includeTitle
+            ? '["name","title","transaction_date","valid_till","status","party_name"]'
+            : '["name","transaction_date","valid_till","status","party_name"]';
 
-      final response = await _dio.get(
-        '/resource/Quotation',
-        queryParameters: queryParams,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': cookies,
+        return _dio.get(
+          '/resource/Quotation',
+          queryParameters: {
+            "fields": fields,
+            "filters": jsonEncode(filters),
+            "order_by": "transaction_date desc"
           },
-          validateStatus: (status) => status! < 500,
-        ),
-      );
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+              'Cookie': cookies,
+            },
+            validateStatus: (status) => status! < 500,
+          ),
+        );
+      }
 
-      debugPrint('Quotation Search URL: /resource/Quotation');
-      debugPrint('Quotation Search Filters: ${jsonEncode(filters)}');
-      debugPrint('Quotation Search Response: ${response.data}');
+      Response response = await fetchQuotation(true);
+
+      if (response.data.toString().contains(
+          'Field not permitted in query: title')) {
+        debugPrint('Retry search without title...');
+        response = await fetchQuotation(false);
+      }
 
       if (response.statusCode == 200) {
         return GetQuotationResponse.fromJson(response.data);
-      } else {
-        apiErrorHandler.handleHttpError(context, response);
-        return null;
       }
-    } on DioException catch (e) {
-      debugPrint('DioException: ${e.message}');
-      throw Exception('Failed to fetch quotation search results');
+
+      apiErrorHandler.handleHttpError(context, response);
+      return null;
     } catch (e) {
       debugPrint('Exception: $e');
-      throw Exception('Failed to fetch quotation search results');
+      throw Exception(
+          'Failed to fetch quotation search results');
     }
   }
   Future<bool> submitQuotationToERP(String quotationName) async {

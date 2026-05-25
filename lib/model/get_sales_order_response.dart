@@ -92,6 +92,7 @@ class SalesOrderDetails {
   double? discountAmount;
   double? additionalDiscountPercentage;
   String? setWarehouse;
+  String? applyDiscountOn;
   List<SalesOrderItem>? items;
 
   SalesOrderDetails({
@@ -109,6 +110,7 @@ class SalesOrderDetails {
     this.discountAmount,
     this.setWarehouse,
     this.additionalDiscountPercentage,
+    this.applyDiscountOn,
     this.items,
   });
 
@@ -122,6 +124,7 @@ class SalesOrderDetails {
       customerName: json['customer_name'],
       deliveryDate: json['delivery_date'],
       transactionDate: json['transaction_date'],
+      applyDiscountOn: json['apply_discount_on'],
       status: json['status'],
       netTotal: (json['net_total'] != null)
           ? double.tryParse(json['net_total'].toString())
@@ -193,6 +196,7 @@ class SalesOrderItem {
   final String? quotationItem;
   final String? prevdocDocname;
 
+
   SalesOrderItem({
     this.rowName,
     this.itemCode,
@@ -210,6 +214,7 @@ class SalesOrderItem {
     this.netAmount,
     this.quotationItem,
     this.prevdocDocname
+
   });
 
   factory SalesOrderItem.fromJson(Map<String, dynamic> json) {
@@ -234,7 +239,6 @@ class SalesOrderItem {
       netAmount: _parse(json['net_amount']),
       quotationItem: json['quotation_item'],
       prevdocDocname: json['prevdoc_docname'],
-
 
 
     );

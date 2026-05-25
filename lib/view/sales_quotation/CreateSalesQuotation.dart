@@ -294,7 +294,8 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     required double discountPercentage,
     required String itemTaxTemplate,
     required double lastPurchaseRate, // ✅ NEW
-
+    String uom = '',   // 👇 new
+    VoidCallback? onCa
   }) {
     showDialog(
       context: context,
@@ -307,7 +308,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         discountPercentage: discountPercentage,
         itemTaxTemplate: itemTaxTemplate,
         lastPurchaseRate: lastPurchaseRate, // ✅ NEW
-
+        uom: uom,           // 👇 pass it down
         onCancel: () {},
         onItemAdded: (addedRate, addedQty) {
           final double addedAmount = addedRate * addedQty;
@@ -320,107 +321,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
       ),
     );
   }
-  // void _showEditDialog(BuildContext context, int index,
-  //     SalesOrderProvider provider, final VoidCallback onCancel) {
-  //   final item = provider.itemsList[index];
-  //   final _rateController = TextEditingController(text: item.rate.toString());
-  //   final _quantityController = TextEditingController(text: item.quantity.toString());
-  //   final _priceListRateController = TextEditingController(text: item.priceListRate?.toString() ?? '');
-  //   final _discountPercentageController = TextEditingController(text: item.discountPercentage?.toString() ?? '');
-  //   late TextEditingController _itemTaxTemplateController;
-  //
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return AlertDialog(
-  //         title: Text('Edit Item'),
-  //         content: SingleChildScrollView(
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               Text('Item: ${item.name}'),
-  //
-  //               TextField(
-  //                 controller: _priceListRateController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Price List Rate'),
-  //                 readOnly: true,
-  //               ),
-  //               TextField(
-  //                 // readOnly: true,
-  //                 controller: _discountPercentageController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Discount Percentage'),
-  //               ),
-  //               TextField(
-  //                 controller: _rateController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Rate'),
-  //               ),
-  //
-  //
-  //
-  //               TextField(
-  //                 controller: _quantityController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Quantity'),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () {
-  //               final newRate = double.tryParse(_rateController.text) ?? 0.0;
-  //               final newQuantity = double.tryParse(_quantityController.text) ?? 0.0;
-  //               final newPriceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
-  //               final newDiscountPercentage = double.tryParse(_discountPercentageController.text) ?? 0.0;
-  //
-  //               if (newRate <= 0) {
-  //                 Fluttertoast.showToast(msg: "Please enter a valid rate");
-  //               } else if (newQuantity <= 0) {
-  //                 Fluttertoast.showToast(msg: "Please enter a valid quantity");
-  //               } else {
-  //                 final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //
-  //                 // 🧮 Compute difference
-  //                 final oldAmount = item.rate * item.quantity;
-  //                 final newAmount = newRate * newQuantity;
-  //                 final diff = newAmount - oldAmount;
-  //
-  //                 // ✅ Update the item
-  //                 provider.editItem(index, newRate, newQuantity, newPriceListRate, newDiscountPercentage);
-  //
-  //                 // ✅ Update total globally
-  //                 if (diff != 0) {
-  //                   if (diff > 0) {
-  //                     provider.addToTotal(diff);
-  //                   } else {
-  //                     provider.subtractFromTotal(diff.abs());
-  //                   }
-  //                 }
-  //                 // 🟡 Mark form dirty after editing
-  //                 setState(() {
-  //                   _isFormDirty = true;
-  //                 });
-  //                 Navigator.of(context).pop();
-  //               }
-  //             },
-  //             child: const Text('Save'),
-  //           ),
-  //
-  //           TextButton(
-  //             onPressed: () {
-  //               onCancel();
-  //               Navigator.of(context).pop();
-  //             },
-  //             child: Text('Cancel'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
+
   void _showEditDialog(BuildContext context, int index,
       SalesOrderProvider provider, final VoidCallback onCancel) async {
 
@@ -442,7 +343,9 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
 
     final itemTaxTemplate =
         message?["item_tax_template"] ?? item.itemTaxTemplate;
-
+    final uom = item.uom?.isNotEmpty == true    // 👈 add this
+        ? item.uom!
+        : (message?["uom"] ?? message?["stock_uom"] ?? '');
     showDialog(
       context: context,
       builder: (context) => AddItemDialog(
@@ -457,6 +360,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         isEdit: true, // ✅ IMPORTANT
         editIndex: index,
         onCancel: onCancel,
+        uom: uom,              // ✅ use the resolved variable, not item.uom
         onItemAdded: (rate, qty) {
           setState(() {
             _isFormDirty = true;
@@ -498,6 +402,8 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
           "price_list_rate": item["price_list_rate"],
           "rate": item["rate"],
           "discount_percentage": item["discount_percentage"] ?? 0.0,
+          "uom": item["uom"] ?? item["stock_uom"] ?? '',   // 👈 add this
+
         }).toList();
 
         provider.setItemsFromQuotation(itemsList);
@@ -546,83 +452,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final item = items[index];
-                  // return ListTile(
-                  //   title: Text(item.itemName ?? '',
-                  //       style: const TextStyle(fontWeight: FontWeight.bold)),
-                  //   subtitle: Text(item.itemCode ?? '',
-                  //       style: const TextStyle(color: Colors.grey)),
-                  //   onTap: () async {
-                  //     _hideOverlay();
-                  //
-                  //     final quotationProvider =
-                  //     Provider.of<SalesOrderProvider>(context, listen: false);
-                  //
-                  //     if (quotationProvider.allowMultipleItems == 0) {
-                  //       bool alreadyExists = quotationProvider.itemsList.any(
-                  //             (i) => i.itemCode == item.itemCode,
-                  //       );
-                  //       if (alreadyExists) {
-                  //         Fluttertoast.showToast(
-                  //           msg: "This item is already added and duplicates are not allowed.",
-                  //           toastLength: Toast.LENGTH_SHORT,
-                  //           gravity: ToastGravity.BOTTOM,
-                  //         );
-                  //         return;
-                  //       }
-                  //     }
-                  //
-                  //     setState(() {
-                  //       _selectedItem = item.itemName;
-                  //       _itemSelected = true;
-                  //     });
-                  //
-                  //     try {
-                  //       final itemDetails = await quotationProvider.fetchItemDetail(
-                  //         context: context,
-                  //         itemCode: item.itemCode ?? '',
-                  //         currency: _currency ?? '',
-                  //         quantity: 1.0,
-                  //         customerName: _selectedCustomer ?? '',
-                  //       );
-                  //
-                  //       if (itemDetails != null && itemDetails['message'] != null) {
-                  //         final fetchedRate = itemDetails['message']['rate'] ?? 0.0;
-                  //         final fetchedPriceListRate = itemDetails['message']['price_list_rate'] ?? 0.0;
-                  //         final fetchedDiscountPercentage =
-                  //             itemDetails['message']['discount_percentage'] ?? 0.0;
-                  //         final message = itemDetails["message"];
-                  //         final lastPurchaseRate = itemDetails['message']['last_purchase_rate'] ?? 0.0; // ✅ NEW
-                  //
-                  //         _showAddItemDialog(
-                  //           itemName: item.itemName ?? "",
-                  //           itemCode: item.itemCode ?? "",
-                  //           rate: fetchedPriceListRate,
-                  //           quantity: 1,
-                  //           priceListRate: fetchedPriceListRate,
-                  //           discountPercentage: fetchedDiscountPercentage,
-                  //           itemTaxTemplate: message["item_tax_template"] ?? "",
-                  //           lastPurchaseRate: lastPurchaseRate, // ✅ NEW
-                  //
-                  //         );
-                  //       } else {
-                  //         Fluttertoast.showToast(msg: "Select Customer first");
-                  //       }
-                  //     } catch (e) {
-                  //       Fluttertoast.showToast(msg: "Error fetching item details: $e");
-                  //     }
-                  //
-                  //     // 👇 reset and refocus for next entry
-                  //     setState(() {
-                  //       _itemSearchController.clear();
-                  //       _itemSelected = false;
-                  //       _selectedItem = null;
-                  //     });
-                  //
-                  //     await Future.delayed(const Duration(milliseconds: 200));
-                  //     _itemSearchFocusNode.requestFocus();
-                  //   },
-                  //
-                  // );
+
                   return ListTile(
                     title: Text(item.itemName ?? '',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -705,6 +535,8 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                             discountPercentage: fetchedDiscountPercentage,
                             itemTaxTemplate: message["item_tax_template"] ?? "",
                             lastPurchaseRate: lastPurchaseRate,
+                            uom: message["uom"] ?? "",   // 👇 new
+
                           );
                         } else {
                           Fluttertoast.showToast(msg: "Select Customer first");
@@ -1064,12 +896,14 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                               physics: const NeverScrollableScrollPhysics(), // 🆕 Disable inner scroll
                               itemBuilder: (context, index) {
                                 final item = itemList[index];
-                                final double? discount = item.discountPercentage;
-                                final double effectiveRate =
-                                discount! > 0 ? item.rate * (1 - discount / 100) : item.rate;
+                                final double discount = item.discountPercentage ?? 0.0;
 
-                                final double amount = effectiveRate * item.quantity;
+                                // ✅ item.rate already contains discounted price
+                                final double amount = item.rate * item.quantity;
 
+                                // ✅ original amount before discount
+                                final double originalAmount =
+                                    (item.priceListRate ?? item.rate) * item.quantity;
                                 return Card(
                                   elevation: 1,
                                   margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
@@ -1151,12 +985,42 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                                                 const SizedBox(height: 4),
 
                                                 // Quantity and Rate
-                                                Text(
-                                                  '${item.quantity} × ₹${item.rate.toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.grey[600],
-                                                  ),
+                                                // Text(
+                                                //   '${item.quantity} × ₹${item.rate.toStringAsFixed(2)}',
+                                                //   style: TextStyle(
+                                                //     fontSize: 11,
+                                                //     color: Colors.grey[600],
+                                                //   ),
+                                                // ),
+                                                // Quantity and Rate
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      '${item.quantity} × ₹${item.rate.toStringAsFixed(2)}',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                    ),
+                                                    if (item.uom != null && item.uom!.isNotEmpty) ...[
+                                                      const SizedBox(width: 6),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.blue[50],
+                                                          borderRadius: BorderRadius.circular(4),
+                                                        ),
+                                                        child: Text(
+                                                          item.uom!,
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            color: Colors.blue[700],
+                                                            fontWeight: FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
                                                 ),
                                                 if (discount > 0)
                                                   Padding(
@@ -1182,9 +1046,9 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               // Amount
-                                              if (item.discountPercentage! > 0)
+                                              if (discount > 0)
                                                 Text(
-                                                  '₹${(item.rate * item.quantity).toStringAsFixed(2)}',
+                                                  '₹${originalAmount.toStringAsFixed(2)}',
                                                   style: TextStyle(
                                                     fontSize: 11,
                                                     color: Colors.grey[500],
@@ -1310,6 +1174,7 @@ class AddItemDialog extends StatefulWidget {
   final double lastPurchaseRate; // ✅ NEW
   final bool isEdit;
   final int? editIndex;
+  final String uom;             // 👇 new
 
 
   const AddItemDialog({
@@ -1326,6 +1191,7 @@ class AddItemDialog extends StatefulWidget {
     this.lastPurchaseRate = 0.0, // ✅ NEW
     this.isEdit = false,
     this.editIndex,
+    this.uom = '',              // 👇 new
 
 
   });
@@ -1348,12 +1214,15 @@ class _AddItemDialogState extends State<AddItemDialog> {
   late FocusNode _rateFocusNode;
   late FocusNode _priceListRateFocusNode;
   late FocusNode _discountFocusNode;
-
+  double _baseRate = 0.0;
+  bool _isUpdatingDiscount = false;
 
   @override
   void initState() {
     super.initState();
-
+    _baseRate = widget.priceListRate > 0
+        ? widget.priceListRate
+        : widget.rate;
     _rateController = TextEditingController(text: widget.rate.toStringAsFixed(3));
     _quantityController = TextEditingController(text: widget.quantity.toStringAsFixed(2));
     _priceListRateController = TextEditingController(text: widget.priceListRate.toStringAsFixed(3));
@@ -1368,8 +1237,22 @@ class _AddItemDialogState extends State<AddItemDialog> {
     _discountFocusNode = FocusNode();
 
     _calculateTotal();
+    _quantityController.addListener(_calculateTotal);
 
-    _rateController.addListener(_calculateTotal);
+    _discountPercentageController.addListener(() {
+      _applyDiscountCalculation();
+    });
+
+    _priceListRateController.addListener(() {
+      if (_priceListRateFocusNode.hasFocus) {
+
+        _baseRate =
+            double.tryParse(_priceListRateController.text) ?? 0.0;
+
+        _applyDiscountCalculation();
+      }
+    });
+    // _rateController.addListener(_calculateTotal);
     _quantityController.addListener(_calculateTotal);
     _totalController.addListener(_updateRateFromTotal);
 
@@ -1399,40 +1282,50 @@ class _AddItemDialogState extends State<AddItemDialog> {
         _totalController.selection = TextSelection(baseOffset: 0, extentOffset: _totalController.text.length);
       }
     });
-    // Update rate when price list rate is edited
-    _priceListRateController.addListener(() {
-      if (_priceListRateFocusNode.hasFocus) {
-        final priceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
-        _rateController.text = priceListRate.toStringAsFixed(3);
-      }
-    });
-
     _discountFocusNode.addListener(() {
       if (_discountFocusNode.hasFocus) {
         _discountPercentageController.selection = TextSelection(baseOffset: 0, extentOffset: _discountPercentageController.text.length);
       }
     });
   }
+  void _applyDiscountCalculation() {
+    if (_isUpdatingDiscount) return;
+
+    final discount =
+        double.tryParse(_discountPercentageController.text) ?? 0.0;
+
+    final discountedRate =
+        _baseRate - ((_baseRate * discount) / 100);
+
+    _isUpdatingDiscount = true;
+
+    /// Prevent cursor jump while typing rate
+    if (!_rateFocusNode.hasFocus) {
+      _rateController.text =
+          discountedRate.toStringAsFixed(3);
+    }
+
+    _isUpdatingDiscount = false;
+
+    _calculateTotal();
+  }
 
   void _calculateTotal() {
     if (_isUpdatingFromTotal) return;
 
-    final rate = double.tryParse(_rateController.text) ?? 0;
-    final quantity = double.tryParse(_quantityController.text) ?? 0;
-    final discount =
-        double.tryParse(_discountPercentageController.text) ?? 0;
+    final rate =
+        double.tryParse(_rateController.text) ?? 0;
 
-    final discountedRate =
-    discount > 0 ? rate * (1 - discount / 100) : rate;
+    final quantity =
+        double.tryParse(_quantityController.text) ?? 0;
 
-    final total = discountedRate * quantity;
+    final total = rate * quantity;
 
     setState(() {
       _totalAmount = total;
       _totalController.text = total.toStringAsFixed(3);
     });
   }
-
   void _updateRateFromTotal() {
     if (!_totalFocusNode.hasFocus) return;
 
@@ -1478,100 +1371,290 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
     super.dispose();
   }
-
+  //
+  // @override
+  // Widget build(BuildContext context) {
+  //   return AlertDialog(
+  //     title: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //
+  //         RichText(
+  //           text: TextSpan(
+  //             children: [
+  //               TextSpan(
+  //                 text: widget.itemName,
+  //                 style: const TextStyle(
+  //                   fontSize: 14,
+  //                   fontWeight: FontWeight.w600,
+  //                   color: Colors.black87,
+  //                 ),
+  //               ),
+  //               TextSpan(
+  //                 text: " (${widget.itemCode})",
+  //                 style: const TextStyle(
+  //                   fontSize: 14,
+  //                   fontWeight: FontWeight.normal,
+  //                   color: Colors.black54,
+  //                 ),
+  //               ),
+  //               if (widget.uom.isNotEmpty)   // 👈 add this block
+  //                 TextSpan(
+  //                   text: " · ${widget.uom}",
+  //                   style: const TextStyle(
+  //                     fontSize: 13,
+  //                     fontWeight: FontWeight.normal,
+  //                     color: Colors.blueGrey,
+  //                   ),
+  //                 ),
+  //             ],
+  //           ),
+  //         ),
+  //
+  //       ],
+  //     ),
+  //     content: SingleChildScrollView(
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           TextField(
+  //             controller: _itemTaxTemplateController,
+  //             readOnly: true,
+  //             decoration: const InputDecoration(
+  //               labelText: 'Item Tax Template',
+  //             ),
+  //           ),
+  //           TextField(
+  //             controller: TextEditingController(
+  //               text: widget.lastPurchaseRate.toStringAsFixed(3),
+  //             ),
+  //             readOnly: true,
+  //             decoration: const InputDecoration(
+  //               labelText: 'Last Purchase Rate',
+  //             ),
+  //           ),
+  //           TextField(
+  //             controller: _priceListRateController,
+  //             focusNode: _priceListRateFocusNode,
+  //             keyboardType: TextInputType.number,
+  //             decoration: InputDecoration(labelText: 'Price List Rate'),
+  //           ),
+  //           TextField(
+  //             // readOnly: true,
+  //             controller: _discountPercentageController,
+  //             keyboardType: TextInputType.number,
+  //             focusNode: _discountFocusNode,
+  //             decoration: InputDecoration(labelText: 'Discount Percentage'),
+  //           ),
+  //           TextField(
+  //             controller: _rateController,
+  //             focusNode: _rateFocusNode,
+  //             keyboardType: TextInputType.number,
+  //             decoration: InputDecoration(labelText: 'Rate'),
+  //           ),
+  //
+  //
+  //           TextField(
+  //             controller: _quantityController,
+  //             focusNode: _quantityFocusNode,
+  //             keyboardType: TextInputType.number,
+  //             decoration: InputDecoration(labelText: 'Quantity'),
+  //           ),
+  //
+  //           TextField(
+  //             controller: _totalController,
+  //             focusNode: _totalFocusNode,
+  //             readOnly: true,
+  //             keyboardType: TextInputType.number,
+  //             decoration: InputDecoration(labelText: 'Total'),
+  //           ),
+  //
+  //
+  //         ],
+  //       ),
+  //     ),
+  //     actions: [
+  //
+  //       TextButton(
+  //         onPressed: () {
+  //           final rate = double.tryParse(_rateController.text) ?? 0.0;
+  //           final quantity = double.tryParse(_quantityController.text) ?? 0;
+  //           final priceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
+  //           final discountPercentage = double.tryParse(_discountPercentageController.text) ?? 0.0;
+  //
+  //           if (rate <= 0) {
+  //             Fluttertoast.showToast(msg: "Please enter a valid rate");
+  //           } else if (quantity <= 0) {
+  //             Fluttertoast.showToast(msg: "Please enter a valid quantity");
+  //           } else {
+  //             final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //             if (widget.isEdit && widget.editIndex != null) {
+  //               provider.editItem(
+  //                 widget.editIndex!,
+  //                 rate,
+  //                 quantity,
+  //                 priceListRate,
+  //                 discountPercentage,
+  //               );
+  //             } else {
+  //               provider.addItem(
+  //                 rate,
+  //                 quantity,
+  //                 widget.itemName,
+  //                 widget.itemCode,
+  //                 priceListRate,
+  //                 discountPercentage,
+  //                 widget.itemTaxTemplate,
+  //                 widget.lastPurchaseRate,
+  //                 uom: widget.uom,
+  //               );
+  //             }
+  //             // ✅ Notify parent to update global total
+  //             widget.onItemAdded?.call(rate, quantity);
+  //
+  //             Navigator.of(context).pop();
+  //           }
+  //         },
+  //         // child: const Text('Add'),
+  //         child: Text(widget.isEdit ? 'Save' : 'Add'),
+  //       ),
+  //
+  //       TextButton(
+  //         onPressed: () {
+  //           widget.onCancel();
+  //           Navigator.of(context).pop();
+  //         },
+  //         child: Text('Cancel'),
+  //       ),
+  //     ],
+  //   );
+  // }
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: widget.itemName, // ✅ highlighted item name
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600, // semi-bold for name
-                    color: Colors.black87,
-                  ),
-                ),
-                TextSpan(
-                  text: " (${widget.itemCode})", // ✅ normal item code
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.normal,
-                    color: Colors.black54, // slightly lighter
-                  ),
-                ),
-              ],
+      contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      title: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: widget.itemName,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
             ),
-          ),
-
-        ],
+            TextSpan(
+              text: " (${widget.itemCode})",
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+                color: Colors.black54,
+              ),
+            ),
+            if (widget.uom.isNotEmpty)
+              TextSpan(
+                text: " · ${widget.uom}",
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                  color: Colors.blueGrey,
+                ),
+              ),
+          ],
+        ),
       ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: _itemTaxTemplateController,
-              readOnly: true,
-              decoration: const InputDecoration(
-                labelText: 'Item Tax Template',
-              ),
+            // ── Read-only info chips ────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _infoChip(
+                    label: 'Tax Template',
+                    value: widget.itemTaxTemplate.isNotEmpty
+                        ? widget.itemTaxTemplate
+                        : '—',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _infoChip(
+                    label: 'Last Purchase Rate',
+                    value: '₹${widget.lastPurchaseRate.toStringAsFixed(2)}',
+                  ),
+                ),
+              ],
             ),
-            TextField(
-              controller: TextEditingController(
-                text: widget.lastPurchaseRate.toStringAsFixed(3),
-              ),
-              readOnly: true,
-              decoration: const InputDecoration(
-                labelText: 'Last Purchase Rate',
-              ),
-            ),
-            TextField(
-              controller: _priceListRateController,
-              focusNode: _priceListRateFocusNode,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Price List Rate'),
-            ),
-            TextField(
-              // readOnly: true,
-              controller: _discountPercentageController,
-              keyboardType: TextInputType.number,
-              focusNode: _discountFocusNode,
-              decoration: InputDecoration(labelText: 'Discount Percentage'),
-            ),
-            TextField(
-              controller: _rateController,
-              focusNode: _rateFocusNode,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Rate'),
-            ),
+            const SizedBox(height: 10),
 
-
-            TextField(
-              controller: _quantityController,
-              focusNode: _quantityFocusNode,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Quantity'),
+            // ── Price List Rate + Discount ──────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _compactField(
+                    controller: _priceListRateController,
+                    focusNode: _priceListRateFocusNode,
+                    label: 'Price List Rate',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _compactField(
+                    controller: _discountPercentageController,
+                    focusNode: _discountFocusNode,
+                    label: 'Discount %',
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
 
-            TextField(
+            // ── Rate + Quantity ─────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _compactField(
+                    controller: _rateController,
+                    focusNode: _rateFocusNode,
+                    label: 'Rate',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _compactField(
+                    controller: _quantityController,
+                    focusNode: _quantityFocusNode,
+                    label: 'Quantity',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // ── Total (full width) ──────────────────────────────
+            _compactField(
               controller: _totalController,
               focusNode: _totalFocusNode,
+              label: 'Total',
               readOnly: true,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Total'),
             ),
-
-
+            const SizedBox(height: 8),
           ],
         ),
       ),
       actions: [
-
+        TextButton(
+          onPressed: () {
+            widget.onCancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('Cancel'),
+        ),
         TextButton(
           onPressed: () {
             final rate = double.tryParse(_rateController.text) ?? 0.0;
@@ -1585,16 +1668,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
               Fluttertoast.showToast(msg: "Please enter a valid quantity");
             } else {
               final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-              // provider.addItem(rate, quantity, widget.itemName, widget.itemCode, priceListRate, discountPercentage);
-              // if (widget.isEdit) {
-              //   provider.editItemByCode(
-              //     widget.itemCode,
-              //     rate,
-              //     quantity,
-              //     priceListRate,
-              //     discountPercentage,
-              //   );
-              // }
               if (widget.isEdit && widget.editIndex != null) {
                 provider.editItem(
                   widget.editIndex!,
@@ -1613,26 +1686,63 @@ class _AddItemDialogState extends State<AddItemDialog> {
                   discountPercentage,
                   widget.itemTaxTemplate,
                   widget.lastPurchaseRate,
+                  uom: widget.uom,
                 );
               }
-              // ✅ Notify parent to update global total
               widget.onItemAdded?.call(rate, quantity);
-
               Navigator.of(context).pop();
             }
           },
-          // child: const Text('Add'),
           child: Text(widget.isEdit ? 'Save' : 'Add'),
         ),
-
-        TextButton(
-          onPressed: () {
-            widget.onCancel();
-            Navigator.of(context).pop();
-          },
-          child: Text('Cancel'),
-        ),
       ],
+    );
+  }
+
+// ── Helpers ────────────────────────────────────────────────────
+
+  Widget _infoChip({required String label, required String value}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+          const SizedBox(height: 2),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _compactField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String label,
+    bool readOnly = false,
+  }) {
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      readOnly: readOnly,
+      keyboardType: TextInputType.number,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(fontSize: 12),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+      ),
     );
   }
 }

@@ -11,8 +11,17 @@ import 'package:sales_ordering_app/view/sales_invoice.dart/SalesInvoice.dart';
 
 class SalesInvoiceCreateScreen extends StatefulWidget {
   final void Function(Future<void> Function())? onSave;
+// 👇 Add these to the widget's constructor
+  final VoidCallback? onSubmitStart;
+  final VoidCallback? onSubmitEnd;
 
-  const SalesInvoiceCreateScreen({super.key, this.onSave});
+  // const SalesInvoiceCreateScreen({super.key, this.onSave});
+  const SalesInvoiceCreateScreen({
+    super.key,
+    required this.onSave,
+    this.onSubmitStart,
+    this.onSubmitEnd,
+  });
 
   @override
   State<SalesInvoiceCreateScreen> createState() =>
@@ -26,7 +35,7 @@ class _SalesInvoiceCreateScreenState extends State<SalesInvoiceCreateScreen> {
   bool _customerSelected = false;
   String? _currency;
   bool isSubmitting = false;
-
+  final FocusNode _itemSearchFocusNode = FocusNode();
   final TextEditingController _itemSearchController = TextEditingController();
   String? _selectedItem;
   bool _itemSelected = false;
@@ -42,7 +51,10 @@ class _SalesInvoiceCreateScreenState extends State<SalesInvoiceCreateScreen> {
   final TextEditingController postingDateController = TextEditingController();
   DateTime? _selectedPostingDate;
 
-
+  bool _isDiscountExpanded = false;
+  String _applyDiscountOn = 'Net Total';
+  final TextEditingController _discountPercentageController = TextEditingController();
+  final TextEditingController _discountAmountController = TextEditingController();
   final FocusNode totalFocusNode = FocusNode(); // NEW
 
   String currency = "INR";
@@ -68,6 +80,7 @@ class _SalesInvoiceCreateScreenState extends State<SalesInvoiceCreateScreen> {
 
   @override
   void dispose() {
+    _itemSearchFocusNode.dispose();
     _searchController.dispose();
     _itemSearchController.dispose();
     customerController.dispose();
@@ -80,62 +93,126 @@ class _SalesInvoiceCreateScreenState extends State<SalesInvoiceCreateScreen> {
     totalController.dispose(); // dispose new controller
     totalFocusNode.dispose(); // dispose new focus node
     postingDateController.dispose();
-
+    _discountPercentageController.dispose();
+    _discountAmountController.dispose();
 
     super.dispose();
   }
 
+  // Future<void> _handleSave() async {
+  //   if (isSubmitting) return;
+  //
+  //   setState(() => isSubmitting = true);
+  //
+  //   final provider =
+  //   Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //   final customerName = customerController.text.trim();
+  //   final dueDate = dueDateController.text.trim();
+  //   final items = provider.items;
+  //
+  //   if (customerName.isEmpty || dueDate.isEmpty || items.isEmpty) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("Please fill all fields and add items.")),
+  //     );
+  //     setState(() => isSubmitting = false);
+  //     return;
+  //   }
+  //
+  //   final success = await provider.submitInvoice(
+  //     context,
+  //     customerName,
+  //     _selectedDueDate!,
+  //     _selectedPostingDate!,
+  //   );
+  //
+  //   if (success) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text("Sales Invoice Created"),
+  //         backgroundColor: Colors.green,
+  //       ),
+  //     );
+  //
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(builder: (_) => const SalesInvoicePage()),
+  //     );
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text(provider.errorMessage ?? "Unknown error occurred"),
+  //       ),
+  //     );
+  //   }
+  //
+  //   setState(() => isSubmitting = false);
+  // }
   Future<void> _handleSave() async {
     if (isSubmitting) return;
 
     setState(() => isSubmitting = true);
+    widget.onSubmitStart?.call(); // 👇 tell parent to show overlay
 
-    final provider =
-    Provider.of<SalesOrderProvider>(context, listen: false);
-
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
     final customerName = customerController.text.trim();
     final dueDate = dueDateController.text.trim();
     final items = provider.items;
 
     if (customerName.isEmpty || dueDate.isEmpty || items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill all fields and add items.")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please fill all fields and add items.")),
+        );
+      }
       setState(() => isSubmitting = false);
+      widget.onSubmitEnd?.call(); // 👇 tell parent to hide overlay
       return;
     }
+
+    final double discountPercentage = provider.isDiscountEnabled
+        ? (double.tryParse(_discountPercentageController.text.trim()) ?? 0.0)
+        : 0.0;
+    final double discountAmount = provider.isDiscountEnabled
+        ? (double.tryParse(_discountAmountController.text.trim()) ?? 0.0)
+        : 0.0;
+    final String applyDiscountOn =
+    provider.isDiscountEnabled ? _applyDiscountOn : 'Grand Total';
 
     final success = await provider.submitInvoice(
       context,
       customerName,
       _selectedDueDate!,
       _selectedPostingDate!,
+      applyDiscountOn: applyDiscountOn,
+      additionalDiscountPercentage: discountPercentage,
+      discountAmount: discountAmount,
     );
 
+    if (!mounted) return;
+
     if (success) {
+      widget.onSubmitEnd?.call(); // 👇 hide overlay before navigating
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Sales Invoice Created"),
           backgroundColor: Colors.green,
         ),
       );
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const SalesInvoicePage()),
       );
     } else {
+      setState(() => isSubmitting = false);
+      widget.onSubmitEnd?.call(); // 👇 hide overlay on failure
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(provider.errorMessage ?? "Unknown error occurred"),
         ),
       );
     }
-
-    setState(() => isSubmitting = false);
   }
-
-
     Future<void> _searchCustomer(String customer) async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
     try {
@@ -211,6 +288,8 @@ void _showAddItemDialog({
   required VoidCallback onCancel,
   required String itemTaxTemplate,
   required double lastPurchaseRate,
+  String uom = '',   // 👇 new
+  VoidCallback? onCa
 
 }) {
     // Set rateController to priceListRate as default
@@ -230,143 +309,11 @@ void _showAddItemDialog({
       onCancel: onCancel,
       itemTaxTemplate: itemTaxTemplate,
       lastPurchaseRate: lastPurchaseRate,
+      uom: uom,           // 👇 pass it down
 
     ),
   );
 }
-
-  //
-  // void _showEditDialog(BuildContext context, int index,
-  //     SalesOrderProvider provider, final VoidCallback onCancel) {
-  //   final item = provider.itemsList[index];
-  //   final _rateController = TextEditingController(text: item.rate.toString());
-  //   final _quantityController = TextEditingController(text: item.quantity.toString());
-  //   final _priceListRateController = TextEditingController(text: item.priceListRate?.toString() ?? '');
-  //   final _discountPercentageController = TextEditingController(text: item.discountPercentage?.toString() ?? '');
-  //   final _totalController = TextEditingController(text: (item.rate * item.quantity).toStringAsFixed(3));
-  //   final _totalFocusNode = FocusNode();
-  //
-  //   double totalAmount = item.rate * item.quantity;
-  //
-  //   void updateTotal() {
-  //     if (_totalFocusNode.hasFocus) return;
-  //
-  //     final rate = double.tryParse(_rateController.text) ?? 0;
-  //     final qty = double.tryParse(_quantityController.text) ?? 0;
-  //     final discount =
-  //         double.tryParse(_discountPercentageController.text) ?? 0;
-  //
-  //     final effectiveRate =
-  //     discount > 0 ? rate * (1 - discount / 100) : rate;
-  //
-  //     totalAmount = effectiveRate * qty;
-  //     _totalController.text = totalAmount.toStringAsFixed(3);
-  //   }
-  //
-  //
-  //   void updateRateFromTotal() {
-  //     if (!_totalFocusNode.hasFocus) return;
-  //
-  //     final total = double.tryParse(_totalController.text) ?? 0;
-  //     final qty = double.tryParse(_quantityController.text) ?? 0;
-  //     if (qty > 0) {
-  //       final newRate = total / qty;
-  //       _rateController.text = newRate.toStringAsFixed(3);
-  //       _priceListRateController.text = newRate.toStringAsFixed(3);
-  //     }
-  //   }
-  //
-  //   _rateController.addListener(updateTotal);
-  //   _quantityController.addListener(updateTotal);
-  //   _totalController.addListener(updateRateFromTotal);
-  //
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return AlertDialog(
-  //         title: Text('Edit Item'),
-  //         content: SingleChildScrollView(
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               Text('Item: ${item.name}'),
-  //               TextField(
-  //                 controller: _priceListRateController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Price List Rate'),
-  //                 readOnly: true,
-  //               ),
-  //               TextField(
-  //                 controller: _rateController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Rate'),
-  //               ),
-  //               TextField(
-  //                 controller: _discountPercentageController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Discount Percentage'),
-  //               ),
-  //               TextField(
-  //                 controller: _quantityController,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Quantity'),
-  //               ),
-  //               TextField(
-  //                 controller: _totalController,
-  //                 focusNode: _totalFocusNode,
-  //                 keyboardType: TextInputType.number,
-  //                 decoration: InputDecoration(labelText: 'Total'),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () {
-  //               final newRate = double.tryParse(_rateController.text) ?? 0.0;
-  //               final newQuantity = double.tryParse(_quantityController.text) ?? 0;
-  //               final newPriceListRate =
-  //                   double.tryParse(_priceListRateController.text) ?? 0.0;
-  //               final newDiscountPercentage =
-  //                   double.tryParse(_discountPercentageController.text) ?? 0.0;
-  //
-  //               if (newRate <= 0) {
-  //                 Fluttertoast.showToast(
-  //                   msg: "Please enter a valid rate",
-  //                   toastLength: Toast.LENGTH_SHORT,
-  //                   gravity: ToastGravity.BOTTOM,
-  //                 );
-  //               } else if (newQuantity <= 0) {
-  //                 Fluttertoast.showToast(
-  //                   msg: "Please enter a valid quantity",
-  //                   toastLength: Toast.LENGTH_SHORT,
-  //                   gravity: ToastGravity.BOTTOM,
-  //                 );
-  //               } else {
-  //                 provider.editItem(
-  //                   index,
-  //                   newRate,
-  //                   newQuantity,
-  //                   newPriceListRate,
-  //                   newDiscountPercentage,
-  //                 );
-  //                 Navigator.of(context).pop();
-  //               }
-  //             },
-  //             child: Text('Save'),
-  //           ),
-  //           TextButton(
-  //             onPressed: () {
-  //               onCancel();
-  //               Navigator.of(context).pop();
-  //             },
-  //             child: Text('Cancel'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
 
   void _showEditDialog(BuildContext context, int index,
       SalesOrderProvider provider, final VoidCallback onCancel) async {
@@ -389,7 +336,9 @@ void _showAddItemDialog({
 
     final itemTaxTemplate =
         message?["item_tax_template"] ?? item.itemTaxTemplate;
-
+    final uom = item.uom?.isNotEmpty == true    // 👈 add this
+        ? item.uom!
+        : (message?["uom"] ?? message?["stock_uom"] ?? '');
     showDialog(
       context: context,
       builder: (context) => AddItemDialog(
@@ -404,6 +353,7 @@ void _showAddItemDialog({
         isEdit: true,
         editIndex: index,// ✅ IMPORTANT
         onCancel: onCancel,
+        uom: uom,              // ✅ use the resolved variable, not item.uom
         onItemAdded: (rate, qty) {
           setState(() {
             // _isFormDirty = true;
@@ -449,6 +399,8 @@ void initState() {
   rateController.addListener(_recalculateTotal);
   totalController.addListener(_handleTotalEdit);
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+    provider.fetchDiscountSettings(context);
     widget.onSave?.call(_handleSave);
     resetForm(); // Ensures context is available
   });
@@ -458,155 +410,161 @@ void initState() {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<SalesOrderProvider>(context);
-        final items = provider.itemListModel?.data ?? [];
-    TextStyle style =
-        const TextStyle(fontSize: 15, fontWeight: FontWeight.bold);
-        final customerList = provider.customerSearchModel?.data ?? [];
+    final items = provider.itemListModel?.data ?? [];
+    final customerList = provider.customerSearchModel?.data ?? [];
+    TextStyle labelStyle = const TextStyle(fontSize: 13, fontWeight: FontWeight.bold);
 
+    // 👇 Get bottom inset (navigation bar height)
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+        bottom: false,
+        child: Padding(
+        padding: const EdgeInsets.all(12.0),
+    child: SingleChildScrollView(
+    padding: EdgeInsets.only(
+    bottom: bottomPadding + bottomInset + 16,
+    ),
+    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+    child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+              /// 🔍 CUSTOMER SEARCH + TOTAL (SAME ROW)
+              Row(
                 children: [
-
-                  /// 💰 TOTAL (TOP RIGHT)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      _buildTotalAmount(),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  /// 🔍 SEARCH CUSTOMER (FULL WIDTH)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        labelText: 'Search Customer',
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() {
-                              _searchController.clear();
-                              _selectedCustomer = null;
-                              customerController.clear();
-                              customerList.clear();
-                            });
-                          },
-                        )
-                            : const Icon(Icons.search),
-                        border: InputBorder.none,
+                  Expanded(
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      onChanged: (value) {
-                        _selectedCustomer = null;
-                        _searchCustomer(value);
-                      },
+                      child: TextField(
+                        controller: _searchController,
+                        style: const TextStyle(fontSize: 14),
+                        decoration: InputDecoration(
+                          labelText: 'Search Customer',
+                          labelStyle: const TextStyle(fontSize: 13),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                            iconSize: 18,
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _selectedCustomer = null;
+                                customerController.clear();
+                                customerList.clear();
+                              });
+                            },
+                          )
+                              : const Icon(Icons.search, size: 18),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        onChanged: (value) {
+                          _selectedCustomer = null;
+                          _searchCustomer(value);
+                        },
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  _buildTotalAmount(),
                 ],
               ),
 
-
-
-// List of Matching Customers
+              /// 📋 CUSTOMER DROPDOWN LIST
               if (customerList.isNotEmpty)
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: customerList.length,
+                    separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey[200]),
+                    itemBuilder: (context, index) {
+                      final customer = customerList[index];
+                      final isSelected = _selectedCustomer == customer.name;
+                      return InkWell(
+                        onTap: () async {
+                          if (customer.name == null) return;
+                          setState(() {
+                            _selectedCustomer = customer.name;
+                            _searchController.text = customer.customerName ?? '';
+                            customerController.text = customer.name ?? '';
+                            customerList.clear();
+                          });
+                          try {
+                            final p = Provider.of<SalesOrderProvider>(context, listen: false);
+                            final details = await p.fetchCustomerDetails(context, customer.customerName ?? '');
+                            if (details?['message'] != null) {
+                              setState(() => _currency = details!['message']['currency'] ?? '');
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Failed to fetch customer details')),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Error fetching customer')),
+                            );
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              if (isSelected)
+                                Icon(Icons.check_circle, size: 16, color: AppColors.primaryColor),
+                              if (isSelected) const SizedBox(width: 6),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(customer.customerName ?? '',
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                    Text(customer.name ?? '',
+                                        style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
 
-                SizedBox(
-    height: 200,
-    child: ListView.builder(
-      itemCount: customerList.length,
-      itemBuilder: (BuildContext context, int index) {
-        final customer = customerList[index];
+              if (Provider.of<SalesOrderProvider>(context).isLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: RadioListTile<String>(
-            title: Text(customer.customerName ?? ''),
-            subtitle: Text(
-              customer.name ?? '',
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            value: customer.name ?? '',
-            groupValue: _selectedCustomer,
-            onChanged: (String? selected) async {
-              if (selected == null) return;
+              const SizedBox(height: 10),
 
-
-              setState(() {
-                _selectedCustomer = customer.name;
-                _searchController.text = customer.customerName ?? '';
-                customerController.text = customer.name ?? '';
-                customerList.clear(); // hide list after selection
-              });
-
-              try {
-                final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-                final customerDetails = await provider.fetchCustomerDetails(
-                  context,
-                  customer.customerName ?? '',
-                );
-
-                debugPrint('✅ Fetched Customer Details: $customerDetails');
-
-                if (customerDetails != null && customerDetails['message'] != null) {
-                  final message = customerDetails['message'];
-                  setState(() {
-                    _currency = message['currency'] ?? '';
-                  });
-                  debugPrint('💱 Currency: $_currency');
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Failed to fetch customer details')),
-                  );
-                }
-              } catch (e) {
-                debugPrint('❌ Error fetching customer details: $e');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error occurred while fetching customer')),
-                );
-              }
-            },
-          ),
-        );
-      },
-    ),
-  ),
-
-// Loading Indicator
-if (Provider.of<SalesOrderProvider>(context).isLoading)
-  const Center(child: CircularProgressIndicator()),
-
-              const SizedBox(height: 12),
-
-const SizedBox(height: 15),
-
+              /// 📅 POSTING DATE + DUE DATE
               Row(
                 children: [
-                  // Posting Date
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(left: 5.0, bottom: 3),
-                          child: Text(
-                            "Posting Date",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 2),
+                          child: Text("Posting Date", style: labelStyle),
                         ),
                         GestureDetector(
                           onTap: () => _selectPostingDate(context),
@@ -614,8 +572,8 @@ const SizedBox(height: 15),
                             child: CommonTextField(
                               controller: postingDateController,
                               hintText: "Select",
-                              borderRadius: 10,
-                              style: style,
+                              borderRadius: 8,
+                              style: const TextStyle(fontSize: 13),
                               obscureText: false,
                             ),
                           ),
@@ -623,20 +581,14 @@ const SizedBox(height: 15),
                       ],
                     ),
                   ),
-
                   const SizedBox(width: 10),
-
-                  // Due Date
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(left: 5.0, bottom: 3),
-                          child: Text(
-                            "Due Date",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 2),
+                          child: Text("Due Date", style: labelStyle),
                         ),
                         GestureDetector(
                           onTap: () => _selectDueDate(context),
@@ -644,8 +596,8 @@ const SizedBox(height: 15),
                             child: CommonTextField(
                               controller: dueDateController,
                               hintText: "Select",
-                              borderRadius: 10,
-                              style: style,
+                              borderRadius: 8,
+                              style: const TextStyle(fontSize: 13),
                               obscureText: false,
                             ),
                           ),
@@ -656,504 +608,387 @@ const SizedBox(height: 15),
                 ],
               ),
 
-                  const Divider(height: 32),
-              const Text("Add Item", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Divider(height: 20),
 
-// Input field styled like reference
-Container(
-  padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 0.0),
-  decoration: BoxDecoration(
-    color: Colors.grey[200],
-    borderRadius: BorderRadius.circular(10.0),
-  ),
-  child: TextField(
-    controller: _itemSearchController,
-    decoration: const InputDecoration(
-      labelText: 'Search Item',
-      suffixIcon: Icon(Icons.search),
-      border: InputBorder.none,
-      contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-    ),
-    onChanged: (content) {
-      setState(() {
-        _itemSelected = false;
-      });
-      _searchItemList(content);
+              /// ➕ ADD ITEM SECTION
+              const Text("Add Item", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+    TapRegion(
+    onTapOutside: (_) {
+    setState(() {
+    _itemSelected = true;
+    });
+
+    _itemSearchFocusNode.unfocus();
     },
-    onSubmitted: (query) {
-      setState(() {
-        _itemSelected = false;
-      });
-      _searchItemList(query);
-    },
-  ),
-),
-
-// List of matching items
-if (!_itemSelected && items.isNotEmpty)
-  SizedBox(
-    height: 200,
-    child: ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (BuildContext context, int index) {
-        var item = items[index];
-        bool isAlreadySelected = _selectedItem == item.itemName;
-
-        return Padding(
-          padding: const EdgeInsets.only(top: 15),
-          child: RadioListTile<String>(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.itemName ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+    child: Column(
+    children: [
+              Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  item.itemCode ?? '',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-            value: item.itemName ?? '',
-            groupValue: _selectedItem,
-
-              onChanged: (String? selected) async {
-                if (selected == null) return;
-
-                final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-                final customer = customerController.text.trim();
-
-                // 🔐 Check if customer is filled in
-                if (customer.isEmpty) {
-                  Fluttertoast.showToast(msg: "Please enter/select a customer first.");
-                  return;
-                }
-
-                // 🔁 Ensure customer details are fetched
-                if (provider.invoiceCustomerDetails == null ||
-                    provider.invoiceCustomerDetails?["customer_name"] != customer) {
-                  try {
-                    await provider.fetchCustomer(context, customer);
-                  } catch (e) {
-                    Fluttertoast.showToast(msg: "Failed to fetch customer details.");
-                    return;
-                  }
-                }
-
-                final customerDetails = provider.invoiceCustomerDetails ??
-                    await provider.fetchCustomer(context, customer);
-
-                if (customerDetails == null) {
-                  Fluttertoast.showToast(msg: "Failed to load customer details.");
-                  return;
-                }
-
-                final priceList = provider.sellingPriceList;
-
-                if (priceList == null || priceList.isEmpty) {
-                  Fluttertoast.showToast(
-                    msg: "Selling Price List is not configured for this customer.",
-                  );
-                  return;
-                }
-
-                try {
-                  final item = items[index];
-
-                  // 🚫 Check if item already exists in the list
-                  final isDuplicate = provider.itemsList.any(
-                        (existingItem) => existingItem.itemCode == item.itemCode,
-                  );
-
-                  if (isDuplicate) {
-                    Fluttertoast.showToast(msg: "Item '${item.itemName}' already added.");
-                    return; // Exit early, don't proceed to fetch or show dialog
-                  }
-
-                  // final itemDetails = await provider.fetchItem(
-                  //   context: context,
-                  //   itemCode: item.itemCode ?? '',
-                  //   itemName: item.itemName ?? '',
-                  //   quantity: 1.0,
-                  //   currency: currency,
-                  //   customer: customer,
-                  //   priceList: priceList,
-                  // );
-                  final itemDetails = await provider.fetchItemDetail(
-                    context: context,
-                    itemCode: item.itemCode ?? '',
-                    currency: currency,
-                    quantity: 1.0,
-                    customerName: customer,
-                  );
-
-                  // if (itemDetails != null) {
-                  //
-                  //   final rate = (itemDetails['rate'] ?? 0).toDouble();
-                  //   final priceListRate = (itemDetails['price_list_rate'] ?? 0).toDouble();
-                  //   final discount = (itemDetails['discount_percentage'] ?? 0).toDouble();
-                  //   final itemTaxTemplate = itemDetails["item_tax_template"] ?? "";
-                  if (itemDetails != null && itemDetails['message'] != null) {
-
-                    final message = itemDetails['message'];
-
-                    final rate = (message['rate'] ?? 0).toDouble();
-                    final priceListRate = (message['price_list_rate'] ?? 0).toDouble();
-                    final discount = (message['discount_percentage'] ?? 0).toDouble();
-                    final itemTaxTemplate = message["item_tax_template"] ?? "";
-
-                    /// ✅ NEW
-                    final lastPurchaseRate =
-                    (message['last_purchase_rate'] ?? 0).toDouble();
-
-                    setState(() {
-                      _selectedItem = selected;
-                      _itemSelected = true;
-                      _itemSearchController.clear();
-                    });
-
-                    _showAddItemDialog(
-                      itemName: item.itemName ?? "",
-                      itemCode: item.itemCode ?? "",
-                      rate: rate,
-                      quantity: 1,
-                      priceListRate: priceListRate,
-                      discountPercentage: discount,
-                      lastPurchaseRate: lastPurchaseRate,
-                      // itemTaxTemplate: message["item_tax_template"] ?? "",
-                      itemTaxTemplate: itemTaxTemplate,
-
-                      onCancel: () {
-                        setState(() {
-                          _selectedItem = null;
-                          _itemSelected = false;
-                        });
-                      },
-                    );
-                  } else {
-                    Fluttertoast.showToast(msg: "Failed to fetch item details.");
-                  }
-                } catch (e) {
-                  Fluttertoast.showToast(msg: "Error fetching item: $e");
-                }
-
-              }
-
-          ),
-        );
-      },
-    ),
-  ),
-
-              if (provider.isLoadingItem)
-                const Center(
-                  child: CircularProgressIndicator(),
-                ),
-
-SizedBox(
-  height: 300, // Increased height to fit the total amount text
-  child: Consumer<SalesOrderProvider>(
-    builder: (context, itemProvider, child) {
-      // Calculate grand total of all items
-      final grandTotal = itemProvider.itemsList.fold<double>(
-        0,
-        (sum, item) => sum + ((item.rate ?? 0) * (item.quantity ?? 0)),
-      );
-
-return Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    // List of items
-    Expanded(
-      child: Consumer<SalesOrderProvider>(
-        builder: (context, itemProvider, child) {
-          final itemList = itemProvider.itemsList;
-
-          /// 🔄 Loading
-          if (itemProvider.isLoadingItem) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          /// 📭 Empty state
-          if (itemList.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No items added yet',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                child: TextField(
+                  focusNode: _itemSearchFocusNode,
+                  controller: _itemSearchController,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(
+                    labelText: 'Search Item',
+                    labelStyle: TextStyle(fontSize: 13),
+                    suffixIcon: Icon(Icons.search, size: 18),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 10),
                   ),
-                ],
-              ),
-            );
-          }
-
-          /// 📦 Item list
-          return ListView.builder(
-            itemCount: itemList.length,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            itemBuilder: (context, index) {
-              final item = itemList[index];
-
-              final double rate = item.rate ?? 0;
-              final double qty = item.quantity ?? 0;
-              final double discount = item.discountPercentage ?? 0;
-
-              final double effectiveRate =
-              discount > 0 ? rate * (1 - discount / 100) : rate;
-
-              final double amount = effectiveRate * qty;
-              final double originalAmount = rate * qty;
-
-              return Card(
-                elevation: 1,
-                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey[200]!, width: 1),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    _showEditDialog(context, index, itemProvider, () {
-                      setState(() => _selectedItem = null);
-                      _itemSearchController.clear();
-                    });
+                  onChanged: (content) {
+                    setState(() => _itemSelected = false);
+                    _searchItemList(content);
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        /// 🔢 Serial badge
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${index + 1}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: AppColors.primaryColor,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
+                  onSubmitted: (query) {
+                    setState(() => _itemSelected = false);
+                    _searchItemList(query);
+                  },
+                ),
+              ),
 
-                        /// 📄 Item details
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              /// 📋 ITEM DROPDOWN LIST
+              if (!_itemSelected && items.isNotEmpty)
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey[200]),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return InkWell(
+                        onTap: () async {
+                          final p = Provider.of<SalesOrderProvider>(context, listen: false);
+                          final customer = customerController.text.trim();
+
+                          if (customer.isEmpty) {
+                            Fluttertoast.showToast(msg: "Please select a customer first.");
+                            return;
+                          }
+
+                          if (p.invoiceCustomerDetails == null ||
+                              p.invoiceCustomerDetails?["customer_name"] != customer) {
+                            try {
+                              await p.fetchCustomer(context, customer);
+                            } catch (_) {
+                              Fluttertoast.showToast(msg: "Failed to fetch customer details.");
+                              return;
+                            }
+                          }
+
+                          final customerDetails = p.invoiceCustomerDetails ??
+                              await p.fetchCustomer(context, customer);
+                          if (customerDetails == null) {
+                            Fluttertoast.showToast(msg: "Failed to load customer details.");
+                            return;
+                          }
+
+                          final priceList = p.sellingPriceList;
+                          if (priceList == null || priceList.isEmpty) {
+                            Fluttertoast.showToast(msg: "Selling Price List not configured.");
+                            return;
+                          }
+
+                          final isDuplicate = p.itemsList.any((e) => e.itemCode == item.itemCode);
+                          if (isDuplicate) {
+                            Fluttertoast.showToast(msg: "'${item.itemName}' already added.");
+                            return;
+                          }
+
+                          try {
+                            final itemDetails = await p.fetchItemDetail(
+                              context: context,
+                              itemCode: item.itemCode ?? '',
+                              currency: currency,
+                              quantity: 1.0,
+                              customerName: customer,
+                            );
+
+                            if (itemDetails?['message'] != null) {
+                              final msg = itemDetails!['message'];
+                              setState(() {
+                                _selectedItem = item.itemName;
+                                _itemSelected = true;
+                                _itemSearchController.clear();
+                              });
+                              _showAddItemDialog(
+                                itemName: item.itemName ?? "",
+                                itemCode: item.itemCode ?? "",
+                                rate: (msg['rate'] ?? 0).toDouble(),
+                                quantity: 1,
+                                priceListRate: (msg['price_list_rate'] ?? 0).toDouble(),
+                                discountPercentage: (msg['discount_percentage'] ?? 0).toDouble(),
+                                lastPurchaseRate: (msg['last_purchase_rate'] ?? 0).toDouble(),
+                                itemTaxTemplate: msg["item_tax_template"] ?? "",
+                                uom: msg?["uom"] ?? msg?["stock_uom"] ?? '',  // 👈 add this
+                                onCancel: () => setState(() {
+                                  _selectedItem = null;
+                                  _itemSelected = false;
+                                }),
+                              );
+                            } else {
+                              Fluttertoast.showToast(msg: "Failed to fetch item details.");
+                            }
+                          } catch (e) {
+                            Fluttertoast.showToast(msg: "Error fetching item: $e");
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
                             children: [
-                              /// Item name
-                              Text(
-                                item.name ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.itemName ?? '',
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                    Text(item.itemCode ?? '',
+                                        style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-
-                              /// Item code
-                              if (item.itemCode != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    item.itemCode!,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey[700],
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-
-                              const SizedBox(height: 4),
-
-                              /// Qty × Rate
-                              Text(
-                                '${qty.toStringAsFixed(2)} × ₹${rate.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-
-                              /// Discount
-                              if (discount > 0)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    'Discount: ${discount.toStringAsFixed(1)}%',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.orange[700],
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
                         ),
+                      );
+                    },
+                  ),
+                ),
+    ],
+    ),
+    ),
 
-                        const SizedBox(width: 8),
+              const SizedBox(height: 8),
 
-                        /// 💰 Amount + Delete
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+              /// 📦 ITEM LIST
+              Consumer<SalesOrderProvider>(
+                builder: (context, itemProvider, child) {
+                  final itemList = itemProvider.itemsList;
+
+                  if (itemProvider.isLoadingItem) {
+                    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                  }
+
+                  if (itemList.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Column(
                           children: [
-                            if (discount > 0)
-                              Text(
-                                '₹${originalAmount.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[500],
-                                  decoration: TextDecoration.lineThrough,
+                            Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey[300]),
+                            const SizedBox(height: 8),
+                            Text('No items added yet',
+                                style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: List.generate(itemList.length, (index) {
+                      final item = itemList[index];
+                      final double rate = item.rate ?? 0;
+                      final double qty = item.quantity ?? 0;
+                      final double discount = item.discountPercentage ?? 0;
+                      final double effectiveRate = discount > 0 ? rate * (1 - discount / 100) : rate;
+                      final double amount = effectiveRate * qty;
+                      final double originalAmount = rate * qty;
+
+                      return Card(
+                        elevation: 0,
+                        margin: const EdgeInsets.symmetric(vertical: 3),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: Colors.grey[200]!, width: 1),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            _showEditDialog(context, index, itemProvider,
+                                    () => setState(() => _selectedItem = null));
+                            _itemSearchController.clear();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                /// Serial badge
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue[50],
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text('${index + 1}',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                          color: AppColors.primaryColor)),
                                 ),
-                              ),
+                                const SizedBox(width: 8),
 
-                            Text(
-                              '₹${amount.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Colors.green[700],
-                              ),
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            /// 🗑 Delete
-                            InkWell(
-                              onTap: () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    title: const Row(
-                                      children: [
-                                        Icon(Icons.warning_amber_rounded,
-                                            color: Colors.redAccent),
-                                        SizedBox(width: 8),
-                                        Text("Confirm Delete",
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                    content: Text(
-                                      "Are you sure you want to delete '${item.name}'?",
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, false),
-                                        child: const Text("Cancel"),
+                                /// Item info — Expanded forces it to take only remaining space
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.name ?? '',
+                                        maxLines: 2,              // allow wrap instead of overflow
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                                       ),
-                                      ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.redAccent,
-                                        ),
-                                        onPressed: () =>
-                                            Navigator.pop(context, true),
-                                        icon: const Icon(Icons.delete_forever,
-                                            size: 18),
-                                        label: const Text("Delete"),
+                                      const SizedBox(height: 2),
+                                      // Wrap(                        // Wrap instead of Row so it never overflows
+                                      //   spacing: 6,
+                                      //   runSpacing: 2,
+                                      //   children: [
+                                      //     if (item.itemCode != null)
+                                      //       Container(
+                                      //         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      //         decoration: BoxDecoration(
+                                      //           color: Colors.grey[100],
+                                      //           borderRadius: BorderRadius.circular(3),
+                                      //         ),
+                                      //         child: Text(item.itemCode!,
+                                      //             style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                                      //       ),
+                                      //     Text(
+                                      //       '${qty.toStringAsFixed(0)} × ₹${rate.toStringAsFixed(2)}',
+                                      //       style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                      //     ),
+                                      //     if (discount > 0)
+                                      //       Text(
+                                      //         '-${discount.toStringAsFixed(0)}%',
+                                      //         style: TextStyle(
+                                      //             fontSize: 10,
+                                      //             color: Colors.orange[600],
+                                      //             fontWeight: FontWeight.w600),
+                                      //       ),
+                                      //   ],
+                                      // ),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 2,
+                                        children: [
+                                          if (item.itemCode != null)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[100],
+                                                borderRadius: BorderRadius.circular(3),
+                                              ),
+                                              child: Text(item.itemCode!,
+                                                  style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                                            ),
+                                          Text(
+                                            '${qty.toStringAsFixed(0)} × ₹${rate.toStringAsFixed(2)}',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                          ),
+                                          if (item.uom != null && item.uom!.isNotEmpty)   // 👈 add this
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue[50],
+                                                borderRadius: BorderRadius.circular(3),
+                                              ),
+                                              child: Text(
+                                                item.uom!,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.blue[700],
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          if (discount > 0)
+                                            Text(
+                                              '-${discount.toStringAsFixed(0)}%',
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.orange[600],
+                                                  fontWeight: FontWeight.w600),
+                                            ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                );
+                                ),
 
-                                if (confirm == true) {
-                                  itemProvider.deleteItem(index);
-                                  // setState(() => _isFormDirty = true);
+                                const SizedBox(width: 8),
 
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          "'${item.name}' deleted successfully"),
-                                      backgroundColor: Colors.redAccent,
+                                /// Amount + delete — intrinsic width, never grows
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,     // ← don't stretch vertically
+                                  children: [
+                                    if (discount > 0)
+                                      Text(
+                                        '₹${originalAmount.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey[400],
+                                            decoration: TextDecoration.lineThrough),
+                                      ),
+                                    Text(
+                                      '₹${amount.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.green[700]),
                                     ),
-                                  );
-                                }
-                              },
-                              child: Icon(Icons.delete_outline,
-                                  size: 18, color: Colors.red[400]),
+                                    const SizedBox(height: 2),
+                                    InkWell(
+                                      onTap: () async { /* your existing delete logic */ },
+                                      child: Icon(Icons.delete_outline, size: 16, color: Colors.red[400]),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
+                      );
+                    }),
+                  );
+                },
+              ),
+      Consumer<SalesOrderProvider>(
+        builder: (context, provider, _) {
+          // Still loading — show a subtle placeholder so layout doesn't jump
+          if (!provider.isDiscountEnabled) return const SizedBox.shrink();
+          return _buildAdditionalDiscountSection();
         },
       ),
-    ),
-
-
-  ],
-);
-
-    },
-  ),
-),
-
-             Consumer<SalesOrderProvider>(
-  builder: (context, provider, _) {
-    if (provider.item.isEmpty) return SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("Items Added:", style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        ...provider.item.map((item) {
-return ListTile(
-  title: Text("${item["item_code"]} - ${item["item_name"]}"),
-  subtitle: Text("Qty: ${item["qty"]}, Rate: ${item["rate"]}"),
-);
-
-        }).toList(),
-      ],
-    );
-  },
-),
-
-              // const SizedBox(height: 30),
 
               if (provider.errorMessage != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  provider.errorMessage!,
-                  style: const TextStyle(color: Colors.red),
-                ),
+                const SizedBox(height: 8),
+                Text(provider.errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12)),
               ],
             ],
           ),
         ),
       ),
+    ),
     );
   }
   Widget _buildTotalAmount() {
@@ -1185,6 +1020,241 @@ return ListTile(
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAdditionalDiscountSection() {
+    final List<String> discountOnOptions = ['Grand Total', 'Net Total'];
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          /// Header / Toggle
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => setState(() => _isDiscountExpanded = !_isDiscountExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.local_offer_outlined,
+                        size: 16, color: Colors.orange[700]),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Additional Discount',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                  /// Show summary when collapsed and values exist
+                  if (!_isDiscountExpanded)
+                    _buildDiscountSummaryBadge(),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: _isDiscountExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.keyboard_arrow_down,
+                        size: 20, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          /// Expandable body
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: _buildDiscountFields(discountOnOptions),
+            crossFadeState: _isDiscountExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiscountSummaryBadge() {
+    final pct = _discountPercentageController.text.trim();
+    final amt = _discountAmountController.text.trim();
+
+    if (pct.isEmpty && amt.isEmpty) return const SizedBox.shrink();
+
+    String label = '';
+    if (pct.isNotEmpty && pct != '0') label = '$pct%';
+    if (amt.isNotEmpty && amt != '0') {
+      label = label.isEmpty ? '₹$amt' : '$label · ₹$amt';
+    }
+    if (label.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 11,
+            color: Colors.orange[800],
+            fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _buildDiscountFields(List<String> discountOnOptions) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(height: 1, color: Colors.grey[200]),
+          const SizedBox(height: 10),
+
+          /// Apply Discount On
+          const Text('Apply Discount On',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 6),
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _applyDiscountOn,
+                isExpanded: true,
+                isDense: true,
+                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                icon: Icon(Icons.unfold_more, size: 18, color: Colors.grey[500]),
+                onChanged: (val) {
+                  if (val != null) setState(() => _applyDiscountOn = val);
+                },
+                items: discountOnOptions
+                    .map((opt) => DropdownMenuItem(
+                  value: opt,
+                  child: Text(opt),
+                ))
+                    .toList(),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          /// Percentage + Amount side by side
+          Row(
+            children: [
+              /// Discount Percentage
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Discount %',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: TextField(
+                        controller: _discountPercentageController,
+                        keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(fontSize: 13),
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          hintText: '0.00',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          suffixText: '%',
+                          suffixStyle: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        onChanged: (val) {
+                          setState(() {}); // refresh badge
+                          /// Optional: auto-calculate discount amount from grand total
+                          // final total = _calculateGrandTotal();
+                          // final pct = double.tryParse(val) ?? 0;
+                          // _discountAmountController.text =
+                          //     (total * pct / 100).toStringAsFixed(2);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              /// Discount Amount
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Discount Amount',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: TextField(
+                        controller: _discountAmountController,
+                        keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(fontSize: 13),
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          hintText: '0.00',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          prefixText: '₹',
+                          prefixStyle: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        onChanged: (val) => setState(() {}), // refresh badge
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

@@ -30,26 +30,7 @@ class _SalesOrderPageState extends State<SalesOrderPage>
   final GlobalKey<SalesOrderScreenState> _salesOrderKey =
   GlobalKey<SalesOrderScreenState>();
   TabController get tabController => _tabController; // 👈 expose controller
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   // 👇 now we can use `this` as vsync safely
-  //   _tabController = TabController(length: 2, vsync: this);
-  //   _tabController.addListener(() {
-  //     if (mounted) {
-  //       setState(() {}); // rebuild AppBar when tab changes
-  //     }
-  //
-  //   });
-  //   // ✅ Clear previous order data on fresh load
-  //   WidgetsBinding.instance.addPostFrameCallback((_) {
-  //     if (widget.mappedQuotation == null) {
-  //       context.read<SalesOrderProvider>().clearSelectedSalesOrder();
-  //     }
-  //   });
-  //
-  // }
+  bool _isSaving = false;
   // SalesOrderPage
   @override
   void initState() {
@@ -72,205 +53,458 @@ class _SalesOrderPageState extends State<SalesOrderPage>
     super.dispose();
   }
 
-
+  //
+  // @override
+  // Widget build(BuildContext context) {
+  //   final provider = Provider.of<SalesOrderProvider>(context);
+  //
+  //   return Scaffold(
+  //
+  //     appBar: AppBar(
+  //       automaticallyImplyLeading: false,
+  //       leading: GestureDetector(
+  //         onTap: () {
+  //           Navigator.pop(context);
+  //         },
+  //         child: const Icon(Icons.arrow_back, color: Colors.white),
+  //       ),
+  //       backgroundColor: AppColors.primaryColor,
+  //       title: const Text(
+  //         'Sales Order',
+  //         style: TextStyle(color: Colors.white),
+  //       ),
+  //
+  //       actions: _tabController.index == 0
+  //           ? [
+  //
+  //         // 💾 Save
+  //         IconButton(
+  //           icon: const Icon(Icons.save, color: Colors.white),
+  //           tooltip: "Save Sales Order",
+  //           onPressed: () async {
+  //             final state = _salesOrderKey.currentState;
+  //             if (state != null) {
+  //               await state.handleSave(context);
+  //             }
+  //           },
+  //         ),
+  //
+  //         // ✅ SHOW ONLY WHEN ORDER EXISTS
+  //         if (provider.hasActiveOrder)...[
+  //
+  //           // ➕ NEW ORDER
+  //           IconButton(
+  //             icon: const Icon(Icons.add, color: Colors.white),
+  //             tooltip: "New Sales Order",
+  //             onPressed: () async {
+  //               final state = _salesOrderKey.currentState;
+  //
+  //               // 🚫 Prevent losing unsaved changes
+  //               if (state?.isDirty == true) {
+  //                 final confirm = await showDialog<bool>(
+  //                   context: context,
+  //                   builder: (_) => AlertDialog(
+  //                     title: const Text("Discard changes?"),
+  //                     content: const Text(
+  //                         "You have unsaved changes. Continue?"),
+  //                     actions: [
+  //                       TextButton(
+  //                         onPressed: () =>
+  //                             Navigator.pop(context, false),
+  //                         child: const Text("Cancel"),
+  //                       ),
+  //                       ElevatedButton(
+  //                         onPressed: () =>
+  //                             Navigator.pop(context, true),
+  //                         child: const Text("Continue"),
+  //                       ),
+  //                     ],
+  //                   ),
+  //                 );
+  //
+  //                 if (confirm != true) return;
+  //               }
+  //
+  //               Navigator.of(context).pushReplacement(
+  //                 MaterialPageRoute(
+  //                   builder: (context) => const SalesOrderPage(),
+  //                 ),
+  //               );
+  //             },
+  //           ),
+  //
+  //           // ✅ SUBMIT
+  //           IconButton(
+  //             icon: const Icon(Icons.check_circle, color: Colors.white),
+  //             tooltip: "Submit Sales Order",
+  //             onPressed: () async {
+  //               final state = _salesOrderKey.currentState;
+  //               if (state == null) return;
+  //
+  //               // 🚫 BLOCK IF DIRTY
+  //               if (state.isDirty) {
+  //                 ScaffoldMessenger.of(context).showSnackBar(
+  //                   const SnackBar(
+  //                     content:
+  //                     Text("Please save changes before submitting"),
+  //                     backgroundColor: Colors.orange,
+  //                   ),
+  //                 );
+  //                 return;
+  //               }
+  //
+  //               final orderName = state.getCurrentOrderName();
+  //
+  //               if (orderName == null || orderName.isEmpty) {
+  //                 ScaffoldMessenger.of(context).showSnackBar(
+  //                   const SnackBar(
+  //                     content: Text(
+  //                         "Please create/save Sales Order before submitting"),
+  //                     backgroundColor: Colors.orange,
+  //                   ),
+  //                 );
+  //                 return;
+  //               }
+  //
+  //               final confirm = await showDialog<bool>(
+  //                 context: context,
+  //                 builder: (_) => AlertDialog(
+  //                   title: const Text("Submit Sales Order"),
+  //                   content: const Text(
+  //                       "Are you sure you want to submit?"),
+  //                   actions: [
+  //                     TextButton(
+  //                       onPressed: () =>
+  //                           Navigator.pop(context, false),
+  //                       child: const Text("Cancel"),
+  //                     ),
+  //                     ElevatedButton(
+  //                       onPressed: () =>
+  //                           Navigator.pop(context, true),
+  //                       child: const Text("Submit"),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               );
+  //
+  //               if (confirm != true) return;
+  //
+  //               final provider =
+  //               Provider.of<SalesOrderProvider>(context,
+  //                   listen: false);
+  //
+  //               final success =
+  //               await provider.submitSalesOrder(orderName);
+  //
+  //               if (success) {
+  //                 ScaffoldMessenger.of(context).showSnackBar(
+  //                   const SnackBar(
+  //                     content: Text(
+  //                         "Sales Order submitted successfully!"),
+  //                     backgroundColor: Colors.green,
+  //                   ),
+  //                 );
+  //
+  //                 await Future.delayed(
+  //                     const Duration(milliseconds: 500));
+  //
+  //                 Navigator.of(context).pushReplacement(
+  //                   MaterialPageRoute(
+  //                     builder: (context) =>
+  //                     const SalesOrderPage(),
+  //                   ),
+  //                 );
+  //               } else {
+  //                 ScaffoldMessenger.of(context).showSnackBar(
+  //                   SnackBar(
+  //                     content: Text(provider.errorMessage ??
+  //                         "Submit failed"),
+  //                     backgroundColor: Colors.red,
+  //                   ),
+  //                 );
+  //               }
+  //             },
+  //           ),
+  //         ],
+  //       ]
+  //           : null,
+  //
+  //       bottom: TabBar(
+  //         controller: _tabController,
+  //         tabs: const [
+  //           Tab(text: 'Sales Order'),
+  //           Tab(text: 'Sales Order List'),
+  //         ],
+  //       ),
+  //     ),
+  //     body: Consumer<SalesOrderProvider>(
+  //       builder: (context, provider, _) {
+  //         return TabBarView(
+  //           controller: _tabController,
+  //           children: [
+  //             SalesOrderScreen(
+  //               key: _salesOrderKey,
+  //               salesOrder: provider.selectedSalesOrder,
+  //               mappedQuotation: widget.mappedQuotation,
+  //             ),
+  //             SalesOrderListScreen(),
+  //           ],
+  //         );
+  //       },
+  //     ),
+  //   );
+  // }
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<SalesOrderProvider>(context);
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            leading: GestureDetector(
+              // 👇 Block back navigation during save/submit
+              onTap: _isSaving ? null : () => Navigator.pop(context),
+              child: const Icon(Icons.arrow_back, color: Colors.white),
+            ),
+            backgroundColor: AppColors.primaryColor,
+            title: const Text(
+              'Sales Order',
+              style: TextStyle(color: Colors.white),
+            ),
+            actions: _tabController.index == 0
+                ? [
+              // 💾 Save
+              IconButton(
+                icon: const Icon(Icons.save, color: Colors.white),
+                tooltip: "Save Sales Order",
+                // 👇 Disable during save/submit
+                onPressed: _isSaving
+                    ? null
+                    : () async {
+                  final state = _salesOrderKey.currentState;
+                  if (state != null) {
+                    await state.handleSave(context);
+                  }
+                },
+              ),
 
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: GestureDetector(
-          onTap: () {
-            Navigator.pop(context);
-          },
-          child: const Icon(Icons.arrow_back, color: Colors.white),
-        ),
-        backgroundColor: AppColors.primaryColor,
-        title: const Text(
-          'Sales Order',
-          style: TextStyle(color: Colors.white),
-        ),
+              if (provider.hasActiveOrder) ...[
+                // ➕ New Order
+                IconButton(
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  tooltip: "New Sales Order",
+                  onPressed: _isSaving
+                      ? null
+                      : () async {
+                    final state = _salesOrderKey.currentState;
+                    if (state?.isDirty == true) {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text("Discard changes?"),
+                          content: const Text(
+                              "You have unsaved changes. Continue?"),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(context, false),
+                              child: const Text("Cancel"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () =>
+                                  Navigator.pop(context, true),
+                              child: const Text("Continue"),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm != true) return;
+                    }
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => const SalesOrderPage(),
+                      ),
+                    );
+                  },
+                ),
 
-        actions: _tabController.index == 0
-            ? [
+                // ✅ Submit
+                IconButton(
+                  icon: const Icon(Icons.check_circle, color: Colors.white),
+                  tooltip: "Submit Sales Order",
+                  onPressed: _isSaving
+                      ? null
+                      : () async {
+                    final state = _salesOrderKey.currentState;
+                    if (state == null) return;
 
-          // 💾 Save
-          IconButton(
-            icon: const Icon(Icons.save, color: Colors.white),
-            tooltip: "Save Sales Order",
-            onPressed: () async {
-              final state = _salesOrderKey.currentState;
-              if (state != null) {
-                await state.handleSave(context);
-              }
+                    if (state.isDirty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              "Please save changes before submitting"),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
+
+                    final orderName = state.getCurrentOrderName();
+                    if (orderName == null || orderName.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              "Please create/save Sales Order before submitting"),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
+
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text("Submit Sales Order"),
+                        content: const Text(
+                            "Are you sure you want to submit?"),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(context, false),
+                            child: const Text("Cancel"),
+                          ),
+                          ElevatedButton(
+                            onPressed: () =>
+                                Navigator.pop(context, true),
+                            child: const Text("Submit"),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm != true) return;
+
+                    // 👇 Show overlay for submit
+                    if (mounted) setState(() => _isSaving = true);
+
+                    final provider = Provider.of<SalesOrderProvider>(
+                        context,
+                        listen: false);
+                    final success =
+                    await provider.submitSalesOrder(orderName);
+
+                    if (!mounted) return;
+                    setState(() => _isSaving = false);
+
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              "Sales Order submitted successfully!"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      await Future.delayed(
+                          const Duration(milliseconds: 500));
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (context) => const SalesOrderPage(),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              provider.errorMessage ?? "Submit failed"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ]
+                : null,
+            bottom: TabBar(
+              controller: _tabController,
+              // 👇 Block tab switching during save/submit
+              onTap: _isSaving ? (_) {} : null,
+              tabs: const [
+                Tab(text: 'Sales Order'),
+                Tab(text: 'Sales Order List'),
+              ],
+            ),
+          ),
+          body: Consumer<SalesOrderProvider>(
+            builder: (context, provider, _) {
+              return TabBarView(
+                controller: _tabController,
+                // 👇 Block swipe during save/submit
+                physics: _isSaving
+                    ? const NeverScrollableScrollPhysics()
+                    : const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SalesOrderScreen(
+                    key: _salesOrderKey,
+                    salesOrder: provider.selectedSalesOrder,
+                    mappedQuotation: widget.mappedQuotation,
+                    // 👇 Callbacks so child save controls parent overlay
+                    onSaveStart: () {
+                      if (mounted) setState(() => _isSaving = true);
+                    },
+                    onSaveEnd: () {
+                      if (mounted) setState(() => _isSaving = false);
+                    },
+                  ),
+                  SalesOrderListScreen(),
+                ],
+              );
             },
           ),
-
-          // ✅ SHOW ONLY WHEN ORDER EXISTS
-          if (provider.hasActiveOrder)...[
-
-            // ➕ NEW ORDER
-            IconButton(
-              icon: const Icon(Icons.add, color: Colors.white),
-              tooltip: "New Sales Order",
-              onPressed: () async {
-                final state = _salesOrderKey.currentState;
-
-                // 🚫 Prevent losing unsaved changes
-                if (state?.isDirty == true) {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text("Discard changes?"),
-                      content: const Text(
-                          "You have unsaved changes. Continue?"),
-                      actions: [
-                        TextButton(
-                          onPressed: () =>
-                              Navigator.pop(context, false),
-                          child: const Text("Cancel"),
-                        ),
-                        ElevatedButton(
-                          onPressed: () =>
-                              Navigator.pop(context, true),
-                          child: const Text("Continue"),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm != true) return;
-                }
-
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const SalesOrderPage(),
-                  ),
-                );
-              },
-            ),
-
-            // ✅ SUBMIT
-            IconButton(
-              icon: const Icon(Icons.check_circle, color: Colors.white),
-              tooltip: "Submit Sales Order",
-              onPressed: () async {
-                final state = _salesOrderKey.currentState;
-                if (state == null) return;
-
-                // 🚫 BLOCK IF DIRTY
-                if (state.isDirty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content:
-                      Text("Please save changes before submitting"),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                  return;
-                }
-
-                final orderName = state.getCurrentOrderName();
-
-                if (orderName == null || orderName.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          "Please create/save Sales Order before submitting"),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                  return;
-                }
-
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text("Submit Sales Order"),
-                    content: const Text(
-                        "Are you sure you want to submit?"),
-                    actions: [
-                      TextButton(
-                        onPressed: () =>
-                            Navigator.pop(context, false),
-                        child: const Text("Cancel"),
-                      ),
-                      ElevatedButton(
-                        onPressed: () =>
-                            Navigator.pop(context, true),
-                        child: const Text("Submit"),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (confirm != true) return;
-
-                final provider =
-                Provider.of<SalesOrderProvider>(context,
-                    listen: false);
-
-                final success =
-                await provider.submitSalesOrder(orderName);
-
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          "Sales Order submitted successfully!"),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-
-                  await Future.delayed(
-                      const Duration(milliseconds: 500));
-
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (context) =>
-                      const SalesOrderPage(),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(provider.errorMessage ??
-                          "Submit failed"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-            ),
-          ],
-        ]
-            : null,
-
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Sales Order'),
-            Tab(text: 'Sales Order List'),
-          ],
         ),
-      ),
-      body: Consumer<SalesOrderProvider>(
-        builder: (context, provider, _) {
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              SalesOrderScreen(
-                key: _salesOrderKey,
-                salesOrder: provider.selectedSalesOrder,
-                mappedQuotation: widget.mappedQuotation,
+
+        // 👇 Full-screen overlay — covers AppBar + TabBar + body
+        if (_isSaving)
+          Container(
+            color: Colors.black.withOpacity(0.4),
+            child: Center(
+              child: Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Saving...',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Please wait',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
               ),
-              SalesOrderListScreen(),
-            ],
-          );
-        },
-      ),
+            ),
+          ),
+      ],
     );
   }
 }

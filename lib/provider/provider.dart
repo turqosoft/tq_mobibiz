@@ -69,6 +69,7 @@ class SalesOrderProvider extends ChangeNotifier {
   ApiService? _apiService;
 
   ApiService? get apiService => _apiService;
+  String get serverUrl => _apiService?.serverUrl ?? '';
 
   Future<void> initialize() async {
     final pref = await _sharedPrefService.getLoginDetails();
@@ -3048,6 +3049,14 @@ GetSalesInvoiceResponse? get salesInvoiceList => _salesInvoiceList;
     return invoiceCustomerDetails!["selling_price_list"] ??
         invoiceCustomerDetails!["price_list"];
   }
+  // String? get sellingPriceList {
+  //   if (invoiceCustomerDetails == null) return null;
+  //
+  //   return invoiceCustomerDetails!["selling_price_list"] ??
+  //       invoiceCustomerDetails!["price_list"] ??
+  //       invoiceCustomerDetails!["default_price_list"] ??
+  //       "Standard Selling";
+  // }
 
 
   String? _branch;
@@ -3135,121 +3144,228 @@ Future<void> fetchBranchForUser(BuildContext context) async {
     return null;
   }
 }
+//
+// Future<bool> submitInvoice(
+//   BuildContext context,
+//   String customerName,
+//   DateTime dueDateObj,
+//     DateTime postingDateObj, // new
+//
+//     ) async {
+//   iisLoading = true;
+//   eerrorMessage = null;
+//   notifyListeners();
+//
+//   try {
+//     final String formattedDueDate = DateFormat('yyyy-MM-dd').format(dueDateObj);
+//     final String formattedPostingDate = DateFormat('yyyy-MM-dd').format(postingDateObj);
+//
+//
+//     // ✅ Fetch and store customer details
+//     await fetchCustomer(context, customerName);
+//     final customerDetails = invoiceCustomerDetails ?? {};
+//
+//     // ✅ Ensure selling_price_list is present
+//     if (!customerDetails.containsKey("selling_price_list")) {
+//       throw Exception("Selling Price List not found in customer details.");
+//     }
+//
+//     // ✅ Prepare detailed items
+//     List<Map<String, dynamic>> detailedItems = [];
+//
+//     for (var item in _itemsList) {
+//       final itemDetailsResponse = await fetchItem(
+//         context: context,
+//         itemCode: item.itemCode,
+//         itemName: item.name,
+//         quantity: item.quantity.toDouble(),
+//         currency: "INR",
+//         customer: customerName,
+//         priceList: customerDetails["selling_price_list"],
+//       );
+//
+//       Map<String, dynamic> itemMap;
+//
+//       if (itemDetailsResponse != null) {
+//         itemMap = Map<String, dynamic>.from(itemDetailsResponse);
+//
+//         // Override with user-entered values
+//         itemMap['item_code'] = item.itemCode;
+//         itemMap['item_name'] = item.name;
+//         itemMap['qty'] = item.quantity;
+//         itemMap['rate'] = item.rate;
+//         itemMap['price_list_rate'] = item.priceListRate;
+//         itemMap['discount_percentage'] = item.discountPercentage;
+//         itemMap['amount'] = item.rate * item.quantity;
+//       } else {
+//         itemMap = {
+//           "item_code": item.itemCode,
+//           "item_name": item.name,
+//           "qty": item.quantity,
+//           "rate": item.rate,
+//           "priceListRate": item.priceListRate,
+//           "discount_percentage": item.discountPercentage,
+//           "amount": item.rate * item.quantity,
+//         };
+//       }
+//
+//       detailedItems.add(itemMap);
+//     }
+//     // ✅ Submit invoice
+//     await _apiService!.createSalesInvoice(
+//       context: context,
+//       customerName: customerName,
+//       dueDate: formattedDueDate,
+//       postingDate: formattedPostingDate, // new
+//
+//       item: List<Map<String, dynamic>>.from(detailedItems),
+//       customerDetails: customerDetails,
+//     );
+//
+//     // ✅ Clear local state after success
+//     invoiceCustomerDetails = null;
+//     _itemsList.clear();
+//
+//     debugPrint("✅ Sales Invoice Submitted");
+//     return true; // ✅ Mark as success
+//   } catch (e) {
+//     eerrorMessage = "Failed to submit invoice: $e";
+//     debugPrint("❌ Error submitting invoice: $e");
+//
+//     if (e is DioException) {
+//       debugPrint("❌ Server response: ${e.response?.data}");
+//     }
+//
+//     return false; // ❌ Mark as failure
+//   } finally {
+//     iisLoading = false;
+//     notifyListeners();
+//   }
+// }
+  Future<bool> submitInvoice(
+      BuildContext context,
+      String customerName,
+      DateTime dueDateObj,
+      DateTime postingDateObj, {
+        String applyDiscountOn = 'Net Total',       // 👇 new
+        double additionalDiscountPercentage = 0.0,    // 👇 new
+        double discountAmount = 0.0,                  // 👇 new
+      }) async {
+    iisLoading = true;
+    eerrorMessage = null;
+    notifyListeners();
 
-Future<bool> submitInvoice(
-  BuildContext context,
-  String customerName,
-  DateTime dueDateObj,
-    DateTime postingDateObj, // new
+    try {
+      final String formattedDueDate = DateFormat('yyyy-MM-dd').format(dueDateObj);
+      final String formattedPostingDate = DateFormat('yyyy-MM-dd').format(postingDateObj);
 
-    ) async {
-  iisLoading = true;
-  eerrorMessage = null;
-  notifyListeners();
+      await fetchCustomer(context, customerName);
+      final customerDetails = invoiceCustomerDetails ?? {};
 
-  try {
-    final String formattedDueDate = DateFormat('yyyy-MM-dd').format(dueDateObj);
-    final String formattedPostingDate = DateFormat('yyyy-MM-dd').format(postingDateObj);
-
-
-    // ✅ Fetch and store customer details
-    await fetchCustomer(context, customerName);
-    final customerDetails = invoiceCustomerDetails ?? {};
-
-    // ✅ Ensure selling_price_list is present
-    if (!customerDetails.containsKey("selling_price_list")) {
-      throw Exception("Selling Price List not found in customer details.");
-    }
-
-    // ✅ Prepare detailed items
-    List<Map<String, dynamic>> detailedItems = [];
-
-    for (var item in _itemsList) {
-      final itemDetailsResponse = await fetchItem(
-        context: context,
-        itemCode: item.itemCode,
-        itemName: item.name,
-        quantity: item.quantity.toDouble(),
-        currency: "INR",
-        customer: customerName,
-        priceList: customerDetails["selling_price_list"],
-      );
-
-      Map<String, dynamic> itemMap;
-
-      if (itemDetailsResponse != null) {
-        itemMap = Map<String, dynamic>.from(itemDetailsResponse);
-
-        // Override with user-entered values
-        itemMap['item_code'] = item.itemCode;
-        itemMap['item_name'] = item.name;
-        itemMap['qty'] = item.quantity;
-        itemMap['rate'] = item.rate;
-        itemMap['price_list_rate'] = item.priceListRate;
-        itemMap['discount_percentage'] = item.discountPercentage;
-        itemMap['amount'] = item.rate * item.quantity;
-      } else {
-        itemMap = {
-          "item_code": item.itemCode,
-          "item_name": item.name,
-          "qty": item.quantity,
-          "rate": item.rate,
-          "priceListRate": item.priceListRate,
-          "discount_percentage": item.discountPercentage,
-          "amount": item.rate * item.quantity,
-        };
+      if (!customerDetails.containsKey("selling_price_list")) {
+        throw Exception("Selling Price List not found in customer details.");
       }
 
-      detailedItems.add(itemMap);
+      List<Map<String, dynamic>> detailedItems = [];
+
+      for (var item in _itemsList) {
+        final itemDetailsResponse = await fetchItem(
+          context: context,
+          itemCode: item.itemCode,
+          itemName: item.name,
+          quantity: item.quantity.toDouble(),
+          currency: "INR",
+          customer: customerName,
+          priceList: customerDetails["selling_price_list"],
+        );
+
+        Map<String, dynamic> itemMap;
+
+        if (itemDetailsResponse != null) {
+          itemMap = Map<String, dynamic>.from(itemDetailsResponse);
+          itemMap['item_code'] = item.itemCode;
+          itemMap['item_name'] = item.name;
+          itemMap['qty'] = item.quantity;
+          itemMap['rate'] = item.rate;
+          itemMap['price_list_rate'] = item.priceListRate;
+          itemMap['discount_percentage'] = item.discountPercentage;
+          itemMap['amount'] = item.rate * item.quantity;
+        } else {
+          itemMap = {
+            "item_code": item.itemCode,
+            "item_name": item.name,
+            "qty": item.quantity,
+            "rate": item.rate,
+            "priceListRate": item.priceListRate,
+            "discount_percentage": item.discountPercentage,
+            "amount": item.rate * item.quantity,
+          };
+        }
+
+        detailedItems.add(itemMap);
+      }
+
+      await _apiService!.createSalesInvoice(
+        context: context,
+        customerName: customerName,
+        dueDate: formattedDueDate,
+        postingDate: formattedPostingDate,
+        item: List<Map<String, dynamic>>.from(detailedItems),
+        customerDetails: customerDetails,
+        applyDiscountOn: applyDiscountOn,                         // 👇 new
+        additionalDiscountPercentage: additionalDiscountPercentage, // 👇 new
+        discountAmount: discountAmount,                           // 👇 new
+      );
+
+      invoiceCustomerDetails = null;
+      _itemsList.clear();
+
+      debugPrint("✅ Sales Invoice Submitted");
+      return true;
+    } catch (e) {
+      eerrorMessage = "Failed to submit invoice: $e";
+      debugPrint("❌ Error submitting invoice: $e");
+
+      if (e is DioException) {
+        debugPrint("❌ Server response: ${e.response?.data}");
+      }
+
+      return false;
+    } finally {
+      iisLoading = false;
+      notifyListeners();
     }
-    // final List<Map<String, dynamic>> detailedItems =
-    // _itemsList.map((item) {
-    //   final discount = item.discountPercentage ?? 0.0;
-    //
-    //   return {
-    //     "item_code": item.itemCode,
-    //     "qty": item.quantity.toDouble(),
-    //
-    //     // 🔥 REQUIRED for discount
-    //     "price_list_rate": item.priceListRate ?? item.rate,
-    //
-    //     // 🔥 ONLY if > 0
-    //     if (discount > 0)
-    //       "discount_percentage": discount,
-    //   };
-    // }).toList();
-
-    // ✅ Submit invoice
-    await _apiService!.createSalesInvoice(
-      context: context,
-      customerName: customerName,
-      dueDate: formattedDueDate,
-      postingDate: formattedPostingDate, // new
-
-      item: List<Map<String, dynamic>>.from(detailedItems),
-      customerDetails: customerDetails,
-    );
-
-    // ✅ Clear local state after success
-    invoiceCustomerDetails = null;
-    _itemsList.clear();
-
-    debugPrint("✅ Sales Invoice Submitted");
-    return true; // ✅ Mark as success
-  } catch (e) {
-    eerrorMessage = "Failed to submit invoice: $e";
-    debugPrint("❌ Error submitting invoice: $e");
-
-    if (e is DioException) {
-      debugPrint("❌ Server response: ${e.response?.data}");
-    }
-
-    return false; // ❌ Mark as failure
-  } finally {
-    iisLoading = false;
-    notifyListeners();
   }
-}
+  // 👇 Add this state variable
+  // bool _isDiscountEnabled = false;
+  // bool get isDiscountEnabled => _isDiscountEnabled;
+
+// 👇 Add this method
+//   Future<void> fetchDiscountSettings(BuildContext context) async {
+//     try {
+//       _isDiscountEnabled = await _apiService!.fetchDiscountSettings(context);
+//       notifyListeners();
+//     } catch (e) {
+//       debugPrint('❌ Error loading discount settings: $e');
+//       _isDiscountEnabled = false;
+//       notifyListeners();
+//     }
+//   }
+  // 👇 Default true so section is visible immediately; hidden only if API explicitly returns 0
+  bool _isDiscountEnabled = true;
+  bool get isDiscountEnabled => _isDiscountEnabled;
+
+  Future<void> fetchDiscountSettings(BuildContext context) async {
+    try {
+      _isDiscountEnabled = await _apiService!.fetchDiscountSettings(context);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Error loading discount settings — defaulting to visible: $e');
+      // 👇 Keep true on error — never hide due to a failed request
+      _isDiscountEnabled = true;
+      notifyListeners();
+    }
+  }
   Future<List<String>> fetchInvoicePrintFormats() async {
     return await _apiService!.fetchInvoicePrintFormats();
   }
@@ -3920,29 +4036,120 @@ void clearSearchResults() {
 
   //POS Invoice
   //item list
+  //
+  // ItemListResponse? _itemListModel;
+  //
+  // ItemListResponse? get itemListModel => _itemListModel;
+  //
+  // Future<ItemListResponse?> itemGroupList(context) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     _itemListModel = await _apiService!.itemList(context);
+  //     return _itemListModel;
+  //   } catch (e) {
+  //     _customerListModel = null;
+  //     _errorMessage = e.toString();
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
+// provider.dart  — replace the itemList-related block
 
+// ── State ────────────────────────────────────────────────────────────
   ItemListResponse? _itemListModel;
+  final List<ItemData> _allItems = [];   // accumulated across pages
+  bool _isFetchingMore = false;          // for the bottom spinner only
+  bool _hasMoreItems = true;
+  int _currentOffset = 0;
+  // static const int _pageSize = 20;
 
+// ── Getters ──────────────────────────────────────────────────────────
   ItemListResponse? get itemListModel => _itemListModel;
+  List<ItemData> get allItems => _allItems;
+  bool get isFetchingMore => _isFetchingMore;
+  bool get hasMoreItems => _hasMoreItems;
 
-  Future<ItemListResponse?> itemGroupList(context) async {
+// ── Initial / refresh load ───────────────────────────────────────────
+  Future<void> itemGroupList(context) async {
     _isLoading = true;
     _errorMessage = null;
+    _allItems.clear();
+    _currentOffset = 0;
+    _hasMoreItems = true;
     notifyListeners();
 
     try {
-      _itemListModel = await _apiService!.itemList(context);
-      return _itemListModel;
+      final result = await _apiService!.itemList(
+        context,
+        limit: _pageSize,
+        offset: 0,
+      );
+      if (result?.data != null) {
+        _allItems.addAll(result!.data!);
+        _hasMoreItems = result.data!.length == _pageSize;
+        _currentOffset = _allItems.length;
+      }
+      _itemListModel = result;
     } catch (e) {
-      _customerListModel = null;
       _errorMessage = e.toString();
-      return null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
+// ── Load next page ───────────────────────────────────────────────────
+  Future<void> loadMoreItems(context) async {
+    if (_isFetchingMore || !_hasMoreItems) return;
+
+    _isFetchingMore = true;
+    notifyListeners();
+
+    try {
+      final result = await _apiService!.itemList(
+        context,
+        limit: _pageSize,
+        offset: _currentOffset,
+      );
+      if (result?.data != null && result!.data!.isNotEmpty) {
+        _allItems.addAll(result.data!);
+        _hasMoreItems = result.data!.length == _pageSize;
+        _currentOffset = _allItems.length;
+      } else {
+        _hasMoreItems = false;
+      }
+    } catch (e) {
+      debugPrint('Pagination error: $e');
+    } finally {
+      _isFetchingMore = false;
+      notifyListeners();
+    }
+  }
+  Future<void> itemSearchListProducts(String itemName, BuildContext context) async {
+    _isLoadingItem = true;
+    _errorMessage = null;
+    _allItems.clear();
+    _hasMoreItems = false;  // search results are not paginated
+    notifyListeners();
+
+    try {
+      final result = await _apiService!.itemSearchListProducts(itemName, context);
+      if (result?.data != null) {
+        _allItems.addAll(result!.data!);
+      }
+      _itemListModel = result;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoadingItem = false;
+      notifyListeners();
+    }
+  }
   bool _isLoadingItem = false;
   bool get isLoadingItem => _isLoadingItem;
   Future<ItemListResponse?> itemSearchList(
@@ -3979,77 +4186,90 @@ void clearSearchResults() {
 
   // ItemBrandResponse? get itemBrandModel => _itemBrandModel;
 
-  Future<ItemListResponse?> itemByBrandList(
-      String brandName, BuildContext context) async {
+  // Future<ItemListResponse?> itemByBrandList(
+  //     String brandName, BuildContext context) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     print("test brand 2");
+  //
+  //     _itemListModel = await _apiService!.itemByBrand(brandName, context);
+  //     return _itemListModel;
+  //   } catch (e) {
+  //     _customerListModel = null;
+  //     _errorMessage = e.toString();
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
+
+  // Future<ItemListResponse?> itemByCategoryList(
+  //     String category, BuildContext context) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     print("test category 2");
+  //
+  //     _itemListModel = await _apiService!.categoryItemFilter(category, context);
+  //
+  //     return _itemListModel;
+  //   } catch (e) {
+  //     _customerListModel = null;
+  //     _errorMessage = e.toString();
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
+  Future<void> itemByCategoryList(String category, BuildContext context) async {
     _isLoading = true;
     _errorMessage = null;
+    _allItems.clear();
+    _hasMoreItems = false;   // filtered results are not paginated
     notifyListeners();
 
     try {
-      print("test brand 2");
-
-      _itemListModel = await _apiService!.itemByBrand(brandName, context);
-      // if (_itemListModel != null && _itemListModel!.data != null) {
-      //   // Iterate through the data and print each item name
-      //   _itemListModel!.data!.forEach((item) {
-      //     print('Item Name: ${item.itemName}');
-      //   });
-      // }
-      return _itemListModel;
+      final result = await _apiService!.categoryItemFilter(category, context);
+      if (result?.data != null) {
+        _allItems.addAll(result!.data!);
+      }
+      _itemListModel = result;
     } catch (e) {
-      _customerListModel = null;
       _errorMessage = e.toString();
-      return null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
-
-  Future<ItemListResponse?> itemByCategoryList(
-      String category, BuildContext context) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      print("test category 2");
-
-      _itemListModel = await _apiService!.categoryItemFilter(category, context);
-
-      return _itemListModel;
-    } catch (e) {
-      _customerListModel = null;
-      _errorMessage = e.toString();
-      return null;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<ItemListResponse?> categoryAndBrandList(
-      String brand, String category, context) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      print("test category 2");
-
-      _itemListModel = await _apiService!
-          .categoryAndBrandItemFilter(brand, category, context);
-
-      return _itemListModel;
-    } catch (e) {
-      _customerListModel = null;
-      _errorMessage = e.toString();
-      return null;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  // Future<ItemListResponse?> categoryAndBrandList(
+  //     String brand, String category, context) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     print("test category 2");
+  //
+  //     _itemListModel = await _apiService!
+  //         .categoryAndBrandItemFilter(brand, category, context);
+  //
+  //     return _itemListModel;
+  //   } catch (e) {
+  //     _customerListModel = null;
+  //     _errorMessage = e.toString();
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   //brand list
 
   BrandListResponse? _brandListModel;
@@ -4073,7 +4293,77 @@ void clearSearchResults() {
       notifyListeners();
     }
   }
+// 1. Variant list
+  List<String> _variantList = [];
+  List<String> get variantList => _variantList;
 
+  Future<void> fetchVariantList(BuildContext context) async {
+    try {
+      _variantList = await _apiService!.variantList(context);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching variants: $e');
+    }
+  }
+
+// 2. Filter by variant
+  Future<void> itemByVariantList(String variantOf, BuildContext context) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _allItems.clear();
+    _hasMoreItems = false;
+    notifyListeners();
+    try {
+      final result = await _apiService!.itemByVariant(variantOf, context);
+      if (result?.data != null) _allItems.addAll(result!.data!);
+      _itemListModel = result;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+// 3. Update itemByBrandList to use _allItems
+  Future<void> itemByBrandList(String brandName, BuildContext context) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _allItems.clear();
+    _hasMoreItems = false;
+    notifyListeners();
+    try {
+      final result = await _apiService!.itemByBrand(brandName, context);
+      if (result?.data != null) _allItems.addAll(result!.data!);
+      _itemListModel = result;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+// 4. Update categoryAndBrandList to use _allItems
+  Future<void> categoryAndBrandList(
+      String brand, String category, BuildContext context) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _allItems.clear();
+    _hasMoreItems = false;
+    notifyListeners();
+    try {
+      final result =
+      await _apiService!.categoryAndBrandItemFilter(brand, category, context);
+      if (result?.data != null) _allItems.addAll(result!.data!);
+      _itemListModel = result;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
   //item list
 
   CategoryListRespose? _categoryListModel;
@@ -6777,15 +7067,54 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   SalesOrderResponse? _salesOrderModel;
 
   SalesOrderResponse? get salesOrderModel => _salesOrderModel;
-
+  //
+  // Future<SalesOrderResponse?> salesOrder(
+  //   String customerName,
+  //   String deliveryDate,
+  //   List items,
+  //   BuildContext context, {
+  //   Map<String, dynamic>? customerDetails, // 🆕 Accept customer details also
+  //           String? setWarehouse,
+  //       // String? quotation,
+  //     }) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     _salesOrderModel = await _apiService!.salesOrder(
+  //       customerName,
+  //       deliveryDate,
+  //       items,
+  //       context,
+  //       customerDetails: customerDetails, // 🆕 Pass along
+  //       setWarehouse: setWarehouse,
+  //       // quotation: quotation,
+  //
+  //     );
+  //     return _salesOrderModel;
+  //   } catch (e) {
+  //     _salesOrderModel = null;
+  //     _errorMessage = e.toString(); // already formatted from API service
+  //
+  //     _errorMessage = e.toString();
+  //     print("Provider error creating sales order: $e");
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<SalesOrderResponse?> salesOrder(
-    String customerName,
-    String deliveryDate,
-    List items,
-    BuildContext context, {
-    Map<String, dynamic>? customerDetails, // 🆕 Accept customer details also
-            String? setWarehouse,
-        // String? quotation,
+      String customerName,
+      String deliveryDate,
+      List items,
+      BuildContext context, {
+        Map<String, dynamic>? customerDetails,
+        String? setWarehouse,
+        String applyDiscountOn = 'Net Total',       // 👇 new
+        double additionalDiscountPercentage = 0.0,    // 👇 new
+        double discountAmount = 0.0,                  // 👇 new
       }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -6797,18 +7126,58 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         deliveryDate,
         items,
         context,
-        customerDetails: customerDetails, // 🆕 Pass along
+        customerDetails: customerDetails,
         setWarehouse: setWarehouse,
-        // quotation: quotation,
-
+        applyDiscountOn: applyDiscountOn,                         // 👇 new
+        additionalDiscountPercentage: additionalDiscountPercentage, // 👇 new
+        discountAmount: discountAmount,                           // 👇 new
       );
       return _salesOrderModel;
     } catch (e) {
       _salesOrderModel = null;
-      _errorMessage = e.toString(); // already formatted from API service
-
       _errorMessage = e.toString();
       print("Provider error creating sales order: $e");
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<SalesOrderResponse?> updateSalesOrder(
+      String name,
+      String customerName,
+      String deliveryDate,
+      String? setWarehouse,
+      List items,
+      BuildContext context, {
+        Map<String, dynamic>? customerDetails,
+        String applyDiscountOn = 'Grand Total',       // 👇 new
+        double additionalDiscountPercentage = 0.0,    // 👇 new
+        double discountAmount = 0.0,                  // 👇 new
+      }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _salesOrderModel = await _apiService!.updateSalesOrder(
+        name,
+        customerName,
+        deliveryDate,
+        setWarehouse,
+        items,
+        context,
+        customerDetails: customerDetails,
+        applyDiscountOn: applyDiscountOn,                         // 👇 new
+        additionalDiscountPercentage: additionalDiscountPercentage, // 👇 new
+        discountAmount: discountAmount,                           // 👇 new
+      );
+      return _salesOrderModel;
+    } catch (e) {
+      _salesOrderModel = null;
+      _errorMessage = e.toString();
+      debugPrint("Provider error updating sales order: $e");
       return null;
     } finally {
       _isLoading = false;
@@ -6850,42 +7219,42 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
             _salesOrderModel!.data!.name!.isNotEmpty);
   }
 
-  Future<SalesOrderResponse?> updateSalesOrder(
-      String name,
-      String customerName,
-      String deliveryDate,
-      String? setWarehouse,
-      List items,
-      BuildContext context, {
-        Map<String, dynamic>? customerDetails,
-      }) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      _salesOrderModel = await _apiService!.updateSalesOrder(
-        name,
-        customerName,
-        deliveryDate,
-        setWarehouse,
-        items,
-        context,
-        customerDetails: customerDetails,
-      );
-      return _salesOrderModel;
-    } catch (e) {
-      _salesOrderModel = null;
-      _errorMessage = e.toString(); // already formatted from API service
-
-      _errorMessage = e.toString();
-      debugPrint("Provider error updating sales order: $e");
-      return null;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  // Future<SalesOrderResponse?> updateSalesOrder(
+  //     String name,
+  //     String customerName,
+  //     String deliveryDate,
+  //     String? setWarehouse,
+  //     List items,
+  //     BuildContext context, {
+  //       Map<String, dynamic>? customerDetails,
+  //     }) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     _salesOrderModel = await _apiService!.updateSalesOrder(
+  //       name,
+  //       customerName,
+  //       deliveryDate,
+  //       setWarehouse,
+  //       items,
+  //       context,
+  //       customerDetails: customerDetails,
+  //     );
+  //     return _salesOrderModel;
+  //   } catch (e) {
+  //     _salesOrderModel = null;
+  //     _errorMessage = e.toString(); // already formatted from API service
+  //
+  //     _errorMessage = e.toString();
+  //     debugPrint("Provider error updating sales order: $e");
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<bool> submitSalesOrder(String name) async {
     _isLoading = true;
     _errorMessage = null;
@@ -7076,6 +7445,33 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   SalesOrderDetails? get selectedSalesOrder => _selectedSalesOrder;
 
 // Original method — keep for Draft (needs form rebuild)
+//   Future<void> fetchSalesOrderDetails(String orderName) async {
+//     _isLoading = true;
+//     notifyListeners();
+//
+//     try {
+//       _selectedSalesOrder = await _apiService!.getSalesOrderDetails(orderName);
+//
+//       if (_selectedSalesOrder != null) {
+//         setSelectedSalesOrderName(_selectedSalesOrder!.name);
+//         setSelectedTransactionDate(_selectedSalesOrder!.transactionDate);
+//
+//         final netTotal = _selectedSalesOrder!.netTotal;
+//         final total = _selectedSalesOrder!.total;
+//         setSelectedSalesOrderTotal(
+//           (netTotal != null && netTotal != 0)
+//               ? netTotal.toString()
+//               : (total?.toString() ?? '0'),
+//         );
+//       }
+//     } catch (e) {
+//       _selectedSalesOrder = null;
+//       _errorMessage = e.toString();
+//     } finally {
+//       _isLoading = false;
+//       notifyListeners();
+//     }
+//   }
   Future<void> fetchSalesOrderDetails(String orderName) async {
     _isLoading = true;
     notifyListeners();
@@ -7103,7 +7499,6 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
-
 // Silent fetch — for dialog preview (no notifyListeners, no rebuild)
 //   Future<SalesOrderDetails?> fetchSalesOrderDetailsSilent(String orderName) async {
 //     try {
@@ -7371,6 +7766,8 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         rate: (i["rate"] ?? 0.0).toDouble(),
         priceListRate: (i["price_list_rate"] ?? 0.0).toDouble(),
         discountPercentage: (i["discount_percentage"] ?? 0.0).toDouble(),
+        uom: i["uom"] ?? '',   // 👈 add this
+
       )));
     notifyListeners();
   }
@@ -7689,7 +8086,16 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   List<Item> get itemsList => _itemsList;
 
   // Add an item with price_list_rate and discount_percentage
-  // void addItem(double rate, double quantity, String name, String itemCode, double priceListRate, double discountPercentage) {
+  // void addItem(
+  //     double rate,
+  //     double quantity,
+  //     String name,
+  //     String itemCode,
+  //     double priceListRate,
+  //     double discountPercentage,
+  //     String itemTaxTemplate,       // ✅ NEW
+  //     double lastPurchaseRate,      // ✅ NEW
+  //     ) {
   //   _itemsList.add(Item(
   //     rate: rate,
   //     quantity: quantity,
@@ -7697,6 +8103,8 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   //     itemCode: itemCode,
   //     priceListRate: priceListRate,
   //     discountPercentage: discountPercentage,
+  //     itemTaxTemplate: itemTaxTemplate,
+  //     lastPurchaseRate: lastPurchaseRate,
   //   ));
   //   notifyListeners();
   // }
@@ -7707,9 +8115,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       String itemCode,
       double priceListRate,
       double discountPercentage,
-      String itemTaxTemplate,       // ✅ NEW
-      double lastPurchaseRate,      // ✅ NEW
-      ) {
+      String itemTaxTemplate,
+      double lastPurchaseRate, {
+        String uom = '',    // 👇 named optional so existing call sites don't break
+      }) {
     _itemsList.add(Item(
       rate: rate,
       quantity: quantity,
@@ -7719,10 +8128,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       discountPercentage: discountPercentage,
       itemTaxTemplate: itemTaxTemplate,
       lastPurchaseRate: lastPurchaseRate,
+      uom: uom,         // 👇 new
     ));
     notifyListeners();
   }
-
   // Edit an existing item with new values for rate, quantity, price_list_rate, and discount_percentage
   // void editItem(int index, double newRate, double newQuantity, double newPriceListRate, double newDiscountPercentage) {
   //   _itemsList[index] = Item(
@@ -7808,18 +8217,29 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     notifyListeners();
   }
 
+  // double get totalItemAmount {
+  //   if (itemsList.isEmpty) return 0.0;
+  //
+  //   return itemsList.fold(0.0, (sum, item) {
+  //     final rate = item.rate;
+  //     final qty = item.quantity;
+  //     final discount = item.discountPercentage;
+  //
+  //     final discountedRate =
+  //     discount! > 0 ? rate * (1 - discount / 100) : rate;
+  //
+  //     return sum + (discountedRate * qty);
+  //   });
+  // }
   double get totalItemAmount {
     if (itemsList.isEmpty) return 0.0;
 
     return itemsList.fold(0.0, (sum, item) {
       final rate = item.rate;
       final qty = item.quantity;
-      final discount = item.discountPercentage;
 
-      final discountedRate =
-      discount! > 0 ? rate * (1 - discount / 100) : rate;
-
-      return sum + (discountedRate * qty);
+      // ✅ rate already contains discount
+      return sum + (rate * qty);
     });
   }
 
