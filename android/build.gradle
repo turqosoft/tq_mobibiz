@@ -55,13 +55,15 @@
 //    }
 //}
 buildscript {
-    ext.kotlin_version = '1.8.10' // or '1.6.10' (safe)
+//    ext.kotlin_version = '2.0.20'   // ← was 1.8.10
+    ext.kotlin_version = '2.2.20'  // ← was 2.0.20
+
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.3.0' // safe version
+//        classpath 'com.android.tools.build:gradle:7.3.0' // safe version
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
