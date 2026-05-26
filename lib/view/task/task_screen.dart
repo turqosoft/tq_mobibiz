@@ -1971,10 +1971,51 @@ class _TaskScreenState extends State<TaskScreen> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 2),
-                            // Task ID and Project in one line
-                            Row(
+                            // const SizedBox(height: 2),
+                            // // Task ID and Project in one line
+                            // Row(
+                            //   children: [
+                            //     Text(
+                            //       name,
+                            //       style: TextStyle(
+                            //         fontSize: 9,
+                            //         color: isOverdue
+                            //             ? Colors.red.shade700
+                            //             : Colors.grey[600],
+                            //         fontStyle: FontStyle.italic,
+                            //       ),
+                            //     ),
+                            //     if (projectName.isNotEmpty &&
+                            //         projectName != "No Project") ...[
+                            //       Text(
+                            //         " • ",
+                            //         style: TextStyle(
+                            //           fontSize: 9,
+                            //           color: Colors.grey[600],
+                            //         ),
+                            //       ),
+                            //       Flexible(
+                            //         child: Text(
+                            //           projectId.isNotEmpty
+                            //               ? "$projectName ($projectId)"
+                            //               : projectName,
+                            //           style: TextStyle(
+                            //             fontSize: 9,
+                            //             color: Colors.grey[600],
+                            //           ),
+                            //           overflow: TextOverflow.ellipsis,
+                            //         ),
+                            //       ),
+                            //     ],
+                            //   ],
+                            // ),
+                            const SizedBox(height: 3),
+
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+
+                                // Task ID row
                                 Text(
                                   name,
                                   style: TextStyle(
@@ -1984,17 +2025,14 @@ class _TaskScreenState extends State<TaskScreen> {
                                         : Colors.grey[600],
                                     fontStyle: FontStyle.italic,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+
+                                // Project row
                                 if (projectName.isNotEmpty &&
-                                    projectName != "No Project") ...[
-                                  Text(
-                                    " • ",
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                  Flexible(
+                                    projectName != "No Project")
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
                                     child: Text(
                                       projectId.isNotEmpty
                                           ? "$projectName ($projectId)"
@@ -2002,11 +2040,11 @@ class _TaskScreenState extends State<TaskScreen> {
                                       style: TextStyle(
                                         fontSize: 9,
                                         color: Colors.grey[600],
+                                        fontWeight: FontWeight.w400,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ],
                               ],
                             ),
                           ],

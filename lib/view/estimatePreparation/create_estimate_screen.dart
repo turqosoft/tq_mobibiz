@@ -34,7 +34,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
   final _rateController = TextEditingController();
   final _gstPercController = TextEditingController();
   final _messageController = TextEditingController();
-
+  final _customerNameController = TextEditingController();
   String? _selectedCustomerName;
   String? _selectedCustomerDisplay;
   bool _showCustomerDropdown = false;
@@ -89,7 +89,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     _selectedCustomerName = e["customer"];
     _selectedCustomerDisplay = e["customer"];
     _customerSearchController.text = e["customer"] ?? '';
-
+    _customerNameController.text = e["customer_name"] ?? e["customer"] ?? '';
     // Contact
     _contactController.text = e["contact"] ?? '';
 
@@ -158,6 +158,8 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
       _selectedCustomerDisplay = customer.customerName ?? customer.name;
       _customerSearchController.text = _selectedCustomerDisplay!;
       _showCustomerDropdown = false;
+      _customerNameController.text = customer.customerName ?? customer.name ?? '';
+
     });
     _customerFocusNode.unfocus();
 
@@ -241,12 +243,156 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     }
   }
 
+  // Future<void> _submit() async {
+  //   if (!_formKey.currentState!.validate()) return;
+  //   if (_selectedCustomerName == null) {
+  //     _showSnack('Please select a customer from the list', Colors.orange);
+  //     return;
+  //   }
+  //
+  //   final isEditing = widget.existingEstimate != null;
+  //   final existingDocname = widget.existingEstimate?["name"] ?? '';
+  //
+  //   // ── Step 1: Confirm before doing anything ─────────────────
+  //   final confirmed = await showDialog<String>(
+  //     context: context,
+  //     barrierDismissible: false,
+  //     builder: (ctx) => AlertDialog(
+  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  //       title: Row(
+  //         children: [
+  //           const Icon(Icons.receipt_outlined, color: Color(0xFF1565C0), size: 20),
+  //           const SizedBox(width: 8),
+  //           Text(
+  //             isEditing ? 'Update Estimate?' : 'Save Estimate?',
+  //             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+  //           ),
+  //         ],
+  //       ),
+  //       content: const Text(
+  //         'Choose to save as draft or save and submit immediately.',
+  //         style: TextStyle(fontSize: 13, color: Color(0xFF8A94A6)),
+  //       ),
+  //       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+  //       actions: [
+  //         // Cancel
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(ctx, 'cancel'),
+  //           child: const Text('Cancel',
+  //               style: TextStyle(color: Color(0xFF8A94A6))),
+  //         ),
+  //         // Save Draft only
+  //         OutlinedButton(
+  //           onPressed: () => Navigator.pop(ctx, 'draft'),
+  //           style: OutlinedButton.styleFrom(
+  //             shape: RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.circular(10)),
+  //             side: const BorderSide(color: Color(0xFF1565C0)),
+  //           ),
+  //           child: const Text('Save Draft',
+  //               style: TextStyle(color: Color(0xFF1565C0))),
+  //         ),
+  //         // Save + Submit
+  //         ElevatedButton.icon(
+  //           onPressed: () => Navigator.pop(ctx, 'submit'),
+  //           icon: const Icon(Icons.send_rounded, size: 14),
+  //           label: const Text('Submit'),
+  //           style: ElevatedButton.styleFrom(
+  //             backgroundColor: const Color(0xFF1565C0),
+  //             foregroundColor: Colors.white,
+  //             shape: RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.circular(10)),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  //
+  //   if (!mounted || confirmed == null || confirmed == 'cancel') return;
+  //
+  //   final provider = context.read<SalesOrderProvider>();
+  //
+  //   // ── Step 2: Save draft (POST new / PUT existing) ──────────
+  //   final saveResult = await provider.saveDraftEstimate(
+  //     context: context,
+  //     docname: isEditing ? existingDocname : null,
+  //     customer: _selectedCustomerName!,
+  //     customerName: _customerNameController.text.trim(), // ← add
+  //     date: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+  //     contact: _contactController.text.trim(),
+  //     validTill: DateFormat('yyyy-MM-dd').format(_validTill),
+  //     itemCode: _itemCodeController.text.trim(),
+  //     itemName: _itemNameController.text.trim(),
+  //     itemDescription: _itemDescController.text.trim(),
+  //     rate: double.tryParse(_rateController.text) ?? 0.0,
+  //     gstPerc: double.tryParse(_gstPercController.text) ?? 0.0,
+  //     message: _messageController.text.trim(),
+  //   );
+  //
+  //   if (!mounted) return;
+  //
+  //   if (saveResult["success"] != true) {
+  //     _showSnack(saveResult["error"] ?? 'Failed to save draft', Colors.red);
+  //     return;
+  //   }
+  //
+  //   final savedDocname = saveResult["docname"] ?? '';
+  //
+  //   // User chose Save Draft only
+  //   if (confirmed == 'draft') {
+  //     _showSnack('Draft saved: $savedDocname', Colors.blueGrey);
+  //     // ✅ Stay on screen — no navigation
+  //     return;
+  //   }
+  //
+  //   // ── Step 3: Submit + WhatsApp ─────────────────────────────
+  //   final submitResult = await provider.submitEstimate(
+  //     context: context,
+  //     docname: savedDocname,
+  //     contact: _contactController.text.trim(),
+  //   );
+  //
+  //   if (!mounted) return;
+  //
+  //   if (submitResult["success"] == true) {
+  //     _showSnack(
+  //       'Estimate $savedDocname submitted & WhatsApp sent!',
+  //       Colors.green,
+  //     );
+  //
+  //     if (widget.onSubmitSuccess != null) {
+  //       // ✅ Called from tab — switch to list tab
+  //       widget.onSubmitSuccess!();
+  //     } else {
+  //       // ✅ Called standalone (edit from list) — pop back
+  //       Navigator.pop(context, true);
+  //     }
+  //   } else {
+  //     _showSnack(
+  //       submitResult["error"] ?? 'Submission failed',
+  //       Colors.red,
+  //     );
+  //   }
+  // }
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCustomerName == null) {
-      _showSnack('Please select a customer from the list', Colors.orange);
+
+    // ✅ Allow either selected from list OR manually entered customer name
+    final bool hasSelectedCustomer = _selectedCustomerName != null;
+    final bool hasManualCustomer = _customerNameController.text.trim().isNotEmpty;
+
+    if (!hasSelectedCustomer && !hasManualCustomer) {
+      _showSnack(
+        'Please select a customer from the list or enter a customer name',
+        Colors.orange,
+      );
       return;
     }
+
+    // ✅ Use selected customer if available, else use manual name as both
+    final String customerValue = hasSelectedCustomer
+        ? _selectedCustomerName!
+        : _customerNameController.text.trim();
 
     final isEditing = widget.existingEstimate != null;
     final existingDocname = widget.existingEstimate?["name"] ?? '';
@@ -259,11 +405,13 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.receipt_outlined, color: Color(0xFF1565C0), size: 20),
+            const Icon(Icons.receipt_outlined,
+                color: Color(0xFF1565C0), size: 20),
             const SizedBox(width: 8),
             Text(
               isEditing ? 'Update Estimate?' : 'Save Estimate?',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -273,13 +421,11 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         actions: [
-          // Cancel
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
             child: const Text('Cancel',
                 style: TextStyle(color: Color(0xFF8A94A6))),
           ),
-          // Save Draft only
           OutlinedButton(
             onPressed: () => Navigator.pop(ctx, 'draft'),
             style: OutlinedButton.styleFrom(
@@ -290,7 +436,6 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
             child: const Text('Save Draft',
                 style: TextStyle(color: Color(0xFF1565C0))),
           ),
-          // Save + Submit
           ElevatedButton.icon(
             onPressed: () => Navigator.pop(ctx, 'submit'),
             icon: const Icon(Icons.send_rounded, size: 14),
@@ -310,11 +455,12 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
 
     final provider = context.read<SalesOrderProvider>();
 
-    // ── Step 2: Save draft (POST new / PUT existing) ──────────
+    // ── Step 2: Save draft ────────────────────────────────────
     final saveResult = await provider.saveDraftEstimate(
       context: context,
       docname: isEditing ? existingDocname : null,
-      customer: _selectedCustomerName!,
+      customer: customerValue,                               // ✅ selected or manual
+      customerName: _customerNameController.text.trim(),
       date: DateFormat('yyyy-MM-dd').format(DateTime.now()),
       contact: _contactController.text.trim(),
       validTill: DateFormat('yyyy-MM-dd').format(_validTill),
@@ -335,39 +481,8 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
 
     final savedDocname = saveResult["docname"] ?? '';
 
-  //   // User chose Save Draft only
-  //   if (confirmed == 'draft') {
-  //     _showSnack('Draft saved: $savedDocname', Colors.blueGrey);
-  //     Navigator.pop(context, true);
-  //     return;
-  //   }
-  //
-  //   // ── Step 3: Submit + WhatsApp ─────────────────────────────
-  //   final submitResult = await provider.submitEstimate(
-  //     context: context,
-  //     docname: savedDocname,
-  //     contact: _contactController.text.trim(),
-  //   );
-  //
-  //   if (!mounted) return;
-  //
-  //   if (submitResult["success"] == true) {
-  //     _showSnack(
-  //       'Estimate $savedDocname submitted & WhatsApp sent!',
-  //       Colors.green,
-  //     );
-  //     Navigator.pop(context, true);
-  //   } else {
-  //     _showSnack(
-  //       submitResult["error"] ?? 'Submission failed',
-  //       Colors.red,
-  //     );
-  //   }
-  // }
-    // User chose Save Draft only
     if (confirmed == 'draft') {
       _showSnack('Draft saved: $savedDocname', Colors.blueGrey);
-      // ✅ Stay on screen — no navigation
       return;
     }
 
@@ -380,30 +495,14 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
 
     if (!mounted) return;
 
-    // if (submitResult["success"] == true) {
-    //   _showSnack(
-    //     'Estimate $savedDocname submitted & WhatsApp sent!',
-    //     Colors.green,
-    //   );
-    //   // ✅ Navigate to list tab (index 1)
-    //   Navigator.pop(context, true);
-    // } else {
-    //   _showSnack(
-    //     submitResult["error"] ?? 'Submission failed',
-    //     Colors.red,
-    //   );
-    // }
     if (submitResult["success"] == true) {
       _showSnack(
         'Estimate $savedDocname submitted & WhatsApp sent!',
         Colors.green,
       );
-
       if (widget.onSubmitSuccess != null) {
-        // ✅ Called from tab — switch to list tab
         widget.onSubmitSuccess!();
       } else {
-        // ✅ Called standalone (edit from list) — pop back
         Navigator.pop(context, true);
       }
     } else {
@@ -435,6 +534,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     _gstPercController.dispose();
     _messageController.dispose();
     _itemFocusNode.dispose();
+    _customerNameController.dispose();
     super.dispose();
   }
 
@@ -484,6 +584,14 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
                       title: 'Customer',
                       children: [
                         _buildCustomerSearchField(),
+                        const SizedBox(height: 12),
+                        _buildField(
+                          controller: _customerNameController,
+                          label: 'Customer Name',
+                          hint: 'Enter or auto-filled from selection',
+                          icon: Icons.badge_outlined,
+                          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                        ),
                         const SizedBox(height: 12),
                         _buildField(
                           controller: _contactController,
@@ -1053,9 +1161,10 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
               controller: _customerSearchController,
               focusNode: _customerFocusNode,
               onChanged: _onCustomerSearchChanged,
-              validator: (_) => _selectedCustomerName == null
-                  ? 'Please select a customer'
-                  : null,
+              // validator: (_) => _selectedCustomerName == null
+              //     ? 'Please select a customer'
+              //     : null,
+              validator: null,
               style: const TextStyle(fontSize: 14, color: _textMain),
               decoration: InputDecoration(
                 labelText: 'Customer',
@@ -1084,6 +1193,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
                     _selectedCustomerName = null;
                     _selectedCustomerDisplay = null;
                     _customerSearchController.clear();
+                    _customerNameController.clear(); // ← add
                     _contactController.clear();
                     _showCustomerDropdown = false;
                   }),

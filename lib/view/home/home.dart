@@ -67,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _lastPickListName;
   bool _isInitialLoad = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isDialogShowing = false; // ✅ Single declaration here
 
   @override
   void initState() {
@@ -327,25 +328,62 @@ class _HomeScreenState extends State<HomeScreen> {
   //       // Now show the dialog with accurate status
   //       _showPopupDialog(context);
   //       break;
+  // void _navigateToScreen(String? menuItem, BuildContext context) async {
+  //   if (menuItem == null) return;
+  //
+  //   switch (menuItem) {
+  //     case 'Checkin':
+  //       final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //       // ✅ Check if user is an employee
+  //       if (!provider.isEmployee) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text("Only employees can use the Checkin module.")),
+  //         );
+  //         return; // stop navigation
+  //       }
+  //
+  //       // Initialize check-in status from server before showing dialog
+  //       await provider.initializeCheckinStatus();
+  //
+  //       // Now show the dialog with accurate status
+  //       _showPopupDialog(context);
+  //       break;
   void _navigateToScreen(String? menuItem, BuildContext context) async {
     if (menuItem == null) return;
 
     switch (menuItem) {
       case 'Checkin':
+      // 🛑 Block if dialog is already open or loading
+        if (_isDialogShowing) return;
+
         final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
-        // ✅ Check if user is an employee
         if (!provider.isEmployee) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Only employees can use the Checkin module.")),
           );
-          return; // stop navigation
+          return;
         }
 
-        // Initialize check-in status from server before showing dialog
-        await provider.initializeCheckinStatus();
+        // 🛑 Block if already fetching (concurrent taps during API call)
+        if (provider.isInitializing) return;
 
-        // Now show the dialog with accurate status
+        // ✅ Lock immediately before async gap
+        setState(() => _isDialogShowing = true);
+
+        try {
+          await provider.initializeCheckinStatus();
+        } catch (e) {
+          setState(() => _isDialogShowing = false);
+          return;
+        }
+
+        if (!context.mounted) {
+          setState(() => _isDialogShowing = false);
+          return;
+        }
+
         _showPopupDialog(context);
         break;
       case 'Attendance': Navigator.push(context, MaterialPageRoute(builder: (_) => AttendanceCalendar())); break;
@@ -462,6 +500,84 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
 
     }
+  }
+  void _showPopupDialog(BuildContext context) {
+    final String formattedDateTime =
+    DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Consumer<SalesOrderProvider>(
+          builder: (context, provider, child) {
+            return CustomDialog(
+              onCheckIn: () async {
+                Future.microtask(() async {
+                  final scaffoldMessenger = ScaffoldMessenger.of(context);
+                  if (provider.errorMessage != null) {
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(content: Text(provider.errorMessage!)),
+                    );
+                  } else {
+                    final message = provider.isCheckedIn
+                        ? 'Check-out successful!'
+                        : 'Check-in successful!';
+                    _showMessagePopup(context, message);
+                  }
+                });
+              },
+              isCheckedIn: provider.isCheckedIn,
+              formattedDateTime: formattedDateTime,
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      // ✅ Reset lock when dialog is dismissed
+      if (mounted) {
+        setState(() => _isDialogShowing = false);
+      }
+    });
+  }
+
+  void _showMessagePopup(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 100,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryColor,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text(
+                'Close',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildPrompt() {
@@ -702,87 +818,87 @@ class GridItem {
 }
 
 
-void _showPopupDialog(BuildContext context) {
-  final DateTime now = DateTime.now();
-  final String formattedDateTime =
-      DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
-
-  showDialog(
-    context: context,
-    barrierDismissible: false, // 🔒 Prevent closing on outside tap
-
-    builder: (BuildContext context) {
-      return Consumer<SalesOrderProvider>(
-        builder: (context, provider, child) {
-          return CustomDialog(
-            onCheckIn: () async {
-              // Use Future.microtask to defer state changes
-              Future.microtask(() async {
-                final scaffoldMessenger = ScaffoldMessenger.of(context);
-                if (provider.errorMessage != null) {
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text(provider.errorMessage!)),
-                  );
-                } else {
-                  final message = provider.isCheckedIn
-                      ? 'Check-out successful!'
-                      : 'Check-in successful!';
-
-                  _showMessagePopup(context, message);
-                }
-              });
-            },
-            isCheckedIn: provider.isCheckedIn,
-            formattedDateTime: formattedDateTime,
-          );
-        },
-      );
-    },
-  );
-}
-
-void _showMessagePopup(BuildContext context, String message) {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.check_circle,
-              color: Colors.green,
-              size: 100, // ✅ Big success icon
-            ),
-            const SizedBox(height: 20),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.primaryColor,
-                fontSize: 20,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: const Text(
-              'Close',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
+// void _showPopupDialog(BuildContext context) {
+//   final DateTime now = DateTime.now();
+//   final String formattedDateTime =
+//       DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+//
+//   showDialog(
+//     context: context,
+//     barrierDismissible: false, // 🔒 Prevent closing on outside tap
+//
+//     builder: (BuildContext context) {
+//       return Consumer<SalesOrderProvider>(
+//         builder: (context, provider, child) {
+//           return CustomDialog(
+//             onCheckIn: () async {
+//               // Use Future.microtask to defer state changes
+//               Future.microtask(() async {
+//                 final scaffoldMessenger = ScaffoldMessenger.of(context);
+//                 if (provider.errorMessage != null) {
+//                   scaffoldMessenger.showSnackBar(
+//                     SnackBar(content: Text(provider.errorMessage!)),
+//                   );
+//                 } else {
+//                   final message = provider.isCheckedIn
+//                       ? 'Check-out successful!'
+//                       : 'Check-in successful!';
+//
+//                   _showMessagePopup(context, message);
+//                 }
+//               });
+//             },
+//             isCheckedIn: provider.isCheckedIn,
+//             formattedDateTime: formattedDateTime,
+//           );
+//         },
+//       );
+//     },
+//   );
+// }
+//
+// void _showMessagePopup(BuildContext context, String message) {
+//   showDialog(
+//     context: context,
+//     builder: (BuildContext context) {
+//       return AlertDialog(
+//         content: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             const Icon(
+//               Icons.check_circle,
+//               color: Colors.green,
+//               size: 100, // ✅ Big success icon
+//             ),
+//             const SizedBox(height: 20),
+//             Text(
+//               message,
+//               textAlign: TextAlign.center,
+//               style: TextStyle(
+//                 fontWeight: FontWeight.bold,
+//                 color: AppColors.primaryColor,
+//                 fontSize: 20,
+//               ),
+//             ),
+//           ],
+//         ),
+//         actions: [
+//           TextButton(
+//             child: const Text(
+//               'Close',
+//               style: TextStyle(
+//                 fontWeight: FontWeight.bold,
+//               ),
+//             ),
+//             onPressed: () {
+//               Navigator.of(context).pop();
+//             },
+//           ),
+//         ],
+//       );
+//     },
+//   );
+// }
 
 
 class CustomDialog extends StatefulWidget {
@@ -827,21 +943,21 @@ class _CustomDialogState extends State<CustomDialog> {
     Future.microtask(() async {
       final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
-      await provider.fetchCustomers(context);
+      // await provider.fetchCustomers(context);
       await provider.initializeCheckinStatus();
 
       // ✅ Auto-select last checked-in customer if available
-      if (provider.isCheckedIn && provider.lastCheckedInCustomer != null) {
-        final customers = provider.customerr;
-        try {
-          final foundCustomer = customers.firstWhere(
-                (c) => c.name == provider.lastCheckedInCustomer,
-          );
-          setState(() => _selectedCustomer = foundCustomer);
-        } catch (_) {
-          setState(() => _selectedCustomer = null);
-        }
-      }
+      // if (provider.isCheckedIn && provider.lastCheckedInCustomer != null) {
+      //   final customers = provider.customerr;
+      //   try {
+      //     final foundCustomer = customers.firstWhere(
+      //           (c) => c.name == provider.lastCheckedInCustomer,
+      //     );
+      //     setState(() => _selectedCustomer = foundCustomer);
+      //   } catch (_) {
+      //     setState(() => _selectedCustomer = null);
+      //   }
+      // }
 
       // ✅ Auto-fill last remarks if available
       if (provider.isCheckedIn && provider.lastRemarks != null) {
@@ -853,19 +969,19 @@ class _CustomDialogState extends State<CustomDialog> {
   }
 
 
-  List<customer.Data> _filterNearbyCustomers(
-      List<customer.Data> allCustomers, double userLat, double userLon,
-      {double radiusInMeters = 100}) { // 5 km radius
-    return allCustomers.where((c) {
-      final lat = double.tryParse(c.latitude ?? '');
-      final lon = double.tryParse(c.longitude ?? '');
-      if (lat == null || lon == null) return false;
-      final distance = Geolocator.distanceBetween(userLat, userLon, lat, lon);
-      debugPrint('Customer: ${c.name}, Distance: ${distance.toStringAsFixed(2)} meters');
-
-      return distance <= radiusInMeters;
-    }).toList();
-  }
+  // List<customer.Data> _filterNearbyCustomers(
+  //     List<customer.Data> allCustomers, double userLat, double userLon,
+  //     {double radiusInMeters = 100}) { // 5 km radius
+  //   return allCustomers.where((c) {
+  //     final lat = double.tryParse(c.latitude ?? '');
+  //     final lon = double.tryParse(c.longitude ?? '');
+  //     if (lat == null || lon == null) return false;
+  //     final distance = Geolocator.distanceBetween(userLat, userLon, lat, lon);
+  //     debugPrint('Customer: ${c.name}, Distance: ${distance.toStringAsFixed(2)} meters');
+  //
+  //     return distance <= radiusInMeters;
+  //   }).toList();
+  // }
 
   Future<void> _initData() async {
     setState(() {
@@ -878,17 +994,17 @@ class _CustomDialogState extends State<CustomDialog> {
     await provider.fetchCustomers(context);
 
     // Filter nearby customers
-    final nearbyCustomers = _filterNearbyCustomers(
-      provider.customerr,
-      latitude,
-      longitude,
-    );
+    // final nearbyCustomers = _filterNearbyCustomers(
+    //   provider.customerr,
+    //   latitude,
+    //   longitude,
+    // );
 
 
     setState(() {
       _isFetchingData = false;
       _loadingText = "";
-      _nearbyCustomers = nearbyCustomers;
+      // _nearbyCustomers = nearbyCustomers;
     });
   }
 

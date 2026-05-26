@@ -3903,7 +3903,7 @@ void clearSearchResults() {
       }
 
       // 4. Load logo from assets
-      final ByteData data = await rootBundle.load('assets/images/logoo.png');
+      final ByteData data = await rootBundle.load('assets/images/logoo.png'); // fetch company logo instead
       final Uint8List imgBytes = data.buffer.asUint8List();
       final img.Image? logo = img.decodeImage(imgBytes);
 
@@ -4737,48 +4737,89 @@ void clearSearchResults() {
 
   String? get lastCheckinTime => _lastCheckinTime;
   DateTime? get lastCheckinDateTime => _lastCheckinDateTime;
+  // Future<void> initializeCheckinStatus() async {
+  //   try {
+  //     final latestCheckin = await _apiService!.getLatestCheckinDetailsForEmployee();
+  //     if (latestCheckin != null) {
+  //       _isCheckedIn = latestCheckin['log_type'] == "IN";
+  //
+  //       /// ✅ TIME PARSING
+  //       final timeStr = latestCheckin['time'];
+  //
+  //       if (timeStr != null) {
+  //         try {
+  //           final parsed = DateTime.parse(timeStr);
+  //
+  //           _lastCheckinDateTime = parsed;
+  //
+  //           _lastCheckinTime =
+  //               DateFormat('hh:mm a').format(parsed); // 10:30 AM
+  //         } catch (e) {
+  //           debugPrint("Time parse error: $e");
+  //           _lastCheckinTime = null;
+  //         }
+  //       }
+  //       // // ✅ Store last customer if available
+  //       // final lastCustomer = latestCheckin['customer'];
+  //       // if (lastCustomer != null && lastCustomer.toString().trim().isNotEmpty) {
+  //       //   _lastCheckedInCustomer = lastCustomer;
+  //       // } else {
+  //       //   _lastCheckedInCustomer = null;
+  //       // }
+  //
+  //       // ✅ Store last remarks if available
+  //       final lastRemarks = latestCheckin['remarks'];
+  //       if (lastRemarks != null && lastRemarks.toString().trim().isNotEmpty) {
+  //         _lastRemarks = lastRemarks;
+  //       } else {
+  //         _lastRemarks = null;
+  //       }
+  //
+  //       notifyListeners();
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error initializing check-in status: $e");
+  //   }
+  // }
+  bool _isInitializing = false;
+  bool get isInitializing => _isInitializing;
+
   Future<void> initializeCheckinStatus() async {
+    if (_isInitializing) return; // 🛑 Block concurrent calls
+
+    _isInitializing = true;
+    notifyListeners(); // Trigger UI to show loading state
+
     try {
       final latestCheckin = await _apiService!.getLatestCheckinDetailsForEmployee();
       if (latestCheckin != null) {
         _isCheckedIn = latestCheckin['log_type'] == "IN";
 
-        /// ✅ TIME PARSING
         final timeStr = latestCheckin['time'];
-
         if (timeStr != null) {
           try {
             final parsed = DateTime.parse(timeStr);
-
             _lastCheckinDateTime = parsed;
-
-            _lastCheckinTime =
-                DateFormat('hh:mm a').format(parsed); // 10:30 AM
+            _lastCheckinTime = DateFormat('hh:mm a').format(parsed);
           } catch (e) {
             debugPrint("Time parse error: $e");
             _lastCheckinTime = null;
           }
         }
-        // ✅ Store last customer if available
+
         final lastCustomer = latestCheckin['customer'];
-        if (lastCustomer != null && lastCustomer.toString().trim().isNotEmpty) {
-          _lastCheckedInCustomer = lastCustomer;
-        } else {
-          _lastCheckedInCustomer = null;
-        }
+        _lastCheckedInCustomer = (lastCustomer != null && lastCustomer.toString().trim().isNotEmpty)
+            ? lastCustomer : null;
 
-        // ✅ Store last remarks if available
         final lastRemarks = latestCheckin['remarks'];
-        if (lastRemarks != null && lastRemarks.toString().trim().isNotEmpty) {
-          _lastRemarks = lastRemarks;
-        } else {
-          _lastRemarks = null;
-        }
-
-        notifyListeners();
+        _lastRemarks = (lastRemarks != null && lastRemarks.toString().trim().isNotEmpty)
+            ? lastRemarks : null;
       }
     } catch (e) {
       debugPrint("Error initializing check-in status: $e");
+    } finally {
+      _isInitializing = false; // ✅ Always reset, even on error
+      notifyListeners();
     }
   }
 
@@ -6973,6 +7014,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     required BuildContext context,
     required String? docname,     // null = new estimate
     required String customer,
+    required String customerName,
     required String date,
     required String contact,
     required String validTill,
@@ -6995,6 +7037,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         context: context,
         docname: docname,
         customer: customer,
+        customerName: customerName,
         company: company ?? '',
         date: date,
         contact: contact,

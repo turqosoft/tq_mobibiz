@@ -9480,7 +9480,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
         "/resource/Tq Estimate",
         queryParameters: {
           "fields": jsonEncode([
-            "name", "customer", "contact", "docstatus", "valid_till",
+            "name", "customer", "customer_name","contact", "docstatus", "valid_till",
             "item_code", "item_name", "item_description", "message",
             "Date", "gst_perc", "gst_amount", "rate", "total_amount"
           ]),
@@ -9593,10 +9593,78 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
     }
   }
   // Save draft — POST (new) or PUT (existing)
+  // Future<Map<String, dynamic>> saveDraftEstimate({
+  //   required BuildContext context,
+  //   required String? docname,
+  //   required String customer,
+  //   required String customerName,
+  //   required String company,
+  //   required String date,
+  //   required String contact,
+  //   required String validTill,
+  //   required String itemCode,
+  //   required String itemName,
+  //   required String itemDescription,
+  //   required double rate,
+  //   required double gstPerc,
+  //   required double gstAmount,
+  //   required double totalAmount,
+  //   required String message,
+  // }) async {
+  //   final cookies = await _sharedPrefService.getCookies();
+  //   final headers = {
+  //     'Content-Type': 'application/json',
+  //     'Cookie': cookies,
+  //   };
+  //
+  //   final body = {
+  //     "docstatus": 0,
+  //     "customer": customer,
+  //     "customer_name": customerName,
+  //     "company": company,
+  //     "Date": date,
+  //     "contact": contact,
+  //     "valid_till": validTill,
+  //     "item_code": itemCode,
+  //     "gst_perc": gstPerc.toString(),
+  //     "gst_amount": gstAmount,
+  //     "item_name": itemName,
+  //     "rate": rate,
+  //     "total_amount": totalAmount,
+  //     "item_description": itemDescription,
+  //     "message": "<div class=\"ql-editor read-mode\"><p>$message</p></div>",
+  //   };
+  //
+  //   try {
+  //     final response = docname == null
+  //         ? await _dio.post(
+  //       "/resource/Tq Estimate",
+  //       data: body,
+  //       options: Options(headers: headers),
+  //     )
+  //         : await _dio.put(
+  //       "/resource/Tq Estimate/$docname",
+  //       data: body,
+  //       options: Options(headers: headers),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       final name = response.data["data"]["name"]?.toString() ?? docname ?? '';
+  //       debugPrint("Draft saved: $name");
+  //       return {"success": true, "docname": name};
+  //     }
+  //
+  //     return {"success": false, "error": "Failed to save draft"};
+  //   } catch (e) {
+  //     debugPrint("saveDraftEstimate Error: $e");
+  //     return {"success": false, "error": e.toString()};
+  //   }
+  // }
   Future<Map<String, dynamic>> saveDraftEstimate({
     required BuildContext context,
     required String? docname,
     required String customer,
+    required String customerName,
     required String company,
     required String date,
     required String contact,
@@ -9616,9 +9684,16 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       'Cookie': cookies,
     };
 
+    // ✅ Only send customer link if selected from list (valid ERPNext customer)
+    // If manually entered, leave customer blank and rely on customer_name only
+    final bool isLinkedCustomer = customer.isNotEmpty && customer != customerName;
+
     final body = {
       "docstatus": 0,
-      "customer": customer,
+      "customer": isLinkedCustomer ? customer : "",   // ✅ empty if manual entry
+      "customer_name": customerName.isNotEmpty
+          ? customerName
+          : customer,                                  // ✅ always has a value
       "company": company,
       "Date": date,
       "contact": contact,
@@ -9638,21 +9713,33 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
           ? await _dio.post(
         "/resource/Tq Estimate",
         data: body,
-        options: Options(headers: headers),
+        options: Options(
+          headers: headers,
+          validateStatus: (status) => status != null && status < 500,
+        ),
       )
           : await _dio.put(
         "/resource/Tq Estimate/$docname",
         data: body,
-        options: Options(headers: headers),
+        options: Options(
+          headers: headers,
+          validateStatus: (status) => status != null && status < 500,
+        ),
       );
 
       if (response.statusCode == 200) {
-        final name = response.data["data"]["name"]?.toString() ?? docname ?? '';
+        final name =
+            response.data["data"]["name"]?.toString() ?? docname ?? '';
         debugPrint("Draft saved: $name");
         return {"success": true, "docname": name};
       }
 
-      return {"success": false, "error": "Failed to save draft"};
+      // ✅ Extract server error message if available
+      final serverMessage = response.data?["exception"] ??
+          response.data?["message"] ??
+          "Failed to save draft (${response.statusCode})";
+      debugPrint("saveDraftEstimate failed: $serverMessage");
+      return {"success": false, "error": serverMessage};
     } catch (e) {
       debugPrint("saveDraftEstimate Error: $e");
       return {"success": false, "error": e.toString()};
