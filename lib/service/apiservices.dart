@@ -8096,7 +8096,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       final cookies = await _sharedPrefService.getCookies();
 
       final response = await _dio.get(
-        '/method/tqerp_bd.api.get_sales_person_dashboard',
+        '/method/tqerp_mobibiz_serv.api.get_sales_person_dashboard',
         queryParameters: {
           'from_date': fromDate,
           'to_date': toDate,
@@ -9340,7 +9340,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       // ── Step 3: Send WhatsApp ─────────────────────────────────
       final phone = "91$contact";
       final whatsappResponse = await _dio.post(
-        "/method/tqerp_bd.api.send_whatsapp_estimate",
+        "/method/tqerp_mobibiz_serv.api.send_whatsapp_estimate",
         queryParameters: {
           "docname": docname,
           "phone": phone,
@@ -9580,7 +9580,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       // ── Step 3: Send WhatsApp ─────────────────────────────────
       final phone = "91$contact";
       await _dio.post(
-        "/method/tqerp_bd.api.send_whatsapp_estimate",
+        "/method/tqerp_mobibiz_serv.api.send_whatsapp_estimate",
         queryParameters: {"docname": docname, "phone": phone},
         options: Options(headers: headers),
       );
@@ -9819,7 +9819,7 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
       try {
         final phone = "91$contact";
         final whatsappResponse = await _dio.post(
-          "/method/tqerp_bd.api.send_whatsapp_estimate",
+          "/method/tqerp_mobibiz_serv.api.send_whatsapp_estimate",
           queryParameters: {"docname": docname, "phone": phone},
           options: Options(
             headers: headers,

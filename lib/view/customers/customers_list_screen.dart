@@ -33,7 +33,7 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isFilterBarOpen = false; // 👈 collapsed by default (compact)
   bool _showUnpaidOnly = false;
-
+  final ValueNotifier<bool> _showBackToTop = ValueNotifier(false);
   // @override
   // void initState() {
   //   super.initState();
@@ -76,13 +76,29 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
   }
   @override
   void dispose() {
+    _showBackToTop.dispose();
+    // _debounce?.cancel();
+    // _hasSearchText.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
+  // void _onScroll() {
+  //   if (_scrollController.position.pixels >=
+  //       _scrollController.position.maxScrollExtent - 200) {
+  //     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //     if (!provider.isLoadingMore && provider.hasMoreData) {
+  //       provider.loadMoreCustomers(context);
+  //     }
+  //   }
+  // }
   void _onScroll() {
+    // ✅ Show/hide back to top button
+    _showBackToTop.value = _scrollController.position.pixels > 400;
+
+    // existing load more logic
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
       final provider = Provider.of<SalesOrderProvider>(context, listen: false);
@@ -572,7 +588,7 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
             // 👇 Filter icon with active indicator
             IconButton(
               icon: Icon(
-                Icons.filter_list,
+                Icons.tune_rounded,
                 color: Colors.white,
               ),
               onPressed: _showFilterDialog,
@@ -583,8 +599,14 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
 
 
         // body: Consumer<SalesOrderProvider>(
-        body: Column(
-            children: [
+        // body: Column(
+        //     children: [
+      body: Stack(
+          children: [
+
+      // ── Your existing Column body ──────────────────────────────
+      Column(
+      children: [
               // ── Expandable filter bar ──────────────────────────────
               AnimatedContainer(
                 duration: const Duration(milliseconds: 260),
@@ -634,12 +656,6 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
           }
       // final customerList = provider.customerListModel?.data ?? [];
           final rawList = provider.customerListModel?.data ?? [];
-
-// Client-side filter — no re-fetch needed
-//           final customerList = _showUnpaidOnly
-//               ? rawList.where((c) => (c.totalUnpaid ?? 0) > 0).toList()
-//               : rawList;
-//       final isSearch = provider.activeSearch != null;
 
       if (provider.isLoading) {
         return Center(child: CircularProgressIndicator());
@@ -701,32 +717,6 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
 
 
                   ),
-      // Padding(
-      //   padding: const EdgeInsets.only(bottom: 8),
-      //   child: Consumer<SalesOrderProvider>(
-      //     builder: (context, provider, _) {
-      //
-      //       return Align(
-      //         alignment: Alignment.center,
-      //
-      //         child: Text(
-      //           provider.showOnlyUnpaid
-      //               ? provider.isFetchingAllForUnpaid
-      //               ? 'Found ${provider.unpaidCustomerList.length} so far…'
-      //               : 'Customers with unpaid: ${provider.unpaidCustomerList.length}'
-      //               : isSearch
-      //               ? 'Found ${provider.customerCount} customers'
-      //               : 'Total customers: ${provider.customerCount}',
-      //           style: const TextStyle(
-      //             fontSize: 14,
-      //             fontWeight: FontWeight.w600,
-      //             color: Colors.black54,
-      //           ),
-      //         ),
-      //       );
-      //     },
-      //   ),
-      // ),
       Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Consumer<SalesOrderProvider>(
@@ -937,14 +927,7 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                               customer.totalUnpaid != null &&
                               customer.totalUnpaid! > 0)
                             const SizedBox(width: 6),
-                          // if (customer.totalUnpaid != null && customer.totalUnpaid! > 0)
-                          //   Expanded(
-                          //     child: _buildFinancialChip(
-                          //       "Unpaid",
-                          //       customer.totalUnpaid!,
-                          //       Colors.red,
-                          //     ),
-                          //   ),
+
                           if (customer.totalUnpaid != null && customer.totalUnpaid! > 0)
                             Expanded(
                               child: GestureDetector(
@@ -1226,7 +1209,73 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
       );
         },
         ),
-    )]));
+    ),
+    ]
+      ),
+    // ── Back to Top Button ─────────────────────────────────────
+    Positioned(
+      bottom: 24 + MediaQuery.of(context).padding.bottom,
+    right: 16,
+    child: ValueListenableBuilder<bool>(
+    valueListenable: _showBackToTop,
+    builder: (context, show, _) {
+    return AnimatedSlide(
+    offset: show ? Offset.zero : const Offset(0, 2),
+    duration: const Duration(milliseconds: 300),
+    curve: Curves.easeOut,
+    child: AnimatedOpacity(
+    opacity: show ? 1.0 : 0.0,
+    duration: const Duration(milliseconds: 300),
+    child: show
+    ? GestureDetector(
+    onTap: () {
+    _scrollController.animateTo(
+    0,
+    duration: const Duration(milliseconds: 500),
+    curve: Curves.easeInOut,
+    );
+    },
+    child: Container(
+    padding: const EdgeInsets.symmetric(
+    horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+    color: AppColors.primaryColor,
+    borderRadius: BorderRadius.circular(30),
+    boxShadow: [
+    BoxShadow(
+    color: AppColors.primaryColor.withOpacity(0.35),
+    blurRadius: 10,
+    offset: const Offset(0, 4),
+    ),
+    ],
+    ),
+    child: const Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+    Icon(Icons.keyboard_arrow_up_rounded,
+    color: Colors.white, size: 18),
+    SizedBox(width: 4),
+    // Text(
+    // "Top",
+    // style: TextStyle(
+    // color: Colors.white,
+    // fontSize: 12,
+    // fontWeight: FontWeight.w600,
+    // ),
+    // ),
+    ],
+    ),
+    ),
+    )
+        : const SizedBox.shrink(),
+    ),
+    );
+    },
+    ),
+    ),
+    ],
+    ),
+    );
   }
 }
 void _showPaymentCollectionDialog(BuildContext context, customer) {

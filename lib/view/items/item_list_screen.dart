@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
@@ -17,11 +18,9 @@ class ItemListScreen extends StatefulWidget {
 
 class _ItemListScreenState extends State<ItemListScreen>
     with SingleTickerProviderStateMixin {
-  // String? _selectedBrand;
   String? _selectedCategory;
   SalesOrderProvider? _salesOrderProvider;
 
-  // List<String> _brands = [];
   List<String> _categories = [];
   String? _selectedVariant;       // was _selectedBrand
   List<String> _variants = [];    // was _brands
@@ -30,6 +29,9 @@ class _ItemListScreenState extends State<ItemListScreen>
   final ScrollController _scrollController = ScrollController();
   bool _isGridView = false;
   String _cookies = '';
+  final TextEditingController _searchController = TextEditingController();
+  // bool _isSearching = false;
+  bool _showBackToTop = false;
 
   @override
   void initState() {
@@ -55,15 +57,40 @@ class _ItemListScreenState extends State<ItemListScreen>
     final cookies = await pref.getCookies();
     setState(() => _cookies = cookies ?? '');
   }
+  // void _onScroll() {
+  //   if (_scrollController.position.pixels >=
+  //       _scrollController.position.maxScrollExtent - 200) {
+  //     final provider =
+  //     Provider.of<SalesOrderProvider>(context, listen: false);
+  //     provider.loadMoreItems(context);
+  //   }
+  // }
+
+// 2. Update _onScroll to also track scroll position
   void _onScroll() {
+    // Show back to top button after scrolling 300px
+    if (_scrollController.position.pixels > 300 && !_showBackToTop) {
+      setState(() => _showBackToTop = true);
+    } else if (_scrollController.position.pixels <= 300 && _showBackToTop) {
+      setState(() => _showBackToTop = false);
+    }
+
+    // Pagination trigger
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      final provider =
-      Provider.of<SalesOrderProvider>(context, listen: false);
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
       provider.loadMoreItems(context);
     }
   }
 
+// 3. Add scroll to top method
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutCubic,
+    );
+  }
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -75,6 +102,7 @@ class _ItemListScreenState extends State<ItemListScreen>
   void dispose() {
     _fadeController.dispose();
     _scrollController.dispose();
+    _searchController.dispose();
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _salesOrderProvider?.clearCustomerList();
       _salesOrderProvider?.clearItemList();
@@ -82,22 +110,7 @@ class _ItemListScreenState extends State<ItemListScreen>
     super.dispose();
   }
 
-  // ── Data fetchers (unchanged logic) ──────────────────────────────
 
-  // Future<void> _fetchBrandList() async {
-  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //   try {
-  //     Future.microtask(() async {
-  //       final brandGroupList = await provider.brandList(context);
-  //       setState(() {
-  //         _brands =
-  //             brandGroupList?.data?.map((e) => e.name ?? '').toList() ?? [];
-  //       });
-  //     });
-  //   } catch (e) {
-  //     debugPrint('Error fetching brands: $e');
-  //   }
-  // }
 // 2. Replace _fetchBrandList with _fetchVariantList
   Future<void> _fetchVariantList() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
@@ -134,15 +147,6 @@ class _ItemListScreenState extends State<ItemListScreen>
     }
   }
 
-  // Future<void> _itemBrandList(String brandname) async {
-  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //   try {
-  //     Future.microtask(
-  //             () async => await provider.itemByBrandList(brandname, context));
-  //   } catch (e) {
-  //     debugPrint('Error fetching item by brand: $e');
-  //   }
-  // }
   // 3. Replace _itemBrandList with _itemVariantList
   Future<void> _itemVariantList(String variantOf) async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
@@ -198,13 +202,22 @@ class _ItemListScreenState extends State<ItemListScreen>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                  24, 20, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+            return Padding(
+                // This pushes the sheet above the system nav bar
+                padding: MediaQuery.of(ctx).viewInsets +
+                EdgeInsets.only(bottom: MediaQuery.of(ctx).padding.bottom),
+            child: Container(
+            decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            // Remove bottom padding from here and let MediaQuery handle it
+            padding: EdgeInsets.fromLTRB(
+            24,
+            20,
+            24,
+            24, // static top/side padding only
+            ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,11 +335,20 @@ class _ItemListScreenState extends State<ItemListScreen>
                   ),
                 ],
               ),
-            );
+            ));
           },
         );
       },
     );
+  }
+
+  void _triggerSearch() {
+    final value = _searchController.text.trim();
+    if (value.isEmpty) {
+      _itemList();
+    } else {
+      _itemNameSearchList(value);
+    }
   }
 
   // ── Build ─────────────────────────────────────────────────────────
@@ -353,18 +375,18 @@ class _ItemListScreenState extends State<ItemListScreen>
               tooltip: _isGridView ? 'List view' : 'Grid view',
               onPressed: () => setState(() => _isGridView = !_isGridView),
             ),
-            IconButton(
-              icon: const Icon(Icons.search, color: Colors.white),
-              tooltip: 'Search',
-              onPressed: () {
-                showSearch(
-                  context: context,
-                  delegate: ItemSearchDelegate(
-                    onItemSelected: _itemNameSearchList,
-                  ),
-                );
-              },
-            ),
+            // IconButton(
+            //   icon: const Icon(Icons.search, color: Colors.white),
+            //   tooltip: 'Search',
+            //   onPressed: () {
+            //     showSearch(
+            //       context: context,
+            //       delegate: ItemSearchDelegate(
+            //         onItemSelected: _itemNameSearchList,
+            //       ),
+            //     );
+            //   },
+            // ),
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -402,8 +424,13 @@ class _ItemListScreenState extends State<ItemListScreen>
           ],
         ),
       ),
-      body: Consumer<SalesOrderProvider>(
-        builder: (context, provider, child) {
+      // body: Consumer<SalesOrderProvider>(
+      //   builder: (context, provider, child) {
+      body: Stack(
+          children: [
+      // existing Consumer widget unchanged
+      Consumer<SalesOrderProvider>(
+      builder: (context, provider, child) {
           final String serverUrl = provider.serverUrl;
 
           if (provider.isLoading) {
@@ -424,6 +451,70 @@ class _ItemListScreenState extends State<ItemListScreen>
 
           return Column(
             children: [
+
+// ── Search bar ─────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Container(
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F0F0),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(fontSize: 15),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _triggerSearch(),
+                    onChanged: (value) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Search item',
+                      hintStyle: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey[400],
+                        fontWeight: FontWeight.w400,
+                      ),
+                      // search icon on the RIGHT
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              _searchController.clear();
+                              setState(() {});
+                              _itemList();
+                            },
+                            child: Icon(Icons.close_rounded,
+                                color: Colors.grey[400], size: 18),
+                          ),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: _triggerSearch,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 14),
+                              child: Icon(Icons.search_rounded,
+                                  color: Colors.grey[600], size: 26),
+                            ),
+                          ),
+                        ],
+                      )
+                          : GestureDetector(
+                        onTap: _triggerSearch,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 14),
+                          child: Icon(Icons.search_rounded,
+                              color: Colors.grey[600], size: 26),
+                        ),
+                      ),
+                      prefixIcon: null,  // no left icon
+                      border: InputBorder.none,
+                      contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                    ),
+                  ),
+                ),
+              ),
               // ── Active filter chips bar ────────────────────────
               if (hasActiveFilters)
                 Container(
@@ -616,6 +707,48 @@ class _ItemListScreenState extends State<ItemListScreen>
             ],
           );
         },
+      ),
+            // Back to top button
+            Positioned(
+              bottom: 24 + MediaQuery.of(context).padding.bottom,
+              right: 16,
+              child: AnimatedSlide(
+                offset: _showBackToTop ? Offset.zero : const Offset(0, 2),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                child: AnimatedOpacity(
+                  opacity: _showBackToTop ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: IgnorePointer(
+                    ignoring: !_showBackToTop,
+                    child: GestureDetector(
+                      onTap: _scrollToTop,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryColor.withOpacity(0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
       ),
     );
   }
