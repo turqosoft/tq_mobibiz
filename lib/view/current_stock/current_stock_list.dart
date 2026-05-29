@@ -471,6 +471,7 @@ class _CurrentStockListState extends State<CurrentStockList> {
   }
   void _showItemOverlay(List<Map<String, dynamic>> suggestions) {
     _itemOverlayEntry?.remove(); // remove previous overlay if any
+    _itemOverlayEntry = null;
     final renderBox = _itemKey.currentContext!.findRenderObject() as RenderBox;
     final size = renderBox.size;
     final offset = renderBox.localToGlobal(Offset.zero);
@@ -514,6 +515,7 @@ class _CurrentStockListState extends State<CurrentStockList> {
   }
   void _showWarehouseOverlay(List<Map<String, dynamic>> suggestions) {
     _warehouseOverlayEntry?.remove();
+    _warehouseOverlayEntry = null;
     final renderBox = _warehouseKey.currentContext!.findRenderObject() as RenderBox;
     final size = renderBox.size;
     final offset = renderBox.localToGlobal(Offset.zero);
@@ -558,20 +560,63 @@ class _CurrentStockListState extends State<CurrentStockList> {
     Overlay.of(context).insert(_warehouseOverlayEntry!);
   }
   @override
+  void dispose() {
+    // Remove overlays
+    _itemOverlayEntry?.remove();
+    _itemOverlayEntry = null;
+
+    _warehouseOverlayEntry?.remove();
+    _warehouseOverlayEntry = null;
+
+    // Dispose controllers
+    _itemController.dispose();
+    _warehouseController.dispose();
+    _searchController.dispose();
+
+    super.dispose();
+  }
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) {
+            _itemOverlayEntry?.remove();
+            _itemOverlayEntry = null;
+
+            _warehouseOverlayEntry?.remove();
+            _warehouseOverlayEntry = null;
+          }
+        },
+        child: Scaffold(
+    // return Scaffold(
       appBar: CommonAppBar(
         title: 'Current Stocks',
-        onBackTap: () => Navigator.pop(context),
+        // onBackTap: () => Navigator.pop(context),
+        onBackTap: () {
+          _itemOverlayEntry?.remove();
+          _itemOverlayEntry = null;
+
+          _warehouseOverlayEntry?.remove();
+          _warehouseOverlayEntry = null;
+
+          Navigator.pop(context);
+        },
         actions: IconButton(
           onPressed: () {
+            // Remove item overlay
+            _itemOverlayEntry?.remove();
+            _itemOverlayEntry = null;
+
+            // Remove warehouse overlay
+            _warehouseOverlayEntry?.remove();
+            _warehouseOverlayEntry = null;
             _itemController.clear();
             _warehouseController.clear();
             _selectedItemCode = null;
             _selectedWarehouse = null;
             _fetchCurrentStockList();
           },
-          icon: Icon(Icons.refresh),
+          icon: Icon(Icons.refresh,color: Colors.white,),
         ),
       ),
       body: Consumer<SalesOrderProvider>(
@@ -592,31 +637,6 @@ class _CurrentStockListState extends State<CurrentStockList> {
                             children: [
                               Text("Item", style: TextStyle(fontWeight: FontWeight.bold)),
                               SizedBox(height: 5),
-                          // Container(
-                          //   key: _itemKey,
-                          //   child: TextField(
-                          //       controller: _itemController,
-                          //       decoration: InputDecoration(
-                          //         hintText: "Search Item...",
-                          //         prefixIcon: Icon(Icons.search),
-                          //         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          //         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          //       ),
-                          //     onChanged: (value) {
-                          //       if (value.isNotEmpty) {
-                          //         provider.searchItem(value, context).then((_) {
-                          //           if (provider.searchResults.isNotEmpty) {
-                          //             _showItemOverlay(provider.searchResults);
-                          //           }
-                          //         });
-                          //       } else {
-                          //         _itemOverlayEntry?.remove();
-                          //         _itemOverlayEntry = null;
-                          //         provider.clearSearchResults();
-                          //       }
-                          //     },
-                          //     ),
-                          // ),
                               Container(
                                 key: _itemKey,
                                 child: TextField(
@@ -670,31 +690,7 @@ class _CurrentStockListState extends State<CurrentStockList> {
                             children: [
                               Text("Warehouse", style: TextStyle(fontWeight: FontWeight.bold)),
                               SizedBox(height: 5),
-                          // Container(
-                          //   key: _warehouseKey,
-                          //   child: TextField(
-                          //       controller: _warehouseController,
-                          //       decoration: InputDecoration(
-                          //         hintText: "Search Warehouse...",
-                          //         prefixIcon: Icon(Icons.home_work),
-                          //         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          //         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          //       ),
-                          //     onChanged: (value) {
-                          //       if (value.isNotEmpty) {
-                          //         provider.searchWarehouse(value, context).then((_) {
-                          //           if (provider.warehouseResults.isNotEmpty) {
-                          //             _showWarehouseOverlay(provider.warehouseResults);
-                          //           }
-                          //         });
-                          //       } else {
-                          //         _warehouseOverlayEntry?.remove();
-                          //         _warehouseOverlayEntry = null;
-                          //         provider.clearWarehouseResults();
-                          //       }
-                          //     },
-                          //     ),
-                          // ),
+
                               Container(
                                 key: _warehouseKey,
                                 child: TextField(
@@ -891,6 +887,7 @@ class _CurrentStockListState extends State<CurrentStockList> {
           );
         },
       ),
+    ),
     );
   }
 

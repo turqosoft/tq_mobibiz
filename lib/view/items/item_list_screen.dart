@@ -414,6 +414,7 @@ class _ItemListScreenState extends State<ItemListScreen>
               icon: const Icon(Icons.refresh_rounded, color: Colors.white),
               tooltip: 'Refresh',
               onPressed: () {
+                _searchController.clear();
                 setState(() {
                   _selectedVariant = null;
                   _selectedCategory = null;
@@ -445,8 +446,25 @@ class _ItemListScreenState extends State<ItemListScreen>
           }
 
           final items = provider.allItems;
+          // if (items.isEmpty) {
+          //   return _EmptyView(onRefresh: _itemList);
+          // }
+          // In the Consumer builder, replace the empty check:
           if (items.isEmpty) {
-            return _EmptyView(onRefresh: _itemList);
+            return _EmptyView(
+              message: _searchController.text.trim().isNotEmpty
+                  ? 'No items found for "${_searchController.text.trim()}"'
+                  : 'No items available',
+              onRefresh: () {
+                // Clear both search and filters
+                _searchController.clear();
+                setState(() {
+                  _selectedVariant = null;
+                  _selectedCategory = null;
+                });
+                _itemList();
+              },
+            );
           }
 
           return Column(
@@ -1399,10 +1417,51 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
+// class _EmptyView extends StatelessWidget {
+//   final VoidCallback onRefresh;
+//
+//   const _EmptyView({required this.onRefresh});
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Center(
+//       child: Padding(
+//         padding: const EdgeInsets.all(32),
+//         child: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[300]),
+//             const SizedBox(height: 16),
+//             const Text('No items found',
+//                 style: TextStyle(
+//                     fontSize: 16,
+//                     fontWeight: FontWeight.w600,
+//                     color: Color(0xFF555555))),
+//             const SizedBox(height: 6),
+//             Text('Try adjusting your filters',
+//                 style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+//             const SizedBox(height: 20),
+//             TextButton.icon(
+//               onPressed: onRefresh,
+//               icon: const Icon(Icons.refresh_rounded, size: 18),
+//               label: const Text('Refresh'),
+//               style: TextButton.styleFrom(
+//                   foregroundColor: AppColors.primaryColor),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }
 class _EmptyView extends StatelessWidget {
   final VoidCallback onRefresh;
+  final String message;
 
-  const _EmptyView({required this.onRefresh});
+  const _EmptyView({
+    required this.onRefresh,
+    this.message = 'No items found',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1414,21 +1473,28 @@ class _EmptyView extends StatelessWidget {
           children: [
             Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            const Text('No items found',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF555555))),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF555555),
+              ),
+            ),
             const SizedBox(height: 6),
-            Text('Try adjusting your filters',
-                style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+            Text(
+              'Tap refresh to reset and reload',
+              style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+            ),
             const SizedBox(height: 20),
             TextButton.icon(
               onPressed: onRefresh,
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Refresh'),
               style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryColor),
+                foregroundColor: AppColors.primaryColor,
+              ),
             ),
           ],
         ),
@@ -1437,59 +1503,6 @@ class _EmptyView extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Search delegate (unchanged logic, minor UX polish)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// class ItemSearchDelegate extends SearchDelegate<String> {
-//   final Function(String) onItemSelected;
-//
-//   ItemSearchDelegate({required this.onItemSelected});
-//
-//   @override
-//   String get searchFieldLabel => 'Search items…';
-//
-//   @override
-//   ThemeData appBarTheme(BuildContext context) {
-//     return Theme.of(context).copyWith(
-//       appBarTheme: AppBarTheme(
-//         backgroundColor: AppColors.primaryColor,
-//         iconTheme: const IconThemeData(color: Colors.white),
-//       ),
-//       inputDecorationTheme: const InputDecorationTheme(
-//         hintStyle: TextStyle(color: Colors.white70),
-//         border: InputBorder.none,
-//       ),
-//       textTheme: const TextTheme(
-//         titleLarge: TextStyle(color: Colors.white, fontSize: 16),
-//       ),
-//     );
-//   }
-//
-//   @override
-//   List<Widget> buildActions(BuildContext context) => [
-//     if (query.isNotEmpty)
-//       IconButton(
-//         icon: const Icon(Icons.close, color: Colors.white),
-//         onPressed: () => query = '',
-//       ),
-//   ];
-//
-//   @override
-//   Widget buildLeading(BuildContext context) => IconButton(
-//     icon: const Icon(Icons.arrow_back, color: Colors.white),
-//     onPressed: () => close(context, ''),
-//   );
-//
-//   @override
-//   Widget buildResults(BuildContext context) {
-//     onItemSelected(query);
-//     return const SizedBox.shrink();
-//   }
-//
-//   @override
-//   Widget buildSuggestions(BuildContext context) => const SizedBox.shrink();
-// }
 class ItemSearchDelegate extends SearchDelegate<String> {
   final Function(String) onItemSelected;
 

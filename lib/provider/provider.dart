@@ -4130,21 +4130,45 @@ void clearSearchResults() {
       notifyListeners();
     }
   }
+  // Future<void> itemSearchListProducts(String itemName, BuildContext context) async {
+  //   _isLoadingItem = true;
+  //   _errorMessage = null;
+  //   _allItems.clear();
+  //   _hasMoreItems = false;  // search results are not paginated
+  //   notifyListeners();
+  //
+  //   try {
+  //     final result = await _apiService!.itemSearchListProducts(itemName, context);
+  //     if (result?.data != null) {
+  //       _allItems.addAll(result!.data!);
+  //     }
+  //     _itemListModel = result;
+  //   } catch (e) {
+  //     _errorMessage = e.toString();
+  //   } finally {
+  //     _isLoadingItem = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<void> itemSearchListProducts(String itemName, BuildContext context) async {
     _isLoadingItem = true;
     _errorMessage = null;
     _allItems.clear();
-    _hasMoreItems = false;  // search results are not paginated
+    _hasMoreItems = false;
     notifyListeners();
 
     try {
       final result = await _apiService!.itemSearchListProducts(itemName, context);
-      if (result?.data != null) {
-        _allItems.addAll(result!.data!);
+      if (result?.data != null && result!.data!.isNotEmpty) {
+        _allItems.addAll(result.data!);
       }
       _itemListModel = result;
+      // No error — empty _allItems will show the empty state in the UI
     } catch (e) {
-      _errorMessage = e.toString();
+      debugPrint('Search error: $e');
+      // Don't set _errorMessage for search — just leave _allItems empty
+      // so the UI shows "No items found" instead of an error screen
+      _itemListModel = null;
     } finally {
       _isLoadingItem = false;
       notifyListeners();

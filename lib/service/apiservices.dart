@@ -6783,10 +6783,33 @@ Future<String?> fetchItemNameLocal(BuildContext context, String itemCode) async 
         ),
       );
 
+      // if (response.statusCode == 200) {
+      //   final message = response.data['message'];
+      //   final List<String> keys = List<String>.from(message['keys']);
+      //   final List<dynamic> values = message['values'];
+      //
+      //   final List<ItemData> dataList = values.map((row) {
+      //     final Map<String, dynamic> map = {};
+      //     for (int i = 0; i < keys.length; i++) {
+      //       map[keys[i]] = row[i];
+      //     }
+      //     return ItemData.fromJson(map);
+      //   }).toList();
+      //
+      //   return ItemListResponse(data: dataList);
+      // } else {
+      //   apiErrorHandler.handleHttpError(context, response);
+      //   return null;
+      // }
       if (response.statusCode == 200) {
         final message = response.data['message'];
-        final List<String> keys = List<String>.from(message['keys']);
-        final List<dynamic> values = message['values'];
+        final List<String> keys = List<String>.from(message['keys'] ?? []);
+        final List<dynamic> values = message['values'] ?? [];
+
+        // Empty values = no results, return empty list instead of throwing
+        if (values.isEmpty) {
+          return ItemListResponse(data: []);
+        }
 
         final List<ItemData> dataList = values.map((row) {
           final Map<String, dynamic> map = {};

@@ -446,31 +446,6 @@ class _PickScannerPageState extends State<PickScannerPage > {
     }
 
     /// 🔹 Build validation summary
-    // final List<PickValidationSummary> summary = [];
-    //
-    // for (int i = 0; i < items.length; i++) {
-    //   final item = items[i];
-    //
-    //   final bool hasSerial =
-    //   (item["has_serial_no"] == 1 || item["has_serial_no"] == true);
-    //
-    //   if (!hasSerial) continue;
-    //
-    //   final qty = item["qty"] ?? 0;
-    //
-    //   final serialsForItem = _serialControllers[i]
-    //       ?.map((c) => c.text.trim())
-    //       .where((v) => v.isNotEmpty)
-    //       .toList() ??
-    //       [];
-    //
-    //   summary.add(
-    //     PickValidationSummary(
-    //       itemName: item["item_name"] ?? item["item"],
-    //       qty: qty,
-    //       serials: serialsForItem,
-    //     ),
-    //   );
     final List<PickValidationSummary> summary = [];
 
     for (int i = 0; i < items.length; i++) {
