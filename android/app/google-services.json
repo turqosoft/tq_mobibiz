@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "917395127923",
+    "project_id": "mobibiz-4f604",
+    "storage_bucket": "mobibiz-4f604.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:917395127923:android:c2c8dc2f8f7c0e3b7e7406",
+        "android_client_info": {
+          "package_name": "com.turqosoft.mobibiz"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBeKFn0t79VL6_Xx2rg8ef1fcYq853tkdc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
