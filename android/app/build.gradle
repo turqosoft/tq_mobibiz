@@ -83,6 +83,9 @@
 
 plugins {
     id "com.android.application"
+    // START: FlutterFire Configuration
+    id 'com.google.gms.google-services'
+    // END: FlutterFire Configuration
     id "org.jetbrains.kotlin.android"  // ✅ Corrected without version
     id "dev.flutter.flutter-gradle-plugin"
 }
@@ -111,7 +114,7 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace = "com.example.sales_ordering_app"
+    namespace = "com.turqosoft.mobibiz"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -126,7 +129,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.sales_ordering_app"
+        applicationId = "com.turqosoft.mobibiz"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()

@@ -1,4 +1,4 @@
-package com.example.sales_ordering_app
+package com.turqosoft.mobibiz
 
 
 
