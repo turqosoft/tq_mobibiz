@@ -6,7 +6,6 @@ import 'package:sales_ordering_app/view/sales_manager/performance/salesperson_pe
 
 import 'executive_report/ExecutiveReportScreen.dart';
 import 'expense_tracker/ExecutiveTrackerScreen.dart';
-import 'expense_tracker/ExpenseTrackerScreen.dart';
 
 class SalesManagerScreen extends StatelessWidget {
   const SalesManagerScreen({super.key});

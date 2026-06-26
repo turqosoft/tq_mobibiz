@@ -3,8 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:sales_ordering_app/provider/provider.dart';
 
+import '../../../utils/app_colors.dart';
 import 'ExecutiveTrackerScreen.dart';
-import 'ExpenseTrackerScreen.dart';
 
 class ReportScreen extends StatefulWidget {
   @override
@@ -164,6 +164,7 @@ class _ReportScreenState extends State<ReportScreen> {
     );
 
   }
+  bool _isDialogOpening = false;
 
   @override
   Widget build(BuildContext context) {
@@ -221,10 +222,17 @@ class _ReportScreenState extends State<ReportScreen> {
                   // return Card(
                   return InkWell(
                       borderRadius: BorderRadius.circular(12),
-                  onTap: () async {
-                  await provider.fetchEEMDetails(eem["name"]);
-                  _showEEMDetailsDialog(context);
-                  },
+                      onTap: () async {
+                        if (_isDialogOpening) return; // ← block duplicate taps
+                        _isDialogOpening = true;
+
+                        try {
+                          await provider.fetchEEMDetails(eem["name"]);
+                          if (mounted) _showEEMDetailsDialog(context);
+                        } finally {
+                          _isDialogOpening = false;
+                        }
+                      },
                   child: Card(
                     color: cardColors[index % cardColors.length],
                     elevation: 1.5,
@@ -513,6 +521,12 @@ class _ReportScreenState extends State<ReportScreen> {
                                         ? "${s["actual_distance"]} km"
                                         : "-",
                                   ),
+                                  _compactRow(
+                                    "Time",
+                                    s?["checkin_time"] != null
+                                        ? "${s["checkin_time"]} "
+                                        : "-",
+                                  ),
 
                                   /// Show remarks only if customer is valid
                                   if (isCustomerValid && (s?["remarks"] ?? "").isNotEmpty)
@@ -558,6 +572,7 @@ class _ReportScreenState extends State<ReportScreen> {
       },
     );
   }
+
   Widget _summaryCard(Map data) {
     return Card(
       elevation: 1,
@@ -567,6 +582,31 @@ class _ReportScreenState extends State<ReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Vehicle type badge ──────────────────────────
+            if ((data["vehicle_type"] ?? "").toString().isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(
+                    _vehicleIcon(data["vehicle_type"]?.toString() ?? ""),
+                    size: 14,
+                    color: AppColors.primaryColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    data["vehicle_type"]?.toString() ?? "",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1, thickness: 0.6),
+              const SizedBox(height: 8),
+            ],
+
             const Text(
               "Total Expense",
               style: TextStyle(color: Colors.grey),
@@ -598,6 +638,18 @@ class _ReportScreenState extends State<ReportScreen> {
         ),
       ),
     );
+  }
+
+// ── Helper to pick icon based on vehicle type ─────────────────────────
+  IconData _vehicleIcon(String vehicleType) {
+    switch (vehicleType) {
+      case "Two Wheeler":
+        return Icons.two_wheeler;
+      case "Four Wheeler":
+        return Icons.directions_car;
+      default:
+        return Icons.directions_car_outlined;
+    }
   }
   Widget _infoTile(String title, String? value) {
     return ListTile(

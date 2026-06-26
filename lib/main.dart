@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sales_ordering_app/utils/app_colors.dart';
 import 'package:sales_ordering_app/provider/provider.dart';
+import 'package:sales_ordering_app/view/home/widgets/version_watermark.dart';
 import 'package:sales_ordering_app/view/pick_list/PickList.dart';
 import 'package:sales_ordering_app/view/splash_screen.dart';
 import 'package:provider/provider.dart';
@@ -74,16 +75,35 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
+  // Widget build(BuildContext context) {
+  //   return MaterialApp(
+  //     navigatorKey: navigatorKey,
+  //     debugShowCheckedModeBanner: false,
+  //
+  //     theme: ThemeData(
+  //       primaryColor: AppColors.primaryColor,
+  //       primarySwatch: Colors.blue,
+  //     ),
+  //
+  //     // ✅ ADD THESE
+  //     locale: const Locale('en', 'GB'), // 👈 Forces DD/MM/YYYY globally
+  //
+  //     supportedLocales: const [
+  //       Locale('en', 'US'),
+  //       Locale('en', 'GB'), // 👈 Required for DD/MM/YYYY
+  //     ],
+  //
+  //     localizationsDelegates: const [
+  //       GlobalMaterialLocalizations.delegate,
+  //       GlobalWidgetsLocalizations.delegate,
+  //       GlobalCupertinoLocalizations.delegate,
+  //     ],
+  //
+  //     home: SplashScreen(),
+  //   );
+  //
+  // }
   Widget build(BuildContext context) {
-    // return MaterialApp(
-    //   navigatorKey: navigatorKey,
-    //   debugShowCheckedModeBanner: false,
-    //   theme: ThemeData(
-    //     primaryColor: AppColors.primaryColor,
-    //     primarySwatch: Colors.blue,
-    //   ),
-    //   home: SplashScreen(),
-    // );
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
@@ -93,22 +113,21 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
 
-      // ✅ ADD THESE
-      locale: const Locale('en', 'GB'), // 👈 Forces DD/MM/YYYY globally
-
+      locale: const Locale('en', 'GB'),
       supportedLocales: const [
         Locale('en', 'US'),
-        Locale('en', 'GB'), // 👈 Required for DD/MM/YYYY
+        Locale('en', 'GB'),
       ],
-
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
 
+      // ✅ Use builder — runs INSIDE MaterialApp, so Directionality exists
+      builder: (context, child) => VersionWatermark(child: child!),
+
       home: SplashScreen(),
     );
-
   }
 }

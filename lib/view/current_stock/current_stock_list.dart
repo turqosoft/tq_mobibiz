@@ -1,399 +1,3 @@
-// import 'package:flutter/material.dart';
-// import 'package:provider/provider.dart';
-// import 'package:sales_ordering_app/provider/provider.dart';
-// import 'package:sales_ordering_app/utils/app_colors.dart';
-// import 'package:sales_ordering_app/utils/common/common_widgets.dart';
-
-// class CurrentStockList extends StatefulWidget {
-//   const CurrentStockList({super.key});
-
-//   @override
-//   State<CurrentStockList> createState() => _CurrentStockListState();
-// }
-
-// class _CurrentStockListState extends State<CurrentStockList> {
-//   final TextEditingController _searchController = TextEditingController();
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       _fetchCurrentStockList();
-//     });
-//   }
-
-//   Future<void> _fetchCurrentStockList() async {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     try {
-//       await provider.currentStockList();
-//     } catch (e) {
-//       print('Error fetching current stock details: $e');
-//     }
-//   }
-
-//   Future<void> _fetchCurrentStockFilter(String itemCode) async {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     try {
-//       await provider.currentStockFilter(itemCode);
-//     } catch (e) {
-//       print('Error fetching customer groups: $e');
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: CommonAppBar(
-//         title: 'Current Stocks',
-//         onBackTap: () {
-//           Navigator.pop(context);
-//         },
-//       ),
-//       // appBar: AppBar(
-//       //   title: Text('Current Stocks',),
-//       //   centerTitle: true,
-
-//       // ),
-//       body: Consumer<SalesOrderProvider>(
-//         builder: (context, provider, child) {
-//           if (provider.isLoading) {
-//             return Center(child: CircularProgressIndicator());
-//           } else if (provider.currentStockListModel == null ||
-//               provider.currentStockListModel!.data == null ||
-//               provider.currentStockListModel!.data!.isEmpty) {
-//             return Center(child: Text('No current stock data available.'));
-//           } else {
-//             return SingleChildScrollView(
-//               child: Padding(
-//                 padding: const EdgeInsets.all(15.0),
-//                 child: Column(
-//                   children: [
-//                     Container(
-//             padding: EdgeInsets.all(16.0),
-//             child: TextField(
-//               controller: _searchController,
-//               decoration: InputDecoration(
-//                 labelText: 'Search',
-//                 suffixIcon: Icon(Icons.search),
-//                 border: OutlineInputBorder(
-//                   borderRadius: BorderRadius.circular(10.0),
-//                   borderSide: BorderSide.none,
-//                 ),
-//                 filled: true,
-//                 fillColor: Colors.grey[200],
-//                 contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-//               ),
-//               onSubmitted: (query) {
-//                 print('Search query: $query');
-//                 _fetchCurrentStockFilter(_searchController.text);
-//               },
-//             ),
-//           ),
-//                     // TextField(
-//                     //   controller: _searchController,
-//                     //   decoration: InputDecoration(
-//                     //     labelText: 'Search',
-//                     //     suffixIcon: Icon(Icons.search),
-//                     //     border: OutlineInputBorder(
-//                     //       borderRadius: BorderRadius.circular(10.0),
-//                     //     ),
-//                     //   ),
-//                     //   onSubmitted: (query) {
-//                     //     print('Search query: $query');
-//                     //     _fetchCurrentStockFilter(_searchController.text);
-//                     //   },
-//                     // ),
-//                     // Container(
-//                     //   decoration: BoxDecoration(
-//                     //     color: AppColors.primaryColor.withOpacity(0.5),
-//                     //     borderRadius: BorderRadius.circular(10.0),
-//                     //   ),
-//                     //   child: TextField(
-//                     //     controller: _searchController,
-//                     //     decoration: InputDecoration(
-//                     //       labelText: 'Search',
-//                     //       labelStyle: TextStyle(
-//                     //           color: Colors.white, fontWeight: FontWeight.bold),
-//                     //       suffixIcon: Icon(
-//                     //         Icons.search,
-//                     //         color: Colors.white,
-//                     //       ),
-//                     //       border: InputBorder.none,
-//                     //       contentPadding:
-//                     //           EdgeInsets.symmetric(horizontal: 16.0),
-//                     //     ),
-//                     //     onSubmitted: (query) {
-//                     //       print('Search query: $query');
-//                     //       _fetchCurrentStockFilter(_searchController.text);
-//                     //     },
-//                     //   ),
-//                     // ),
-
-//                     SizedBox(height: 10),
-//                     ListView.separated(
-//                       separatorBuilder: (context, index) {
-//                         return const SizedBox(height: 10);
-//                       },
-//                       itemCount: provider.currentStockListModel!.data!.length,
-//                       shrinkWrap: true,
-//                       physics: const NeverScrollableScrollPhysics(),
-//                       itemBuilder: (BuildContext context, int index) {
-//                         final stock =
-//                             provider.currentStockListModel!.data![index];
-//                         return Card(
-//                           shape: RoundedRectangleBorder(
-//                             borderRadius: BorderRadius.circular(10.0),
-//                           ),
-//                           margin: EdgeInsets.symmetric(vertical: 8.0),
-//                           child: Padding(
-//                             padding: const EdgeInsets.all(15.0),
-//                             child: Column(
-//                               mainAxisAlignment: MainAxisAlignment.start,
-//                               crossAxisAlignment: CrossAxisAlignment.start,
-//                               children: [
-//                                 Text(
-//                                   "Item Code: ${stock.itemCode}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Item Name: ${stock.name}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Warehouse: ${stock.warehouse}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Actual Quantity: ${stock.actualQty}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Planned Quantity: ${stock.plannedQty}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Projected Quantity: ${stock.projectedQty}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Reserved Quantity: ${stock.reservedQty}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Reserved Stock: ${stock.reservedStock}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                               ],
-//                             ),
-//                           ),
-//                         );
-//                       },
-//                     ),
-//                   ],
-//                 ),
-//               ),
-//             );
-//           }
-//         },
-//       ),
-//     );
-//   }
-// }
-// import 'package:flutter/material.dart';
-// import 'package:provider/provider.dart';
-// import 'package:sales_ordering_app/provider/provider.dart';
-// import 'package:sales_ordering_app/utils/app_colors.dart';
-// import 'package:sales_ordering_app/utils/common/common_widgets.dart';
-
-// class CurrentStockList extends StatefulWidget {
-//   const CurrentStockList({super.key});
-
-//   @override
-//   State<CurrentStockList> createState() => _CurrentStockListState();
-// }
-
-// class _CurrentStockListState extends State<CurrentStockList> {
-//   final TextEditingController _searchController = TextEditingController();
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       _fetchCurrentStockList();
-//     });
-//   }
-
-//   Future<void> _fetchCurrentStockList() async {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     try {
-//       await provider.currentStockList();
-//     } catch (e) {
-//       print('Error fetching current stock details: $e');
-//     }
-//   }
-
-//   Future<void> _fetchCurrentStockFilter(String itemCode) async {
-//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//     try {
-//       await provider.currentStockFilter(itemCode);
-//     } catch (e) {
-//       print('Error fetching customer groups: $e');
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: CommonAppBar(
-//         title: 'Current Stocks',
-//         onBackTap: () {
-//           Navigator.pop(context);
-//         },
-//       ),
-//       body: Consumer<SalesOrderProvider>(
-//         builder: (context, provider, child) {
-//           if (provider.isLoading) {
-//             return Center(child: CircularProgressIndicator());
-//           } else if (provider.currentStockListModel == null ||
-//               provider.currentStockListModel!.data == null ||
-//               provider.currentStockListModel!.data!.isEmpty) {
-//             return Center(child: Text('No current stock data available.'));
-//           } else {
-//             return SingleChildScrollView(
-//               child: Padding(
-//                 padding: const EdgeInsets.all(15.0),
-//                 child: Column(
-//                   children: [
-//                     Container(
-//                       padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-//                       decoration: BoxDecoration(
-//                         color: Colors.grey[200],
-//                         borderRadius: BorderRadius.circular(10.0),
-//                       ),
-//                       child: TextField(
-//                         controller: _searchController,
-//                         decoration: InputDecoration(
-//                           labelText: 'Search',
-//                           suffixIcon: Icon(Icons.search),
-//                           border: InputBorder.none,
-//                           contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-//                         ),
-//                         onSubmitted: (query) {
-//                           print('Search query: $query');
-//                           _fetchCurrentStockFilter(_searchController.text);
-//                         },
-//                       ),
-//                     ),
-//                     SizedBox(height: 20),
-//                     ListView.separated(
-//                       separatorBuilder: (context, index) {
-//                         return const SizedBox(height: 10);
-//                       },
-//                       itemCount: provider.currentStockListModel!.data!.length,
-//                       shrinkWrap: true,
-//                       physics: const NeverScrollableScrollPhysics(),
-//                       itemBuilder: (BuildContext context, int index) {
-//                         final stock = provider.currentStockListModel!.data![index];
-//                         return Card(
-//                           shape: RoundedRectangleBorder(
-//                             borderRadius: BorderRadius.circular(10.0),
-//                           ),
-//                           elevation: 3.0,
-//                           child: Padding(
-//                             padding: const EdgeInsets.all(15.0),
-//                             child: Column(
-//                               crossAxisAlignment: CrossAxisAlignment.start,
-//                               children: [
-//                                 Row(
-//                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//                                   children: [
-//                                     Text(
-//                                       "Item Code: ${stock.itemCode}",
-//                                       style: TextStyle(
-//                                           fontSize: 16,
-//                                           fontWeight: FontWeight.bold),
-//                                     ),
-//                                     Icon(Icons.inventory, color: AppColors.primaryColor),
-//                                   ],
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Item Name: ${stock.name}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 Text(
-//                                   "Warehouse: ${stock.warehouse}",
-//                                   style: TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.bold),
-//                                 ),
-//                                 SizedBox(height: 10),
-//                                 _buildStockInfoRow("Actual Quantity", stock.actualQty),
-//                                 _buildStockInfoRow("Planned Quantity", stock.plannedQty),
-//                                 _buildStockInfoRow("Projected Quantity", stock.projectedQty),
-//                                 _buildStockInfoRow("Reserved Quantity", stock.reservedQty),
-//                                 _buildStockInfoRow("Reserved Stock", stock.reservedStock),
-//                               ],
-//                             ),
-//                           ),
-//                         );
-//                       },
-//                     ),
-//                   ],
-//                 ),
-//               ),
-//             );
-//           }
-//         },
-//       ),
-//     );
-//   }
-
-//   Widget _buildStockInfoRow(String label, dynamic value) {
-//     return Padding(
-//       padding: const EdgeInsets.symmetric(vertical: 4.0),
-//       child: Row(
-//         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//         children: [
-//           Text(
-//             "$label:",
-//             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-//           ),
-//           Text(
-//             "$value",
-//             style: TextStyle(fontSize: 16),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -872,9 +476,14 @@ class _CurrentStockListState extends State<CurrentStockList> {
                               ),
                               SizedBox(height: 8),
                               _buildStockInfoRow("Actual Qty", stock.actualQty),
-                              // _buildStockInfoRow("Projected Qty", stock.projectedQty),
-                              // _buildStockInfoRow("Reserved Qty", stock.reservedQty),
-                              // _buildStockInfoRow("Reserved Stock", stock.reservedStock),
+                              SizedBox(height: 4),
+                              _buildStockInfoRow(
+                                "Available Qty",
+                                ((stock.actualQty ?? 0) - (stock.reservedQty ?? 0)),
+                                valueColor: ((stock.actualQty ?? 0) - (stock.reservedQty ?? 0)) <= 0
+                                    ? Colors.red
+                                    : Colors.green,
+                              ),
                             ],
                           ),
                         ),
@@ -892,8 +501,30 @@ class _CurrentStockListState extends State<CurrentStockList> {
   }
 
 
-
-  Widget _buildStockInfoRow(String label, dynamic value) {
+  //
+  // Widget _buildStockInfoRow(String label, dynamic value) {
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(vertical: 4.0),
+  //     child: Row(
+  //       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //       children: [
+  //         Flexible(
+  //           child: Text(
+  //             "$label:",
+  //             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  //           ),
+  //         ),
+  //         Flexible(
+  //           child: Text(
+  //             "$value",
+  //             style: TextStyle(fontSize: 16),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+  Widget _buildStockInfoRow(String label, dynamic value, {Color? valueColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
@@ -908,7 +539,7 @@ class _CurrentStockListState extends State<CurrentStockList> {
           Flexible(
             child: Text(
               "$value",
-              style: TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: 16, color: valueColor),
             ),
           ),
         ],

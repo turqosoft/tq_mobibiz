@@ -16,14 +16,18 @@ class SalesOrderScreen extends StatefulWidget {
   final SalesOrderDetails? salesOrder;
   final String? salesOrderName;
   final Map<String, dynamic>? mappedQuotation;
-  final VoidCallback? onSaveStart; // 👇 new
+  final String? initialCustomerName; //
+  final String? initialCustomerId;   //
+  final VoidCallback? onSaveStart; //
   final VoidCallback? onSaveEnd;
 
   const SalesOrderScreen({
     super.key,
     this.salesOrder,
     this.salesOrderName,
-    this.mappedQuotation, // 👈 ADD THIS
+    this.mappedQuotation, //
+    this.initialCustomerName,
+    this.initialCustomerId,
     this.onSaveStart,
     this.onSaveEnd,
   });
@@ -67,21 +71,34 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
   String _applyDiscountOn = 'Net Total';
   final TextEditingController _discountPercentageController = TextEditingController();
   final TextEditingController _discountAmountController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-      provider.fetchDiscountSettings(context);
+
+    // 👇 Set customer synchronously BEFORE any async callbacks
+    if (widget.initialCustomerName != null &&
+        widget.initialCustomerId != null &&
+        widget.salesOrder == null &&        // not in edit mode
+        widget.mappedQuotation == null) {   // not from quotation
+      _selectedCustomer = widget.initialCustomerId;
+      _searchCustomerName = widget.initialCustomerName;
+      _customerSelected = true;
+      _searchController.text = widget.initialCustomerName!; // 👈 sync set
+    }
+
+    _searchController.addListener(() {
+      if (mounted) setState(() {});
     });
-    // ✅ Determine mode FIRST
+
+    // Determine edit mode
     if (widget.salesOrder != null) {
       _isEditMode = true;
       _createdSalesOrderName = widget.salesOrder!.name;
     } else {
       _isEditMode = false;
-      _createdSalesOrderName = null; // only null if truly new
+      _createdSalesOrderName = null;
     }
 
     provider.setSelectedSalesOrderName(null);
@@ -91,12 +108,25 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
     provider.clearSalesOrderModel();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+      provider.fetchDiscountSettings(context);
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchCustomerGroupList();
       if (widget.mappedQuotation != null) {
         _prefillFromMappedQuotation(widget.mappedQuotation!);
       }
       if (widget.salesOrder != null) {
         _prefillFromOrder(widget.salesOrder!);
+      }
+
+      // 👇 Fetch currency details after frame — but state is already set above
+      if (widget.initialCustomerName != null &&
+          widget.initialCustomerId != null &&
+          widget.salesOrder == null &&
+          widget.mappedQuotation == null) {
+        _fetchInitialCustomerDetails(widget.initialCustomerId!);
       }
     });
 
@@ -112,8 +142,28 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
     final salesOrderProvider =
     Provider.of<SalesOrderProvider>(context, listen: false);
     salesOrderProvider.loadAllowMultipleItems(context);
+    _hideOverlay();
   }
 
+// 👇 New method — only fetches currency, doesn't touch customer name/id
+  Future<void> _fetchInitialCustomerDetails(String customerId) async {
+    if (!mounted) return;
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+    try {
+      final details = await provider.fetchCustomerDetails(context, customerId);
+      if (!mounted) return;
+      if (details?['message'] != null) {
+        setState(() {
+          _currency = details?['message']['currency'] ?? '';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching initial customer details: $e');
+    }
+  }
+  void hideSearchOverlay() {
+    _hideOverlay();
+  }
   void _markDirty() {
     if (!_isDirty) {
       setState(() {
@@ -146,6 +196,7 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
       }
     }
   }
+
   void _prefillFromMappedQuotation(Map<String, dynamic> data) async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
     _sourceQuotation = data['name']; // ✅ IMPORTANT
@@ -199,108 +250,6 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
     );
   }
 
-  // void _prefillFromOrder(SalesOrderDetails order) async {
-  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //
-  //   setState(() {
-  //     _selectedCustomer = order.customer;
-  //     _searchCustomerName = order.customerName;
-  //     _customerSelected = true;
-  //     _deliveryDateController.text =
-  //         DateFormat('dd-MM-yyyy').format(DateTime.parse(order.deliveryDate!));
-  //   });
-  //
-  //   /// ✅ 🔥 SET WAREHOUSE (MAIN FIX)
-  //   if (order.setWarehouse != null && order.setWarehouse!.isNotEmpty) {
-  //     provider.setWarehousee(order.setWarehouse!);
-  //   } else if (order.items != null && order.items!.isNotEmpty) {
-  //
-  //   }
-  //
-  //   try {
-  //     final customerDetails =
-  //     await provider.fetchCustomerDetails(context, order.customer ?? "");
-  //
-  //     if (customerDetails != null && customerDetails['message'] != null) {
-  //       final message = customerDetails['message'];
-  //
-  //       setState(() {
-  //         _currency = message['currency'] ?? 'INR';
-  //       });
-  //
-  //       provider.setSelectedCustomerDetails(message);
-  //     }
-  //   } catch (e) {
-  //     print("Error fetching customer details on prefill: $e");
-  //   }
-  //
-  //   provider.setItems(
-  //     order.items!.map((e) => Item(
-  //       rowName: e.rowName,
-  //       name: e.itemName ?? '',
-  //       itemCode: e.itemCode ?? '',
-  //       quantity: e.qty ?? 1,
-  //       rate: e.rate ?? 0,
-  //       priceListRate: e.priceListRate ?? 0,
-  //       discountPercentage: e.discountPercentage ?? 0,
-  //       quotationItem: e.quotationItem,
-  //       prevdocDocname: e.prevdocDocname,
-  //     )).toList(),
-  //   );
-  // }
-  // void _prefillFromOrder(SalesOrderDetails order) async {
-  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //
-  //   setState(() {
-  //     _selectedCustomer = order.customer;
-  //     _searchCustomerName = order.customerName;
-  //     _customerSelected = true;
-  //     _deliveryDateController.text =
-  //         DateFormat('dd-MM-yyyy').format(DateTime.parse(order.deliveryDate!));
-  //
-  //     // 👇 Prefill discount fields from existing order
-  //     _applyDiscountOn = order.applyDiscountOn ?? 'Net Total';
-  //     _discountPercentageController.text =
-  //     (order.additionalDiscountPercentage ?? 0) > 0
-  //         ? (order.additionalDiscountPercentage!).toString()
-  //         : '';
-  //     _discountAmountController.text = (order.discountAmount ?? 0) > 0
-  //         ? (order.discountAmount!).toString()
-  //         : '';
-  //   });
-  //
-  //   if (order.setWarehouse != null && order.setWarehouse!.isNotEmpty) {
-  //     provider.setWarehousee(order.setWarehouse!);
-  //   }
-  //
-  //   try {
-  //     final customerDetails =
-  //     await provider.fetchCustomerDetails(context, order.customer ?? "");
-  //     if (customerDetails != null && customerDetails['message'] != null) {
-  //       final message = customerDetails['message'];
-  //       setState(() => _currency = message['currency'] ?? 'INR');
-  //       provider.setSelectedCustomerDetails(message);
-  //     }
-  //   } catch (e) {
-  //     print("Error fetching customer details on prefill: $e");
-  //   }
-  //
-  //   provider.setItems(
-  //     order.items!
-  //         .map((e) => Item(
-  //       rowName: e.rowName,
-  //       name: e.itemName ?? '',
-  //       itemCode: e.itemCode ?? '',
-  //       quantity: e.qty ?? 1,
-  //       rate: e.rate ?? 0,
-  //       priceListRate: e.priceListRate ?? 0,
-  //       discountPercentage: e.discountPercentage ?? 0,
-  //       quotationItem: e.quotationItem,
-  //       prevdocDocname: e.prevdocDocname,
-  //     ))
-  //         .toList(),
-  //   );
-  // }
   void _prefillFromOrder(SalesOrderDetails order) async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
@@ -832,6 +781,8 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
 
   @override
   void dispose() {
+    _hideOverlay();
+
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _salesOrderProvider?.clearCustomerList();
       _salesOrderProvider?.clearItemList();
@@ -894,29 +845,79 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
                                 style: const TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: Text(item.itemCode ?? '',
                                 style: const TextStyle(color: Colors.grey)),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: (item.actualQty ?? 0) > 0
-                                    ? Colors.green.shade50
-                                    : Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: (item.actualQty ?? 0) > 0
-                                      ? Colors.green.shade300
-                                      : Colors.red.shade300,
-                                ),
-                              ),
-                              child: Text(
-                                'Qty: ${(item.actualQty ?? 0).toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: (item.actualQty ?? 0) > 0
-                                      ? Colors.green.shade700
-                                      : Colors.red.shade700,
-                                ),
-                              ),
+                            // trailing: Container(
+                            //   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            //   decoration: BoxDecoration(
+                            //     color: (item.actualQty ?? 0) > 0
+                            //         ? Colors.green.shade50
+                            //         : Colors.red.shade50,
+                            //     borderRadius: BorderRadius.circular(12),
+                            //     border: Border.all(
+                            //       color: (item.actualQty ?? 0) > 0
+                            //           ? Colors.green.shade300
+                            //           : Colors.red.shade300,
+                            //     ),
+                            //   ),
+                            //   child: Text(
+                            //     'Qty: ${(item.actualQty ?? 0).toStringAsFixed(0)}',
+                            //     style: TextStyle(
+                            //       fontSize: 11,
+                            //       fontWeight: FontWeight.w600,
+                            //       color: (item.actualQty ?? 0) > 0
+                            //           ? Colors.green.shade700
+                            //           : Colors.red.shade700,
+                            //     ),
+                            //   ),
+                            // ),
+                            trailing: Builder(
+                              builder: (context) {
+                                final actual = item.actualQty ?? 0;
+                                final reserved = item.reservedQty ?? 0;
+                                final available = actual - reserved;
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    // Actual Qty badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.blue.shade300),
+                                      ),
+                                      child: Text(
+                                        'Actual: ${actual.toStringAsFixed(0)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // Available Qty badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: available > 0 ? Colors.green.shade50 : Colors.red.shade50,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: available > 0 ? Colors.green.shade300 : Colors.red.shade300,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Avail: ${available.toStringAsFixed(0)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: available > 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             onTap: () async {
                               _hideOverlay();
@@ -970,6 +971,7 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
                                     itemTaxTemplate: message["item_tax_template"] ?? "",
                                     lastPurchaseRate: lastPurchaseRate,
                                     uom: message["uom"] ?? "",   // 👇 new
+                                    availableQty: (item.actualQty ?? 0) - (item.reservedQty ?? 0),
                                   );
                                 } else {
                                   Fluttertoast.showToast(msg: "Select Customer first");
@@ -1412,21 +1414,53 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
                     contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
+                  // onChanged: (query) async {
+                  //   _markDirty();
+                  //   if (query.isEmpty) {
+                  //     setState(() {
+                  //       _itemSelected = false;
+                  //       _selectedItem = null;
+                  //     });
+                  //     _hideOverlay();
+                  //     Provider.of<SalesOrderProvider>(context, listen: false)
+                  //         .clearItemSearch();
+                  //   } else {
+                  //     await _searchItemList(query);
+                  //     final provider =
+                  //     Provider.of<SalesOrderProvider>(context, listen: false);
+                  //     _showOverlay(context, provider.itemListModel?.data ?? []);
+                  //   }
+                  // },
                   onChanged: (query) async {
                     _markDirty();
+
                     if (query.isEmpty) {
                       setState(() {
                         _itemSelected = false;
                         _selectedItem = null;
                       });
+
                       _hideOverlay();
-                      Provider.of<SalesOrderProvider>(context, listen: false)
-                          .clearItemSearch();
+
+                      Provider.of<SalesOrderProvider>(
+                        context,
+                        listen: false,
+                      ).clearItemSearch();
                     } else {
                       await _searchItemList(query);
+
+                      if (!mounted) return;
+
                       final provider =
-                      Provider.of<SalesOrderProvider>(context, listen: false);
-                      _showOverlay(context, provider.itemListModel?.data ?? []);
+                      Provider.of<SalesOrderProvider>(
+                        context,
+                        listen: false,
+                      );
+
+                      _showOverlay(
+                        context,
+                        provider.itemListModel?.data ?? [],
+                      );
                     }
                   },
                   onEditingComplete: () => _itemSearchFocusNode.unfocus(),
@@ -1985,7 +2019,8 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
     required String itemTaxTemplate,
     required double lastPurchaseRate, // ✅ NEW
     String uom = '',   // 👇 new
-    VoidCallback? onCa
+    double availableQty = 0.0,
+    VoidCallback? onCancel
 
   }) {
     showDialog(
@@ -2000,7 +2035,7 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
         itemTaxTemplate: itemTaxTemplate,
         lastPurchaseRate: lastPurchaseRate, // ✅ NEW
         uom: uom,           // 👇 pass it down
-
+        availableQty: availableQty,
 
         onCancel: () {},
         onItemAdded: (addedRate, addedQty) {
@@ -2033,7 +2068,11 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
 
     final itemTaxTemplate =
         message?["item_tax_template"] ?? item.itemTaxTemplate;
-
+    // ✅ Fetch available qty for this item
+    final qtyMap = await provider.fetchItemActualQty(item.itemCode);  // or your API service call
+    final actualQty = qtyMap['${item.itemCode}__actual'] ?? 0.0;
+    final reservedQty = qtyMap['${item.itemCode}__reserved'] ?? 0.0;
+    final availableQty = actualQty - reservedQty;
     showDialog(
       context: context,
       builder: (context) => AddItemDialog(
@@ -2049,6 +2088,7 @@ class SalesOrderScreenState extends State<SalesOrderScreen> {
         editIndex: index,// ✅ IMPORTANT
         onCancel: onCancel,
         uom: item.uom ?? '',   // 👈 this must be here
+        availableQty: availableQty,
         onItemAdded: (rate, qty) {
           _markDirty(); // ✅ THIS FIXES YOUR MAIN ISSUE
         },
@@ -2102,6 +2142,7 @@ class AddItemDialog extends StatefulWidget {
   final bool isEdit;
   final int? editIndex;
   final String uom;             // 👇 new
+  final double availableQty;
 
 
 
@@ -2119,7 +2160,7 @@ class AddItemDialog extends StatefulWidget {
     this.lastPurchaseRate = 0.0, // ✅ NEW
     this.isEdit = false,
     this.uom = '',              // 👇 new
-
+    this.availableQty = 0.0,
     this.editIndex,
 
   });
@@ -2143,7 +2184,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
   late FocusNode _discountFocusNode;
   late TextEditingController _itemTaxTemplateController;
   double _baseRate = 0.0;
-
+  bool _qtyExceedsAvailable = false;
   @override
   void initState() {
     super.initState();
@@ -2253,6 +2294,8 @@ class _AddItemDialogState extends State<AddItemDialog> {
     setState(() {
       _totalAmount = total;
       _totalController.text = total.toStringAsFixed(3);
+      _qtyExceedsAvailable = quantity > widget.availableQty;  // ✅ add this
+
     });
   }
 
@@ -2294,165 +2337,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
     super.dispose();
   }
 
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return AlertDialog(
-//       title: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           RichText(
-//             text: TextSpan(
-//               children: [
-//                 TextSpan(
-//                   text: widget.itemName,
-//                   style: const TextStyle(
-//                     fontSize: 14,
-//                     fontWeight: FontWeight.w600,
-//                     color: Colors.black87,
-//                   ),
-//                 ),
-//                 TextSpan(
-//                   text: " (${widget.itemCode})",
-//                   style: const TextStyle(
-//                     fontSize: 14,
-//                     fontWeight: FontWeight.normal,
-//                     color: Colors.black54,
-//                   ),
-//                 ),
-//                 if (widget.uom.isNotEmpty)   // 👈 add this block
-//                   TextSpan(
-//                     text: " · ${widget.uom}",
-//                     style: const TextStyle(
-//                       fontSize: 13,
-//                       fontWeight: FontWeight.normal,
-//                       color: Colors.blueGrey,
-//                     ),
-//                   ),
-//               ],
-//             ),
-//           ),
-//
-//         ],
-//       ),
-//       content: SingleChildScrollView(
-//         child: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             TextField(
-//               controller: _itemTaxTemplateController,
-//               readOnly: true,
-//               decoration: const InputDecoration(
-//                 labelText: 'Item Tax Template',
-//               ),
-//             ),
-//             TextField(
-//               controller: TextEditingController(
-//                 text: widget.lastPurchaseRate.toStringAsFixed(3),
-//               ),
-//               readOnly: true,
-//               decoration: const InputDecoration(
-//                 labelText: 'Last Purchase Rate',
-//               ),
-//             ),
-//             TextField(
-//               controller: _priceListRateController,
-//               focusNode: _priceListRateFocusNode,
-//               keyboardType: TextInputType.number,
-//               decoration: InputDecoration(labelText: 'Price List Rate'),
-//             ),
-//             TextField(
-//               // readOnly: true,
-//               controller: _discountPercentageController,
-//               keyboardType: TextInputType.number,
-//               focusNode: _discountFocusNode,
-//               decoration: InputDecoration(labelText: 'Discount Percentage'),
-//             ),
-//             TextField(
-//               controller: _rateController,
-//               focusNode: _rateFocusNode,
-//               keyboardType: TextInputType.number,
-//               decoration: InputDecoration(labelText: 'Rate'),
-//             ),
-//             TextField(
-//               controller: _quantityController,
-//               focusNode: _quantityFocusNode,
-//               keyboardType: TextInputType.number,
-//               decoration: InputDecoration(labelText: 'Quantity'),
-//             ),
-//
-//             TextField(
-//               controller: _totalController,
-//               focusNode: _totalFocusNode,
-//               readOnly: true,
-//               keyboardType: TextInputType.number,
-//               decoration: InputDecoration(labelText: 'Total'),
-//             ),
-//
-//
-//           ],
-//         ),
-//       ),
-//       actions: [
-//
-//         TextButton(
-//           onPressed: () {
-//             final rate = double.tryParse(_rateController.text) ?? 0.0;
-//             final quantity = double.tryParse(_quantityController.text) ?? 0;
-//             final priceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
-//             final discountPercentage = double.tryParse(_discountPercentageController.text) ?? 0.0;
-//
-//             if (rate <= 0) {
-//               Fluttertoast.showToast(msg: "Please enter a valid rate");
-//             } else if (quantity <= 0) {
-//               Fluttertoast.showToast(msg: "Please enter a valid quantity");
-//             } else {
-//               final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//               // provider.addItem(rate, quantity, widget.itemName, widget.itemCode, priceListRate, discountPercentage,                   widget.itemTaxTemplate,
-//               //   widget.lastPurchaseRate,);
-//               if (widget.isEdit && widget.editIndex != null) {
-//                 provider.editItem(
-//                   widget.editIndex!,
-//                   rate,
-//                   quantity,
-//                   priceListRate,
-//                   discountPercentage,
-//                 );
-//               } else {
-//                 provider.addItem(
-//                   rate,
-//                   quantity,
-//                   widget.itemName,
-//                   widget.itemCode,
-//                   priceListRate,
-//                   discountPercentage,
-//                   widget.itemTaxTemplate,
-//                   widget.lastPurchaseRate,
-//                   uom: widget.uom,        // 👇 now properly referenced
-//                 );
-//               }
-//
-//               // ✅ Notify parent to update global total
-//               widget.onItemAdded?.call(rate, quantity);
-//
-//               Navigator.of(context).pop();
-//             }
-//           },
-//           // child: const Text('Add'),
-//           child: Text(widget.isEdit ? 'Save' : 'Add'),
-//         ),
-//
-//         TextButton(
-//           onPressed: () {
-//             widget.onCancel();
-//             Navigator.of(context).pop();
-//           },
-//           child: Text('Cancel'),
-//         ),
-//       ],
-//     );
-//   }
-// }
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -2538,6 +2422,25 @@ class _AddItemDialogState extends State<AddItemDialog> {
             const SizedBox(height: 8),
 
             // ── Rate + Quantity ─────────────────────────────────
+            // Row(
+            //   children: [
+            //     Expanded(
+            //       child: _compactField(
+            //         controller: _rateController,
+            //         focusNode: _rateFocusNode,
+            //         label: 'Rate',
+            //       ),
+            //     ),
+            //     const SizedBox(width: 8),
+            //     Expanded(
+            //       child: _compactField(
+            //         controller: _quantityController,
+            //         focusNode: _quantityFocusNode,
+            //         label: 'Quantity',
+            //       ),
+            //     ),
+            //   ],
+            // ),
             Row(
               children: [
                 Expanded(
@@ -2549,10 +2452,33 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _compactField(
-                    controller: _quantityController,
-                    focusNode: _quantityFocusNode,
-                    label: 'Quantity',
+                  child: Column(                              // ✅ wrap in Column
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _compactField(
+                        controller: _quantityController,
+                        focusNode: _quantityFocusNode,
+                        label: 'Quantity',
+                      ),
+                      if (_qtyExceedsAvailable)              // ✅ warning row
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  size: 13, color: Colors.orange.shade700),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  'Exceeds available (${widget.availableQty.toStringAsFixed(0)})',
+                                  style: TextStyle(
+                                      fontSize: 10, color: Colors.orange.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],

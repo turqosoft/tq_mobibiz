@@ -21,7 +21,8 @@ class QuotationListTabState extends State<QuotationListTab>
   final TextEditingController _quotationNameController = TextEditingController();
   final TextEditingController _partyNameController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-
+  String? _selectedQuotationStatus;
+  final _searchItemController = TextEditingController();
   String _fromDate = '';
   String _toDate = '';
   int limitStart = 0;
@@ -202,65 +203,163 @@ class QuotationListTabState extends State<QuotationListTab>
     });
   }
 
+  // void _showSearchPopup(BuildContext context) {
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AlertDialog(
+  //         title: const Text('Search Quotation'),
+  //         content: Column(
+  //           mainAxisSize: MainAxisSize.min,
+  //           children: [
+  //             TextField(
+  //               controller: _quotationNameController,
+  //               decoration: const InputDecoration(
+  //                 labelText: 'Quotation Name',
+  //               ),
+  //             ),
+  //             const SizedBox(height: 10),
+  //             TextField(
+  //               controller: _partyNameController,
+  //               decoration: const InputDecoration(
+  //                 labelText: 'Party Name',
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () {
+  //               Navigator.of(context).pop();
+  //             },
+  //             child: const Text('Cancel'),
+  //           ),
+  //           ElevatedButton(
+  //             onPressed: () {
+  //               _getSearchQuotationList(
+  //                 _quotationNameController.text,
+  //                 _partyNameController.text,
+  //               );
+  //               Navigator.of(context).pop();
+  //             },
+  //             child: const Text('Search'),
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
+  // Future<void> _getSearchQuotationList(String? quotationName, String? partyName) async {
+  //   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+  //   try {
+  //     await provider.getSearchQuotation(
+  //       context,
+  //       quotationName ?? '',
+  //       partyName ?? '',
+  //     );
+  //   } catch (e) {
+  //     debugPrint('Error fetching quotation list: $e');
+  //   }
+  // }
   void _showSearchPopup(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Search Quotation'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _quotationNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Quotation Name',
-                ),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Search Quotation'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _quotationNameController,
+                    decoration: const InputDecoration(labelText: 'Quotation Name'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _partyNameController,
+                    decoration: const InputDecoration(labelText: 'Party Name'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _searchItemController,
+                    decoration: const InputDecoration(labelText: 'Item Code or Item Name'),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: _selectedQuotationStatus,
+                    decoration: const InputDecoration(labelText: 'Status', isDense: true),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('All Statuses')),
+                      DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                      DropdownMenuItem(value: 'Open', child: Text('Open')),
+                      DropdownMenuItem(value: 'Replied', child: Text('Replied')),
+                      DropdownMenuItem(value: 'Partially Ordered', child: Text('Partially Ordered')),
+                      DropdownMenuItem(value: 'Ordered', child: Text('Ordered')),
+                      DropdownMenuItem(value: 'Lost', child: Text('Lost')),
+                      DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
+                      DropdownMenuItem(value: 'Expired', child: Text('Expired')),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() => _selectedQuotationStatus = value);
+                      setState(() => _selectedQuotationStatus = value);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _partyNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Party Name',
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _quotationNameController.clear();
+                          _partyNameController.clear();
+                          _searchItemController.clear();
+                          _selectedQuotationStatus = null;
+                        });
+                        Navigator.of(context).pop();
+                        _getSearchQuotationList();
+                      },
+                      child: const Text('Clear'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        _getSearchQuotationList();
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Search'),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                _getSearchQuotationList(
-                  _quotationNameController.text,
-                  _partyNameController.text,
-                );
-                Navigator.of(context).pop();
-              },
-              child: const Text('Search'),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
   }
-  Future<void> _getSearchQuotationList(String? quotationName, String? partyName) async {
+
+  Future<void> _getSearchQuotationList() async {
     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
     try {
       await provider.getSearchQuotation(
         context,
-        quotationName ?? '',
-        partyName ?? '',
+        quotationName: _quotationNameController.text.isNotEmpty ? _quotationNameController.text : null,
+        partyName: _partyNameController.text.isNotEmpty ? _partyNameController.text : null,
+        itemSearch: _searchItemController.text.isNotEmpty ? _searchItemController.text : null,
+        status: _selectedQuotationStatus,
       );
     } catch (e) {
       debugPrint('Error fetching quotation list: $e');
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -338,6 +437,8 @@ class QuotationListTabState extends State<QuotationListTab>
                         onPressed: () async {
                           _quotationNameController.clear();
                           _partyNameController.clear();
+                          _searchItemController.clear();
+                          setState(() => _selectedQuotationStatus = null);  // ✅
 
                           limitStart = 0; // reset pagination if used
 
@@ -554,16 +655,6 @@ class QuotationListTabState extends State<QuotationListTab>
                         });
                       }
                     } else {
-                      // // Fetch details first
-                      // await provider.fetchQuotationDetails(qtn.name ?? '', context);
-                      // if (!mounted) return;
-                      //
-                      // final quotationData = provider.quotationDetails;
-                      // if (quotationData == null) return;
-                      //
-                      // showDialog(
-                      //   context: safeContext,
-                      //   builder: (_) {
                       // Show a local loading indicator — no provider state change, no list rebuild
                       showDialog(
                         context: context,
@@ -679,7 +770,13 @@ class QuotationListTabState extends State<QuotationListTab>
                                       final qty = _toDouble(itm['qty']);
                                       final rate = _toDouble(itm['rate']);
                                       final amount = _toDouble(itm['amount']);
+                                      final igstAmount = _toDouble(itm['igst_amount']);
+                                      final cgstAmount = _toDouble(itm['cgst_amount']);
+                                      final sgstAmount = _toDouble(itm['sgst_amount']);
+                                      final cessAmount = _toDouble(itm['cess_amount']);
 
+                                      final gstAmount =
+                                          igstAmount + cgstAmount + sgstAmount + cessAmount;
                                       return ExpansionTile(
                                         tilePadding: EdgeInsets.zero,
                                         childrenPadding: const EdgeInsets.symmetric(vertical: 6),
@@ -736,6 +833,10 @@ class QuotationListTabState extends State<QuotationListTab>
                                                 _itemRow("Unit", itm['uom']),
                                                 _itemRow("MRP", _formatFieldValue(itm['mrp'], isCurrency: true)),
                                                 _itemRow("Item Tax Template",(itm['item_tax_template'])),
+                                                _itemRow(
+                                                  "GST Amount",
+                                                  "₹ ${gstAmount.toStringAsFixed(2)}",
+                                                ),
                                                 _itemRow("Price List Rate", _formatFieldValue(itm['price_list_rate'], isCurrency: true)),
 
                                                 if (_toDouble(itm['discount_percentage']) > 0)

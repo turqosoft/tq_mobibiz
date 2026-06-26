@@ -82,7 +82,13 @@ class SalesOrderProvider extends ChangeNotifier {
   }
 
   String get domain => _domain;
-
+  // String get baseHost => 'https://$_domain.frappe.cloud';  // ✅ full host from provider
+  String get baseHost {
+    // Derives from the same URL used to build _apiService
+    // so it stays in sync if you switch between frappe.cloud and self-hosted
+    final base = _apiService?.baseUrl ?? '';
+    return base.replaceAll('/api', ''); // strips /api → "https://mycompany.frappe.cloud"
+  }
   void setDomain(String domain) {
     _domain = domain;
     _apiService = ApiService(baseUrl: 'https://$_domain.frappe.cloud/api');
@@ -945,7 +951,16 @@ class SalesOrderProvider extends ChangeNotifier {
       return false;
     }
   }
-
+// ✅ Returns created doc name or null
+//   Future<String?> createPaymentCollection(
+//       Map<String, dynamic> data, BuildContext context) async {
+//     try {
+//       return await _apiService!.createPaymentCollection(data, context);
+//     } catch (e) {
+//       debugPrint("Provider payment collection error: $e");
+//       return null;
+//     }
+//   }
 
 // Material request
   bool _hasError = false;
@@ -3012,13 +3027,46 @@ GetSalesInvoiceResponse? get salesInvoiceList => _salesInvoiceList;
     }
   }
 
+  // Future<GetSalesInvoiceResponse?> getSearchSalesInvoice(
+  //     context,
+  //     String? invoiceId,
+  //     String? customerId,
+  //     String? startDate,
+  //     String? endDate,
+  //     ) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   _isFilterApplied = true;
+  //   notifyListeners();
+  //
+  //   try {
+  //     _salesInvoiceList = await _apiService!.getSearchSalesInvoice(
+  //       context,
+  //       invoiceId,
+  //       customerId,
+  //       startDate,
+  //       endDate,
+  //     );
+  //     return _salesInvoiceList;
+  //   } catch (e) {
+  //     _salesInvoiceList = null;
+  //     _errorMessage = e.toString();
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<GetSalesInvoiceResponse?> getSearchSalesInvoice(
-      context,
-      String? invoiceId,
-      String? customerId,
-      String? startDate,
-      String? endDate,
-      ) async {
+      context, {
+        String? invoiceId,
+        String? customerId,
+        String? customerName,
+        String? startDate,
+        String? endDate,
+        String? itemSearch,
+        String? status,
+      }) async {
     _isLoading = true;
     _errorMessage = null;
     _isFilterApplied = true;
@@ -3027,10 +3075,13 @@ GetSalesInvoiceResponse? get salesInvoiceList => _salesInvoiceList;
     try {
       _salesInvoiceList = await _apiService!.getSearchSalesInvoice(
         context,
-        invoiceId,
-        customerId,
-        startDate,
-        endDate,
+        invoiceId: invoiceId,
+        customerId: customerId,
+        customerName: customerName,
+        startDate: startDate,
+        endDate: endDate,
+        itemSearch: itemSearch,
+        status: status,
       );
       return _salesInvoiceList;
     } catch (e) {
@@ -3042,7 +3093,6 @@ GetSalesInvoiceResponse? get salesInvoiceList => _salesInvoiceList;
       notifyListeners();
     }
   }
-
   String? get sellingPriceList {
     if (invoiceCustomerDetails == null) return null;
 
@@ -5493,6 +5543,26 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
   // ── Fetch today's site visits ─────────────────────────────────────────
+  // Future<void> fetchTodaySiteVisits() async {
+  //   _isSiteVisitsLoading = true;
+  //   notifyListeners();
+  //
+  //   try {
+  //     final ok = await _ensureEmployeeInfo();
+  //     if (!ok) {
+  //       _todaySiteVisits = [];
+  //       return;
+  //     }
+  //     _todaySiteVisits =
+  //     await apiService!.fetchTodaySiteVisits(eemEmployee!);
+  //   } catch (e) {
+  //     debugPrint("Provider fetchTodaySiteVisits Error: $e");
+  //     _todaySiteVisits = [];
+  //   } finally {
+  //     _isSiteVisitsLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<void> fetchTodaySiteVisits() async {
     _isSiteVisitsLoading = true;
     notifyListeners();
@@ -5503,6 +5573,24 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         _todaySiteVisits = [];
         return;
       }
+
+      // ── If an EEM is already set (edit mode or restored) ──
+      // fetch site visits directly from that EEM's doc
+      if (eemDocName != null) {
+        final eem = await apiService!.fetchEEMDetails(eemDocName!);
+        if (eem != null) {
+          final List rows = eem["employee_site_tracking"] ?? [];
+          _todaySiteVisits = rows
+              .map((r) => {
+            ...Map<String, dynamic>.from(r),
+            "_eem_name": eemDocName,
+          })
+              .toList();
+          return;
+        }
+      }
+
+      // ── Otherwise fetch from today's EEM ─────────────────
       _todaySiteVisits =
       await apiService!.fetchTodaySiteVisits(eemEmployee!);
     } catch (e) {
@@ -5513,9 +5601,83 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
-
 // ── Create site visit (add to EEM child table) ────────────────────────
-  Future<bool> createSiteVisit({
+//   Future<bool> createSiteVisit({
+//     required BuildContext context,
+//     required String customer,
+//     required String site,
+//     required double latitude,
+//     required double longitude,
+//     required String remarks,
+//     required String time,
+//     double? actualDistance,
+//   }) async {
+//     try {
+//       // EEM must exist before adding a site visit
+//       if (!eemCreated || eemDocName == null) {
+//         Fluttertoast.showToast(
+//           msg: "Please save expenses first before adding a site visit.",
+//           backgroundColor: Colors.red.shade600,
+//           textColor: Colors.white,
+//         );
+//         return false;
+//       }
+//
+//       final success = await apiService!.addSiteVisitToEEM(
+//         eemName: eemDocName!,
+//         customer: customer,
+//         site: site,
+//         siteLat: latitude,
+//         siteLong: longitude,
+//         remarks: remarks,
+//         checkinTime: time,
+//         actualDistance: actualDistance,   // ← add this
+//
+//       );
+//
+//       if (success) await fetchTodaySiteVisits();
+//       return success;
+//     } catch (e) {
+//       debugPrint("Provider createSiteVisit Error: $e");
+//       return false;
+//     }
+//   }
+//
+// // ── Update site visit row ─────────────────────────────────────────────
+//   Future<bool> updateSiteVisit({
+//     required String docName,   // row name
+//     required String customer,
+//     required String site,
+//     required double latitude,
+//     required double longitude,
+//     required String remarks,
+//     required String time,
+//     double? actualDistance,       // ← add this
+//
+//   }) async {
+//     try {
+//       if (eemDocName == null) return false;
+//
+//       final success = await apiService!.updateSiteVisitInEEM(
+//         eemName: eemDocName!,
+//         rowName: docName,
+//         customer: customer,
+//         site: site,
+//         siteLat: latitude,
+//         siteLong: longitude,
+//         remarks: remarks,
+//         actualDistance: actualDistance,   // ← add this
+//
+//       );
+//
+//       if (success) await fetchTodaySiteVisits();
+//       return success;
+//     } catch (e) {
+//       debugPrint("Provider updateSiteVisit Error: $e");
+//       return false;
+//     }
+//   }
+  Future<String?> createSiteVisit({
     required BuildContext context,
     required String customer,
     required String site,
@@ -5525,52 +5687,44 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     required String time,
     double? actualDistance,
   }) async {
-    try {
-      // EEM must exist before adding a site visit
-      if (!eemCreated || eemDocName == null) {
-        Fluttertoast.showToast(
-          msg: "Please save expenses first before adding a site visit.",
-          backgroundColor: Colors.red.shade600,
-          textColor: Colors.white,
-        );
-        return false;
-      }
+    if (!eemCreated || eemDocName == null) {
+      return "Please save expenses first before adding a site visit.";
+    }
 
-      final success = await apiService!.addSiteVisitToEEM(
+    try {
+      final error = await apiService!.addSiteVisitToEEM(
         eemName: eemDocName!,
         customer: customer,
         site: site,
         siteLat: latitude,
         siteLong: longitude,
         remarks: remarks,
-        actualDistance: actualDistance,   // ← add this
-
+        checkinTime: time,
+        actualDistance: actualDistance,
       );
 
-      if (success) await fetchTodaySiteVisits();
-      return success;
+      if (error == null) await fetchTodaySiteVisits();
+      return error; // null = success, string = error message
     } catch (e) {
       debugPrint("Provider createSiteVisit Error: $e");
-      return false;
+      return "Unexpected error: $e";
     }
   }
 
-// ── Update site visit row ─────────────────────────────────────────────
-  Future<bool> updateSiteVisit({
-    required String docName,   // row name
+  Future<String?> updateSiteVisit({
+    required String docName,
     required String customer,
     required String site,
     required double latitude,
     required double longitude,
     required String remarks,
     required String time,
-    double? actualDistance,       // ← add this
-
+    double? actualDistance,
   }) async {
-    try {
-      if (eemDocName == null) return false;
+    if (eemDocName == null) return "No active EEM found.";
 
-      final success = await apiService!.updateSiteVisitInEEM(
+    try {
+      final error = await apiService!.updateSiteVisitInEEM(
         eemName: eemDocName!,
         rowName: docName,
         customer: customer,
@@ -5578,18 +5732,16 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         siteLat: latitude,
         siteLong: longitude,
         remarks: remarks,
-        actualDistance: actualDistance,   // ← add this
-
+        actualDistance: actualDistance,
       );
 
-      if (success) await fetchTodaySiteVisits();
-      return success;
+      if (error == null) await fetchTodaySiteVisits();
+      return error;
     } catch (e) {
       debugPrint("Provider updateSiteVisit Error: $e");
-      return false;
+      return "Unexpected error: $e";
     }
   }
-
 // ── Delete site visit row ─────────────────────────────────────────────
 //   Future<bool> deleteSiteVisit(String rowName) async {
 //     // Optimistic removal
@@ -5805,24 +5957,44 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
 
-  /// Upload file and return the file URL
+  // /// Upload file and return the file URL
+  // Future<String?> uploadExpenseFile(
+  //     File file, {
+  //       required String expenseRowName,
+  //     }) async {
+  //   if (apiService == null) return null;
+  //
+  //   _setUploadingFile(true);
+  //   try {
+  //     return await apiService!.uploadFile(
+  //       file: file,
+  //       expenseRowName: expenseRowName,
+  //     );
+  //   } finally {
+  //     _setUploadingFile(false);
+  //   }
+  // }
   Future<String?> uploadExpenseFile(
       File file, {
         required String expenseRowName,
       }) async {
     if (apiService == null) return null;
+    if (eemDocName == null) {
+      debugPrint("uploadExpenseFile: eemDocName is null");
+      return null;
+    }
 
     _setUploadingFile(true);
     try {
       return await apiService!.uploadFile(
         file: file,
+        eemName: eemDocName!,        // ← pass EEM doc name
         expenseRowName: expenseRowName,
       );
     } finally {
       _setUploadingFile(false);
     }
   }
-
 
   String? activeExpenseDocName;
 
@@ -6033,9 +6205,11 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
 
 // ── CREATE EEM (POST — called on first Save tap) ──────────────────────
   Future<bool> createEEM({
+    String? startTime,
     double? startLat,
     double? startLong,
     double? startOdometer,
+    String? vehicleType,
   }) async {
     if (eemCreated) return true;
     final ok = await _ensureEmployeeInfo();
@@ -6045,9 +6219,11 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       employee: eemEmployee!,
       employeeName: eemEmployeeName!,
       date: eemDate!,
+      startTime: startTime,
       startLat: startLat,
       startLong: startLong,
       startOdometer: startOdometer,
+      vehicleType: vehicleType,
     );
 
     if (eemDocName != null) {
@@ -6063,7 +6239,47 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     isEEMEndLoading = v;
     notifyListeners();
   }
-
+  void clearEEMState() {
+    eemDocName = null;
+    eemCreated = false;
+    eemEmployee = null;
+    eemEmployeeName = null;
+    eemDate = null;
+    isEEMSaveLoading = false;
+    isEEMSubmitLoading = false;
+    isEEMEndLoading = false;
+    _todaySiteVisits = [];
+    notifyListeners();
+  }
+  //
+  // Future<bool> updateEEMEnd({
+  //   required double endOdometer,
+  //   required double endLat,
+  //   required double endLong,
+  // }) async {
+  //   if (eemDocName == null) return false;
+  //   _setEEMEndLoading(true);
+  //
+  //   try {
+  //     final endTime =
+  //     DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+  //
+  //     final ok = await apiService!.updateEEMEndDetails(
+  //       eemName: eemDocName!,
+  //       endTime: endTime,
+  //       endLat: endLat,
+  //       endLong: endLong,
+  //       endOdometer: endOdometer,
+  //     );
+  //
+  //     return ok;
+  //   } catch (e) {
+  //     debugPrint("updateEEMEnd Error: $e");
+  //     return false;
+  //   } finally {
+  //     _setEEMEndLoading(false);
+  //   }
+  // }
   Future<bool> updateEEMEnd({
     required double endOdometer,
     required double endLat,
@@ -6076,8 +6292,22 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       final endTime =
       DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
+      // ── Fetch existing start_time and date ──────────────
+      final eem = await apiService!.fetchEEMDetails(eemDocName!);
+      if (eem == null) return false;
+
+      final startTime = eem["start_time"]?.toString() ?? "";
+      final date = eem["date"]?.toString() ?? "";
+
+      if (startTime.isEmpty || date.isEmpty) {
+        debugPrint("updateEEMEnd: missing start_time or date in EEM");
+        return false;
+      }
+
       final ok = await apiService!.updateEEMEndDetails(
         eemName: eemDocName!,
+        startTime: startTime,
+        date: date,
         endTime: endTime,
         endLat: endLat,
         endLong: endLong,
@@ -6097,9 +6327,11 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   Future<bool> saveEEMExpenses(
       List<Map<String, dynamic>> expenses, {
         double? startOdometer,
+        String? startTime,
         double? startLat,
         double? startLong,
         double? endOdometer,
+        String? vehicleType,
       }) async {
     if (isEEMSaveLoading) return false;
     _setEEMSaveLoading(true);
@@ -6108,8 +6340,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       if (!eemCreated) {
         final created = await createEEM(
           startLat: startLat,
+          startTime: startTime,
           startLong: startLong,
           startOdometer: startOdometer,
+          vehicleType: vehicleType,
         );
         if (!created) return false;
       }
@@ -6951,21 +7185,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
 
   bool _isLoadingEstimates = false;
   bool get isLoadingEstimates => _isLoadingEstimates;
-  //
-  // Future<void> fetchEstimateList() async {
-  //   _isLoadingEstimates = true;
-  //   notifyListeners();
-  //
-  //   try {
-  //     _estimateList = await apiService!.fetchEstimateList();
-  //   } catch (e) {
-  //     debugPrint("Provider fetchEstimateList Error: $e");
-  //     _estimateList = [];
-  //   } finally {
-  //     _isLoadingEstimates = false;
-  //     notifyListeners();
-  //   }
-  // }
+
   Future<void> fetchEstimateList({
     required DateTime fromDate,
     required DateTime toDate,
@@ -7286,37 +7506,19 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
             _salesOrderModel!.data!.name!.isNotEmpty);
   }
 
-  // Future<SalesOrderResponse?> updateSalesOrder(
-  //     String name,
-  //     String customerName,
-  //     String deliveryDate,
-  //     String? setWarehouse,
-  //     List items,
-  //     BuildContext context, {
-  //       Map<String, dynamic>? customerDetails,
-  //     }) async {
+  //
+  // Future<bool> submitSalesOrder(String name) async {
   //   _isLoading = true;
   //   _errorMessage = null;
   //   notifyListeners();
   //
   //   try {
-  //     _salesOrderModel = await _apiService!.updateSalesOrder(
-  //       name,
-  //       customerName,
-  //       deliveryDate,
-  //       setWarehouse,
-  //       items,
-  //       context,
-  //       customerDetails: customerDetails,
-  //     );
-  //     return _salesOrderModel;
+  //     final result = await _apiService!.submitSalesOrder(name);
+  //     return result;
   //   } catch (e) {
-  //     _salesOrderModel = null;
-  //     _errorMessage = e.toString(); // already formatted from API service
-  //
   //     _errorMessage = e.toString();
-  //     debugPrint("Provider error updating sales order: $e");
-  //     return null;
+  //     debugPrint("❌ Provider submit error: $e");
+  //     return false;
   //   } finally {
   //     _isLoading = false;
   //     notifyListeners();
@@ -7328,10 +7530,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     notifyListeners();
 
     try {
-      final result = await _apiService!.submitSalesOrder(name);
-      return result;
+      await _apiService!.submitSalesOrder(name);
+      return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst("Exception: ", "");
       debugPrint("❌ Provider submit error: $e");
       return false;
     } finally {
@@ -7379,6 +7581,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       _isLoading = false;
       notifyListeners();
     }
+  }
+  // In provider.dart
+  Future<Map<String, double>> fetchItemActualQty(String itemCode) async {
+    return await _apiService!.fetchItemActualQty(itemCode);
   }
   //payment type and paid to
 
@@ -7511,34 +7717,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
   SalesOrderDetails? _selectedSalesOrder;
   SalesOrderDetails? get selectedSalesOrder => _selectedSalesOrder;
 
-// Original method — keep for Draft (needs form rebuild)
-//   Future<void> fetchSalesOrderDetails(String orderName) async {
-//     _isLoading = true;
-//     notifyListeners();
-//
-//     try {
-//       _selectedSalesOrder = await _apiService!.getSalesOrderDetails(orderName);
-//
-//       if (_selectedSalesOrder != null) {
-//         setSelectedSalesOrderName(_selectedSalesOrder!.name);
-//         setSelectedTransactionDate(_selectedSalesOrder!.transactionDate);
-//
-//         final netTotal = _selectedSalesOrder!.netTotal;
-//         final total = _selectedSalesOrder!.total;
-//         setSelectedSalesOrderTotal(
-//           (netTotal != null && netTotal != 0)
-//               ? netTotal.toString()
-//               : (total?.toString() ?? '0'),
-//         );
-//       }
-//     } catch (e) {
-//       _selectedSalesOrder = null;
-//       _errorMessage = e.toString();
-//     } finally {
-//       _isLoading = false;
-//       notifyListeners();
-//     }
-//   }
+
   Future<void> fetchSalesOrderDetails(String orderName) async {
     _isLoading = true;
     notifyListeners();
@@ -7566,31 +7745,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
-// Silent fetch — for dialog preview (no notifyListeners, no rebuild)
-//   Future<SalesOrderDetails?> fetchSalesOrderDetailsSilent(String orderName) async {
-//     try {
-//       final data = await _apiService!.getSalesOrderDetails(orderName);
-//       _selectedSalesOrder = data; // updates field silently
-//
-//       if (data != null) {
-//         setSelectedSalesOrderName(data.name);
-//         setSelectedTransactionDate(data.transactionDate);
-//
-//         final netTotal = data.netTotal;
-//         final total = data.total;
-//         setSelectedSalesOrderTotal(
-//           (netTotal != null && netTotal != 0)
-//               ? netTotal.toString()
-//               : (total?.toString() ?? '0'),
-//         );
-//       }
-//
-//       return data;
-//     } catch (e) {
-//       debugPrint('Error fetching sales order details (silent): $e');
-//       return null;
-//     }
-//   }
+
   Future<SalesOrderDetails?> fetchSalesOrderDetailsSilent(String orderName) async {
     try {
       final data = await _apiService!.getSalesOrderDetails(orderName);
@@ -7608,6 +7763,9 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         String? salesId,
         String? customerId,
         String? customerName,
+        String? itemSearch,
+        String? status,
+
       }) async {
 
     _isLoading = true;
@@ -7623,6 +7781,9 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
         salesId: salesId,
         customerId: customerId,
         customerName: customerName,
+        itemSearch: itemSearch,
+        status: status,
+
       );
       return _getSalesOrderList;
     } catch (e) {
@@ -7777,22 +7938,7 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
 
-  // Map<String, dynamic>? _quotationDetails;
-  // Map<String, dynamic>? get quotationDetails => _quotationDetails;
-  //
-  // Future<void> fetchQuotationDetails(String quotationName, BuildContext context) async {
-  //   _isLoading = true;
-  //   notifyListeners();
-  //   try {
-  //     _quotationDetails = await _apiService?.getQuotationDetails(quotationName, context);
-  //   } catch (e) {
-  //     _quotationDetails = null;
-  //     debugPrint('Error fetching quotation details: $e');
-  //   } finally {
-  //     _isLoading = false;
-  //     notifyListeners();
-  //   }
-  // }
+
   Map<String, dynamic>? _quotationDetails;
   Map<String, dynamic>? get quotationDetails => _quotationDetails;
 
@@ -7895,11 +8041,38 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
       notifyListeners();
     }
   }
+  // Future<GetQuotationResponse?> getSearchQuotation(
+  //     BuildContext context,
+  //     String quotationName,
+  //     String partyName,
+  //     ) async {
+  //   _isLoading = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+  //
+  //   try {
+  //     _quotationList = await _apiService?.getSearchQuotation(
+  //       context,
+  //       quotationName,
+  //       partyName,
+  //     );
+  //     return _quotationList;
+  //   } catch (e) {
+  //     _errorMessage = e.toString();
+  //     _quotationList = null;
+  //     return null;
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<GetQuotationResponse?> getSearchQuotation(
-      BuildContext context,
-      String quotationName,
-      String partyName,
-      ) async {
+      BuildContext context, {
+        String? quotationName,
+        String? partyName,
+        String? itemSearch,
+        String? status,
+      }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -7907,8 +8080,10 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     try {
       _quotationList = await _apiService?.getSearchQuotation(
         context,
-        quotationName,
-        partyName,
+        quotationName: quotationName,
+        partyName: partyName,
+        itemSearch: itemSearch,
+        status: status,
       );
       return _quotationList;
     } catch (e) {
@@ -7921,36 +8096,6 @@ Future<Map<String, dynamic>?> fetchCustomerDetails(
     }
   }
 
-  // Future<bool> submitQuotation(String quotationName, BuildContext context) async {
-  //   _isLoading = true;
-  //   _errorMessage = null;
-  //   notifyListeners();
-  //
-  //   try {
-  //     final result = await _apiService?.submitQuotationToERP(quotationName);
-  //     if (result == true) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(content: Text('Quotation submitted successfully!')),
-  //       );
-  //       return true;
-  //     } else {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(content: Text('Failed to submit quotation')),
-  //       );
-  //       return false;
-  //     }
-  //   } catch (e) {
-  //     _errorMessage = e.toString();
-  //     debugPrint('Error submitting quotation: $e');
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('Error: $_errorMessage')),
-  //     );
-  //     return false;
-  //   } finally {
-  //     _isLoading = false;
-  //     notifyListeners();
-  //   }
-  // }
   Future<bool> submitQuotation(String quotationName, BuildContext context) async {
     _isLoading = true;
     _errorMessage = null;

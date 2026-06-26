@@ -27,6 +27,8 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
     provider.startConnectionCheck(); // 🟢 Start periodic connection check
 
     tabController.addListener(() {
+      createQuotationTabKey.currentState?.hideSearchOverlay();
+
       if (!tabController.indexIsChanging) {
         setState(() {
           _showSaveIcon = tabController.index == 0;
@@ -58,10 +60,22 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // return Scaffold(
+    return PopScope(
+        onPopInvokedWithResult: (didPop, result) {
+          createQuotationTabKey.currentState?.hideSearchOverlay();
+        },
+        child: Scaffold(
       appBar: AppBar(
+        // leading: GestureDetector(
+        //   onTap: () => Navigator.pop(context),
+        //   child: const Icon(Icons.arrow_back, color: Colors.white),
+        // ),
         leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
+          onTap: () {
+            createQuotationTabKey.currentState?.hideSearchOverlay();
+            Navigator.pop(context);
+          },
           child: const Icon(Icons.arrow_back, color: Colors.white),
         ),
         backgroundColor: AppColors.primaryColor,
@@ -199,6 +213,6 @@ class SalesQuotationPageState extends State<SalesQuotationPage>
           QuotationListTab(key: quotationListTabKey), // 🆕 Pass the key
         ],
       ),
-    );
+    ));
   }
 }

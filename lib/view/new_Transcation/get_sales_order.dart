@@ -13,10 +13,14 @@ import '../../model/get_sales_order_response.dart';
 // class SalesOrderPage extends StatefulWidget {
 class SalesOrderPage extends StatefulWidget {
   final Map<String, dynamic>? mappedQuotation;
+  final String? initialCustomerName; // 👈 display name
+  final String? initialCustomerId;   // 👈 customer.name (ID)
 
   const SalesOrderPage({
     super.key,
     this.mappedQuotation,
+    this.initialCustomerName,
+    this.initialCustomerId,
   });
 
   @override
@@ -37,6 +41,8 @@ class _SalesOrderPageState extends State<SalesOrderPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
+      _salesOrderKey.currentState?.hideSearchOverlay();
+
       if (mounted) setState(() {});
     });
 
@@ -53,219 +59,31 @@ class _SalesOrderPageState extends State<SalesOrderPage>
     super.dispose();
   }
 
-  //
-  // @override
-  // Widget build(BuildContext context) {
-  //   final provider = Provider.of<SalesOrderProvider>(context);
-  //
-  //   return Scaffold(
-  //
-  //     appBar: AppBar(
-  //       automaticallyImplyLeading: false,
-  //       leading: GestureDetector(
-  //         onTap: () {
-  //           Navigator.pop(context);
-  //         },
-  //         child: const Icon(Icons.arrow_back, color: Colors.white),
-  //       ),
-  //       backgroundColor: AppColors.primaryColor,
-  //       title: const Text(
-  //         'Sales Order',
-  //         style: TextStyle(color: Colors.white),
-  //       ),
-  //
-  //       actions: _tabController.index == 0
-  //           ? [
-  //
-  //         // 💾 Save
-  //         IconButton(
-  //           icon: const Icon(Icons.save, color: Colors.white),
-  //           tooltip: "Save Sales Order",
-  //           onPressed: () async {
-  //             final state = _salesOrderKey.currentState;
-  //             if (state != null) {
-  //               await state.handleSave(context);
-  //             }
-  //           },
-  //         ),
-  //
-  //         // ✅ SHOW ONLY WHEN ORDER EXISTS
-  //         if (provider.hasActiveOrder)...[
-  //
-  //           // ➕ NEW ORDER
-  //           IconButton(
-  //             icon: const Icon(Icons.add, color: Colors.white),
-  //             tooltip: "New Sales Order",
-  //             onPressed: () async {
-  //               final state = _salesOrderKey.currentState;
-  //
-  //               // 🚫 Prevent losing unsaved changes
-  //               if (state?.isDirty == true) {
-  //                 final confirm = await showDialog<bool>(
-  //                   context: context,
-  //                   builder: (_) => AlertDialog(
-  //                     title: const Text("Discard changes?"),
-  //                     content: const Text(
-  //                         "You have unsaved changes. Continue?"),
-  //                     actions: [
-  //                       TextButton(
-  //                         onPressed: () =>
-  //                             Navigator.pop(context, false),
-  //                         child: const Text("Cancel"),
-  //                       ),
-  //                       ElevatedButton(
-  //                         onPressed: () =>
-  //                             Navigator.pop(context, true),
-  //                         child: const Text("Continue"),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                 );
-  //
-  //                 if (confirm != true) return;
-  //               }
-  //
-  //               Navigator.of(context).pushReplacement(
-  //                 MaterialPageRoute(
-  //                   builder: (context) => const SalesOrderPage(),
-  //                 ),
-  //               );
-  //             },
-  //           ),
-  //
-  //           // ✅ SUBMIT
-  //           IconButton(
-  //             icon: const Icon(Icons.check_circle, color: Colors.white),
-  //             tooltip: "Submit Sales Order",
-  //             onPressed: () async {
-  //               final state = _salesOrderKey.currentState;
-  //               if (state == null) return;
-  //
-  //               // 🚫 BLOCK IF DIRTY
-  //               if (state.isDirty) {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(
-  //                     content:
-  //                     Text("Please save changes before submitting"),
-  //                     backgroundColor: Colors.orange,
-  //                   ),
-  //                 );
-  //                 return;
-  //               }
-  //
-  //               final orderName = state.getCurrentOrderName();
-  //
-  //               if (orderName == null || orderName.isEmpty) {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(
-  //                     content: Text(
-  //                         "Please create/save Sales Order before submitting"),
-  //                     backgroundColor: Colors.orange,
-  //                   ),
-  //                 );
-  //                 return;
-  //               }
-  //
-  //               final confirm = await showDialog<bool>(
-  //                 context: context,
-  //                 builder: (_) => AlertDialog(
-  //                   title: const Text("Submit Sales Order"),
-  //                   content: const Text(
-  //                       "Are you sure you want to submit?"),
-  //                   actions: [
-  //                     TextButton(
-  //                       onPressed: () =>
-  //                           Navigator.pop(context, false),
-  //                       child: const Text("Cancel"),
-  //                     ),
-  //                     ElevatedButton(
-  //                       onPressed: () =>
-  //                           Navigator.pop(context, true),
-  //                       child: const Text("Submit"),
-  //                     ),
-  //                   ],
-  //                 ),
-  //               );
-  //
-  //               if (confirm != true) return;
-  //
-  //               final provider =
-  //               Provider.of<SalesOrderProvider>(context,
-  //                   listen: false);
-  //
-  //               final success =
-  //               await provider.submitSalesOrder(orderName);
-  //
-  //               if (success) {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(
-  //                     content: Text(
-  //                         "Sales Order submitted successfully!"),
-  //                     backgroundColor: Colors.green,
-  //                   ),
-  //                 );
-  //
-  //                 await Future.delayed(
-  //                     const Duration(milliseconds: 500));
-  //
-  //                 Navigator.of(context).pushReplacement(
-  //                   MaterialPageRoute(
-  //                     builder: (context) =>
-  //                     const SalesOrderPage(),
-  //                   ),
-  //                 );
-  //               } else {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   SnackBar(
-  //                     content: Text(provider.errorMessage ??
-  //                         "Submit failed"),
-  //                     backgroundColor: Colors.red,
-  //                   ),
-  //                 );
-  //               }
-  //             },
-  //           ),
-  //         ],
-  //       ]
-  //           : null,
-  //
-  //       bottom: TabBar(
-  //         controller: _tabController,
-  //         tabs: const [
-  //           Tab(text: 'Sales Order'),
-  //           Tab(text: 'Sales Order List'),
-  //         ],
-  //       ),
-  //     ),
-  //     body: Consumer<SalesOrderProvider>(
-  //       builder: (context, provider, _) {
-  //         return TabBarView(
-  //           controller: _tabController,
-  //           children: [
-  //             SalesOrderScreen(
-  //               key: _salesOrderKey,
-  //               salesOrder: provider.selectedSalesOrder,
-  //               mappedQuotation: widget.mappedQuotation,
-  //             ),
-  //             SalesOrderListScreen(),
-  //           ],
-  //         );
-  //       },
-  //     ),
-  //   );
-  // }
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<SalesOrderProvider>(context);
 
-    return Stack(
-      children: [
-        Scaffold(
+    // return Stack(
+    //   children: [
+    //     Scaffold(
+    return PopScope(
+        onPopInvokedWithResult: (didPop, result) {
+          _salesOrderKey.currentState?.hideSearchOverlay();
+        },
+        child: Stack(
+          children: [
+            Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: false,
             leading: GestureDetector(
               // 👇 Block back navigation during save/submit
-              onTap: _isSaving ? null : () => Navigator.pop(context),
+              // onTap: _isSaving ? null : () => Navigator.pop(context),
+              onTap: _isSaving
+                  ? null
+                  : () {
+                _salesOrderKey.currentState?.hideSearchOverlay();
+                Navigator.pop(context);
+              },
               child: const Icon(Icons.arrow_back, color: Colors.white),
             ),
             backgroundColor: AppColors.primaryColor,
@@ -449,6 +267,8 @@ class _SalesOrderPageState extends State<SalesOrderPage>
                     key: _salesOrderKey,
                     salesOrder: provider.selectedSalesOrder,
                     mappedQuotation: widget.mappedQuotation,
+                    initialCustomerName: widget.initialCustomerName, // 👈
+                    initialCustomerId: widget.initialCustomerId,     // 👈
                     // 👇 Callbacks so child save controls parent overlay
                     onSaveStart: () {
                       if (mounted) setState(() => _isSaving = true);
@@ -505,7 +325,7 @@ class _SalesOrderPageState extends State<SalesOrderPage>
             ),
           ),
       ],
-    );
+    ));
   }
 }
 
@@ -518,17 +338,17 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen>
     with AutomaticKeepAliveClientMixin {
   TextEditingController _searchController = TextEditingController();
   TextEditingController _searchCustomerController = TextEditingController();
-  TextEditingController _searchCustomerNameController = TextEditingController();
   TextEditingController _fromDateController = TextEditingController();
   TextEditingController _toDateController = TextEditingController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
+  final TextEditingController _searchItemController =
+  TextEditingController();
   String _searchQuery = '';
   String _searchCustomerQuery = '';
   String _searchCustomerName = '';
   String _fromDate = '';
   String _toDate = '';
-
+  String? _selectedStatus;
   int limitStart = 0;
   int pageLength = 10;
   bool isLoadingMore = false;
@@ -597,9 +417,14 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen>
       customerId: _searchCustomerController.text.isNotEmpty
           ? _searchCustomerController.text
           : null,
-      customerName: _searchCustomerNameController.text.isNotEmpty
-          ? _searchCustomerNameController.text
+      customerName: _searchCustomerController.text.isNotEmpty
+          ? _searchCustomerController.text
           : null,
+      itemSearch: _searchItemController.text.isNotEmpty
+          ? _searchItemController.text
+          : null,
+      status: _selectedStatus,  // ✅
+
     );
   }
 
@@ -656,97 +481,175 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen>
   }
 
   void _resetFilters() {
-    // Clear non-date filters
     _searchController.clear();
     _searchCustomerController.clear();
-    _searchCustomerNameController.clear();
+    _searchItemController.clear();
+    setState(() => _selectedStatus = null);  // ✅
 
-    // Reuse existing logic
     _setTodayAsDefaultDate();
   }
 
+  // void _showSearchPopup(BuildContext context) {
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AlertDialog(
+  //         title: Text('Search'),
+  //         content: Column(
+  //           mainAxisSize: MainAxisSize.min,
+  //           children: [
+  //             TextField(
+  //               controller: _searchController,
+  //               decoration: InputDecoration(
+  //                 hintText: 'Enter Order Id',
+  //                 suffixIcon: IconButton(
+  //                   icon: Icon(Icons.search),
+  //                   onPressed: () {
+  //                     setState(() {
+  //                       _searchQuery = _searchController.text;
+  //                     });
+  //                   },
+  //                 ),
+  //               ),
+  //             ),
+  //             TextField(
+  //               controller: _searchCustomerController,
+  //               decoration: const InputDecoration(
+  //                 hintText: 'Enter Customer Id or Name',
+  //               ),
+  //             ),
+  //             TextField(
+  //               controller: _searchItemController,
+  //               decoration: const InputDecoration(
+  //                 hintText: 'Enter Item Code or Item Name',
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () {
+  //               Navigator.of(context).pop();
+  //             },
+  //             child: Text('Cancel'),
+  //           ),
+  //           Container(
+  //             decoration: BoxDecoration(
+  //                 color: AppColors.primaryColor,
+  //                 borderRadius: BorderRadius.circular(8)),
+  //             child: TextButton(
+  //               onPressed: () {
+  //                 _fetchSalesOrders();
+  //                 Navigator.of(context).pop();
+  //               },
+  //               child: Text(
+  //                 'Search',
+  //                 style: TextStyle(color: Colors.white),
+  //               ),
+  //             ),
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
   void _showSearchPopup(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Search'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Enter Order Id',
-                  suffixIcon: IconButton(
-                    icon: Icon(Icons.search),
-                    onPressed: () {
-                      setState(() {
-                        _searchQuery = _searchController.text;
-                      });
-                    },
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Search'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter Order Id',
+                    ),
                   ),
-                ),
-              ),
-              TextField(
-                controller: _searchCustomerController,
-                decoration: InputDecoration(
-                  hintText: 'Enter Customer Id',
-                  suffixIcon: IconButton(
-                    icon: Icon(Icons.search),
-                    onPressed: () {
-                      setState(() {
-                        _searchCustomerQuery = _searchCustomerController.text;
-                      });
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchCustomerController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter Customer Id or Name',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchItemController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter Item Code or Item Name',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
 
+                  // ✅ Status dropdown
+                  DropdownButtonFormField<String>(
+                    value: _selectedStatus,
+                    decoration: const InputDecoration(
+                      hintText: 'Select Status',
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('All Statuses')),
+                      DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                      DropdownMenuItem(value: 'On Hold', child: Text('On Hold')),
+                      DropdownMenuItem(value: 'To Pay', child: Text('To Pay')),
+                      DropdownMenuItem(value: 'To Deliver and Bill', child: Text('To Deliver and Bill')),
+                      DropdownMenuItem(value: 'To Deliver', child: Text('To Deliver')),
+                      DropdownMenuItem(value: 'To Bill', child: Text('To Bill')),
+                      DropdownMenuItem(value: 'Completed', child: Text('Completed')),
+                      DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
+                      DropdownMenuItem(value: 'Closed', child: Text('Closed')),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() => _selectedStatus = value);
+                      setState(() => _selectedStatus = value);
                     },
                   ),
-                ),
+                ],
               ),
-              TextField(
-                controller: _searchCustomerNameController,
-                decoration: InputDecoration(
-                  hintText: 'Enter Customer Name',
-                  suffixIcon: IconButton(
-                    icon: Icon(Icons.search),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    // ✅ Clear all filters
+                    setState(() {
+                      _searchController.clear();
+                      _searchCustomerController.clear();
+                      _searchItemController.clear();
+                      _selectedStatus = null;
+                    });
+                    Navigator.of(context).pop();
+                    _fetchSalesOrders();
+                  },
+                  child: const Text('Clear'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: TextButton(
                     onPressed: () {
-                      setState(() {
-                        _searchCustomerName =
-                            _searchCustomerNameController.text;
-                      });
+                      _fetchSalesOrders();
+                      Navigator.of(context).pop();
                     },
+                    child: const Text(
+                      'Search',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('Cancel'),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                  color: AppColors.primaryColor,
-                  borderRadius: BorderRadius.circular(8)),
-              child: TextButton(
-                onPressed: () {
-                  // _getSearchSalesList(
-                  //     _searchController.text,
-                  //     _searchCustomerController.text,
-                  //     _searchCustomerNameController.text);
-                  _fetchSalesOrders();
-                  Navigator.of(context).pop();
-                },
-                child: Text(
-                  'Search',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -1011,9 +914,12 @@ Widget build(BuildContext context) {
                                                     children: [
                                                       _itemRow("Code", item.itemCode),
                                                       _itemRow("Qty", qty.toStringAsFixed(2)),
+                                                      _itemRow("Delivered Qty", item.deliveredQty?.toStringAsFixed(2) ?? '0.00'),
+                                                      _itemRow("Picked Qty", item.pickedQty?.toStringAsFixed(2) ?? '0.00'),
                                                       _itemRow("Unit", item.uom),
                                                       _itemRow("Item Tax Details", item.itemTaxDetails),
-
+                                                      if (item.gstAmount > 0)
+                                                        _itemRow("GST Amount", "₹ ${item.gstAmount.toStringAsFixed(2)}"),
                                                       _itemRow(
                                                         "Price List Rate",
                                                         item.priceListRate?.toStringAsFixed(2),

@@ -156,27 +156,6 @@ class SalesOrderDetails {
   }
 }
 
-// class SalesOrderItem {
-//   String? itemCode;
-//   String? itemName;
-//   double? qty;
-//   double? rate;
-//   double? amount;
-//
-//
-//   SalesOrderItem({this.itemCode, this.itemName, this.qty, this.rate, this.amount});
-//
-//   factory SalesOrderItem.fromJson(Map<String, dynamic> json) {
-//     return SalesOrderItem(
-//       itemCode: json['item_code'],
-//       itemName: json['item_name'],
-//       qty: (json['qty'] ?? 0).toDouble(),
-//       rate: (json['rate'] ?? 0).toDouble(),
-//       amount: (json['amount'] as num?)?.toDouble(),
-//
-//     );
-//   }
-// }
 
 class SalesOrderItem {
   String? rowName;
@@ -185,6 +164,8 @@ class SalesOrderItem {
   String? uom;
   String? itemTaxDetails;
   double? qty;
+  double? deliveredQty;
+  double? pickedQty;
   double? priceListRate;
   double? discountPercentage;
   double? rate;
@@ -193,6 +174,14 @@ class SalesOrderItem {
   double? netRate;
   double? amount;
   double? netAmount;
+  double? igstAmount;
+  double? cgstAmount;
+  double? sgstAmount;
+  double? cessAmount;
+
+  // ✅ Computed GST total
+  double get gstAmount =>
+      (igstAmount ?? 0) + (cgstAmount ?? 0) + (sgstAmount ?? 0) + (cessAmount ?? 0);
   final String? quotationItem;
   final String? prevdocDocname;
 
@@ -203,6 +192,8 @@ class SalesOrderItem {
     this.itemName,
     this.uom,
     this.qty,
+    this.deliveredQty,
+    this.pickedQty,
     this.itemTaxDetails,
     this.priceListRate,
     this.discountAmount,
@@ -213,8 +204,11 @@ class SalesOrderItem {
     this.amount,
     this.netAmount,
     this.quotationItem,
-    this.prevdocDocname
-
+    this.prevdocDocname,
+    this.igstAmount,
+    this.cgstAmount,
+    this.sgstAmount,
+    this.cessAmount,
   });
 
   factory SalesOrderItem.fromJson(Map<String, dynamic> json) {
@@ -227,6 +221,8 @@ class SalesOrderItem {
       itemName: json['item_name'],
       uom: json['uom'],
       qty: _parse(json['qty']),
+      deliveredQty: _parse(json['delivered_qty']),
+      pickedQty: _parse(json['picked_qty']),
       itemTaxDetails: json["item_tax_template"],
       priceListRate: _parse(json['price_list_rate']),
       discountAmount: _parse(json['discount_amount']),
@@ -239,7 +235,10 @@ class SalesOrderItem {
       netAmount: _parse(json['net_amount']),
       quotationItem: json['quotation_item'],
       prevdocDocname: json['prevdoc_docname'],
-
+      igstAmount: _parse(json['igst_amount']),
+      cgstAmount: _parse(json['cgst_amount']),
+      sgstAmount: _parse(json['sgst_amount']),
+      cessAmount: _parse(json['cess_amount']),
 
     );
   }

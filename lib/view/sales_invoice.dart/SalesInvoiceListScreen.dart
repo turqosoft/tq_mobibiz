@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:sales_ordering_app/provider/provider.dart';
 
 import '../../service/apiservices.dart';
+import '../../utils/app_colors.dart';
 
 // class SalesInvoiceScreen extends StatefulWidget {
 class SalesInvoiceScreen extends StatefulWidget {
@@ -21,7 +22,10 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen>
   final TextEditingController _fromDateController = TextEditingController();
   final TextEditingController _toDateController = TextEditingController();
   final ScrollController _scrollController = ScrollController(); // 👈 add this
-
+  final _invoiceController = TextEditingController();
+  final _customerController = TextEditingController();
+  String? _selectedInvoiceStatus;
+  final _searchItemController = TextEditingController();
 
 
   int limitStart = 0;
@@ -96,87 +100,153 @@ Future<void> _selectDate(
     }
   }
 
+  void _resetFilters() {
+    _invoiceController.clear();
+    _customerController.clear();
+    _searchItemController.clear();
+    setState(() => _selectedInvoiceStatus = null);  // ✅
 
-void _showSearchPopup(BuildContext context) {
-  final _invoiceController = TextEditingController();
-  final _customerController = TextEditingController();
-
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text('Search Invoice'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _invoiceController,
-              decoration: InputDecoration(
-                hintText: 'Enter Invoice Name',
+  }
+  void _showSearchPopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Search Invoice'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _invoiceController,
+                    decoration: const InputDecoration(hintText: 'Enter Invoice Name'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _customerController,
+                    decoration: const InputDecoration(hintText: 'Enter Customer Id or Name'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchItemController,
+                    decoration: const InputDecoration(hintText: 'Enter Item Code or Item Name'),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedInvoiceStatus,
+                    decoration: const InputDecoration(hintText: 'Select Status', isDense: true),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('All Statuses')),
+                      DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                      DropdownMenuItem(value: 'Submitted', child: Text('Submitted')),
+                      DropdownMenuItem(value: 'Return', child: Text('Return')),
+                      DropdownMenuItem(value: 'Credit Note Issued', child: Text('Credit Note Issued')),
+                      DropdownMenuItem(value: 'Paid', child: Text('Paid')),
+                      DropdownMenuItem(value: 'Partly Paid', child: Text('Partly Paid')),
+                      DropdownMenuItem(value: 'Unpaid', child: Text('Unpaid')),
+                      DropdownMenuItem(value: 'Unpaid and Discounted', child: Text('Unpaid and Discounted')),
+                      DropdownMenuItem(value: 'Partly Paid and Discounted', child: Text('Partly Paid and Discounted')),
+                      DropdownMenuItem(value: 'Overdue and Discounted', child: Text('Overdue and Discounted')),
+                      DropdownMenuItem(value: 'Overdue', child: Text('Overdue')),
+                      DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
+                      DropdownMenuItem(value: 'Internal Transfer', child: Text('Internal Transfer')),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() => _selectedInvoiceStatus = value);
+                      setState(() => _selectedInvoiceStatus = value);
+                    },
+                  ),
+                ],
               ),
-            ),
-            SizedBox(height: 10),
-            TextField(
-              controller: _customerController,
-              decoration: InputDecoration(
-                hintText: 'Enter Customer',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              _getSearchInvoiceList(
-                _invoiceController.text,
-                _customerController.text,
-              );
-              Navigator.pop(context);
-            },
-            child: Text('Search'),
-          ),
-        ],
-      );
-    },
-  );
-}
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _invoiceController.clear();
+                      _customerController.clear();
+                      _searchItemController.clear();
+                      _selectedInvoiceStatus = null;
+                    });
+                    Navigator.of(context).pop();
+                    _getSearchInvoiceList();
+                  },
+                  child: const Text('Clear'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: TextButton(
+                    onPressed: () {
+                      _getSearchInvoiceList();
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Search', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
-//   Future<void> _getSalesInvoiceList() async {
-//   final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-//   await provider.getSalesInvoice(context, limitStart, pageLength);
-// }
 
-  Future<void> _getSearchInvoiceList(
-      String? invoiceId,
-      String? customerId,
-      ) async {
-    final provider =
-    Provider.of<SalesOrderProvider>(context, listen: false);
+  // Future<void> _getSearchInvoiceList(
+  //     String? invoiceId,
+  //     String? customerId,
+  //     ) async {
+  //   final provider =
+  //   Provider.of<SalesOrderProvider>(context, listen: false);
+  //
+  //   String? startDate;
+  //   String? endDate;
+  //
+  //   if (_fromDate != null && _toDate != null) {
+  //     startDate =
+  //     "${_fromDate!.year}-${_fromDate!.month.toString().padLeft(2, '0')}-${_fromDate!.day.toString().padLeft(2, '0')}";
+  //     endDate =
+  //     "${_toDate!.year}-${_toDate!.month.toString().padLeft(2, '0')}-${_toDate!.day.toString().padLeft(2, '0')}";
+  //   }
+  //
+  //   await provider.getSearchSalesInvoice(
+  //     context,
+  //     invoiceId,
+  //     customerId,
+  //     startDate,
+  //     endDate,
+  //   );
+  // }
+
+  Future<void> _getSearchInvoiceList() async {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
     String? startDate;
     String? endDate;
 
     if (_fromDate != null && _toDate != null) {
-      startDate =
-      "${_fromDate!.year}-${_fromDate!.month.toString().padLeft(2, '0')}-${_fromDate!.day.toString().padLeft(2, '0')}";
-      endDate =
-      "${_toDate!.year}-${_toDate!.month.toString().padLeft(2, '0')}-${_toDate!.day.toString().padLeft(2, '0')}";
+      startDate = "${_fromDate!.year}-${_fromDate!.month.toString().padLeft(2, '0')}-${_fromDate!.day.toString().padLeft(2, '0')}";
+      endDate = "${_toDate!.year}-${_toDate!.month.toString().padLeft(2, '0')}-${_toDate!.day.toString().padLeft(2, '0')}";
     }
 
     await provider.getSearchSalesInvoice(
       context,
-      invoiceId,
-      customerId,
-      startDate,
-      endDate,
+      invoiceId: _invoiceController.text.isNotEmpty ? _invoiceController.text : null,
+      customerId: _customerController.text.isNotEmpty ? _customerController.text : null,
+      customerName: _customerController.text.isNotEmpty ? _customerController.text : null,
+      startDate: startDate,
+      endDate: endDate,
+      itemSearch: _searchItemController.text.isNotEmpty ? _searchItemController.text : null,
+      status: _selectedInvoiceStatus,
     );
   }
-
-
 
   Future<void> _loadMoreInvoices({required bool next}) async {
   setState(() {
@@ -338,7 +408,13 @@ void _showSearchPopup(BuildContext context) {
                     final netRate =
                         item["net_rate"] ?? item["rate"] ?? 0.0;
                     final amount = item["amount"] ?? item["net_amount"] ?? 0.0;
+                    final igstAmount = _toDouble(item["igst_amount"]);
+                    final cgstAmount = _toDouble(item["cgst_amount"]);
+                    final sgstAmount = _toDouble(item["sgst_amount"]);
+                    final cessAmount = _toDouble(item["cess_amount"]);
 
+                    final gstAmount =
+                        igstAmount + cgstAmount + sgstAmount + cessAmount;
                     return ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       childrenPadding: const EdgeInsets.symmetric(vertical: 6),
@@ -403,7 +479,10 @@ void _showSearchPopup(BuildContext context) {
 
                               _itemRow("Unit", item["uom"]),
                               _itemRow("Item Tax Template",(item['item_tax_template'])),
-
+                              _itemRow(
+                                "GST Amount",
+                                "₹ ${gstAmount.toStringAsFixed(2)}",
+                              ),
                               _itemRow(
                                 "Price List Rate",
                                 item["price_list_rate"]?.toString(),
@@ -706,6 +785,7 @@ void _showSearchPopup(BuildContext context) {
                     icon: const Icon(Icons.refresh),
                     tooltip: "Reset to Today",
                     onPressed: () async {
+                      _resetFilters();
                       final provider =
                       Provider.of<SalesOrderProvider>(context, listen: false);
 

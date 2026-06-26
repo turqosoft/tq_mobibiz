@@ -65,6 +65,7 @@ class ItemData {
   String? brand;
   String? itemGroup;
   double? actualQty;
+  double? reservedQty;
   String? productBrochure; // add this
 
 
@@ -77,6 +78,7 @@ class ItemData {
     this.brand,
     this.itemGroup,
     this.actualQty,
+    this.reservedQty,
     this.productBrochure, // add this
 
   });
@@ -90,6 +92,7 @@ class ItemData {
     brand = json['brand'];
     itemGroup = json['item_group'];
     actualQty = (json['actual_qty'] ?? 0).toDouble();
+    reservedQty = (json['reserved_qty'] ?? 0).toDouble();
     productBrochure = json['product_brochure']; // add this
 
 
@@ -105,6 +108,7 @@ class ItemData {
       'brand': brand,
       'item_group': itemGroup,
       'actual_qty': actualQty,
+      'reserved_qty': reservedQty,
       'product_brochure': productBrochure, // add this
 
     };

@@ -41,6 +41,9 @@ class _PickScannerPageState extends State<PickScannerPage > {
   Map<int, double> _originalPickedQty = {};
   Map<int, Map<String, int>> _originalBoxAllocations = {};
   bool _hasUnsavedChanges = true;
+  bool _isManualMode = false; // false = Scan, true = Manual
+  final LayerLink _warehouseLayerLink = LayerLink();
+  OverlayEntry? _warehouseOverlay;
   @override
   void initState() {
     super.initState();
@@ -51,6 +54,7 @@ class _PickScannerPageState extends State<PickScannerPage > {
 
     _warehouseFocus.addListener(() {
       if (!_warehouseFocus.hasFocus) {
+        _removeWarehouseOverlay();
         context.read<SalesOrderProvider>().clearWarehouseResultss();
       }
     });
@@ -75,6 +79,7 @@ class _PickScannerPageState extends State<PickScannerPage > {
   }
   @override
   void dispose() {
+    _removeWarehouseOverlay();
     _warehouseController.dispose();
     _warehouseFocus.dispose(); // ✅ Don't forget to dispose this too
     _boxController.dispose();
@@ -1128,10 +1133,130 @@ class _PickScannerPageState extends State<PickScannerPage > {
       );
     }
   }
+
+  void _showWarehouseOverlay() {
+    _removeWarehouseOverlay();
+    final overlay = Overlay.of(context);
+    final provider = context.read<SalesOrderProvider>();
+
+    _warehouseOverlay = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          width: MediaQuery.of(context).size.width - 24,
+          child: CompositedTransformFollower(
+            link: _warehouseLayerLink,
+            showWhenUnlinked: false,
+            offset: const Offset(0, 50),
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: provider.warehouseResultss.length,
+                  itemBuilder: (context, index) {
+                    final warehouse = provider.warehouseResultss[index];
+
+                    return InkWell(
+                      onTap: () {
+                        _markDirty();
+                        _warehouseController.text = warehouse;
+
+                        provider.clearWarehouseResultss();
+
+                        _removeWarehouseOverlay();
+                        _warehouseFocus.unfocus();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        child: Text(warehouse),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(_warehouseOverlay!);
+  }
+
+  void _removeWarehouseOverlay() {
+    _warehouseOverlay?.remove();
+    _warehouseOverlay = null;
+  }
+
+  Future<void> _showAddBoxDialog(int itemIndex) async {
+    final provider = context.read<SalesOrderProvider>();
+    final items = provider.pickDetail?["items"] as List<dynamic>? ?? [];
+    final item = items[itemIndex];
+    final double itemQty = double.tryParse(item["qty"]?.toString() ?? "0") ?? 0;
+
+    await showDialog(
+      context: context,
+      builder: (context) => _AddBoxDialog(
+        onAdd: (boxName, qty) {
+          /// Calculate current total picked qty
+          final double currentPickedQty =
+              double.tryParse(item["picked_qty"]?.toString() ?? "0") ?? 0;
+
+          /// Validate: new total must not exceed item qty
+          if (currentPickedQty + qty > itemQty) {
+            final remaining = (itemQty - currentPickedQty).toInt();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  remaining <= 0
+                      ? "Picked quantity already reached maximum (${itemQty.toInt()})"
+                      : "Only $remaining more unit(s) can be added. Max qty is ${itemQty.toInt()}",
+                ),
+                backgroundColor: Colors.red.shade700,
+              ),
+            );
+            return;
+          }
+
+          setState(() {
+            /// Add box allocation
+            _boxAllocations.putIfAbsent(itemIndex, () => {});
+            _boxAllocations[itemIndex]!.update(
+              boxName,
+                  (existing) => existing + qty,
+              ifAbsent: () => qty,
+            );
+
+            /// Increase picked_qty by the box qty
+            final double newPickedQty = currentPickedQty + qty;
+            item["picked_qty"] = newPickedQty;
+
+            /// Update the text controller
+            _pickedQtyControllers[itemIndex]?.text =
+                newPickedQty.toStringAsFixed(0);
+
+            _hasUnsavedChanges = true;
+          });
+        },
+        maxQty: (itemQty - double.tryParse(item["picked_qty"]?.toString() ?? "0")!).toInt(),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final provider = context.read<SalesOrderProvider>();
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFFF6F7FB),
       appBar: CommonAppBar(
         title: "Pick Items",
@@ -1223,105 +1348,500 @@ class _PickScannerPageState extends State<PickScannerPage > {
                 /// ─── FIXED TOP SECTION ───────────────────────────────────
 
                 /// 🔹 PICK NAME HEADER
+                // Container(
+                //   width: double.infinity,
+                //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                //   decoration: BoxDecoration(
+                //     color: Colors.blue[50],
+                //     border: Border(
+                //       bottom: BorderSide(color: Colors.blue[100]!, width: 1),
+                //     ),
+                //   ),
+                //   child: Column(
+                //     crossAxisAlignment: CrossAxisAlignment.start,
+                //     children: [
+                //       Row(
+                //         children: [
+                //           Icon(Icons.inventory_2, size: 20, color: Colors.blue[700]),
+                //           const SizedBox(width: 8),
+                //           Text("Pick: ",
+                //               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                //           Expanded(
+                //             child: Text(
+                //               currentPickName ?? widget.pickName,
+                //               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+                //               overflow: TextOverflow.ellipsis,
+                //             ),
+                //           ),
+                //         ],
+                //       ),
+                //       if (deliveryNote != null && deliveryNote.toString().isNotEmpty)
+                //         Padding(
+                //           padding: const EdgeInsets.only(top: 6),
+                //           child: Row(
+                //             children: [
+                //               Icon(Icons.local_shipping, size: 18, color: Colors.orange[700]),
+                //               const SizedBox(width: 8),
+                //               Text(
+                //                 "Delivery Note: ",
+                //                 style: TextStyle(
+                //                   fontSize: 13,
+                //                   fontWeight: FontWeight.w500,
+                //                   color: Colors.grey[600],
+                //                 ),
+                //               ),
+                //               Expanded(
+                //                 child: Text(
+                //                   deliveryNote,
+                //                   style: TextStyle(
+                //                     fontSize: 14,
+                //                     fontWeight: FontWeight.w600,
+                //                     color: Colors.orange[900],
+                //                   ),
+                //                   overflow: TextOverflow.ellipsis,
+                //                 ),
+                //               ),
+                //             ],
+                //           ),
+                //         ),
+                //       if (salesInvoice != null && salesInvoice.toString().isNotEmpty)
+                //         Padding(
+                //           padding: const EdgeInsets.only(top: 6),
+                //           child: Row(
+                //             children: [
+                //               Icon(Icons.receipt_long, size: 18, color: Colors.green[700]),
+                //               const SizedBox(width: 8),
+                //               Text("Invoice: ",
+                //                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                //               Expanded(
+                //                 child: Text(
+                //                   salesInvoice,
+                //                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.green[900]),
+                //                   overflow: TextOverflow.ellipsis,
+                //                 ),
+                //               ),
+                //             ],
+                //           ),
+                //         ),
+                //       if (customer != null && customer.toString().isNotEmpty)
+                //         Padding(
+                //           padding: const EdgeInsets.only(top: 6),
+                //           child: Row(
+                //             children: [
+                //               Icon(Icons.person, size: 18, color: Colors.deepPurple[700]),
+                //               const SizedBox(width: 8),
+                //               Text("Customer: ",
+                //                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                //               Expanded(
+                //                 child: Text(
+                //                   customer,
+                //                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.deepPurple[900]),
+                //                   overflow: TextOverflow.ellipsis,
+                //                 ),
+                //               ),
+                //             ],
+                //           ),
+                //         ),
+                //     ],
+                //   ),
+                // ),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.blue[50],
                     border: Border(
                       bottom: BorderSide(color: Colors.blue[100]!, width: 1),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.inventory_2, size: 20, color: Colors.blue[700]),
-                          const SizedBox(width: 8),
-                          Text("Pick: ",
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey[600])),
-                          Expanded(
-                            child: Text(
-                              currentPickName ?? widget.pickName,
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue[900]),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (deliveryNote != null && deliveryNote.toString().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            children: [
-                              Icon(Icons.local_shipping, size: 18, color: Colors.orange[700]),
-                              const SizedBox(width: 8),
-                              Text(
-                                "Delivery Note: ",
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  deliveryNote,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.orange[900],
+
+                      /// ─── MAIN INFO COLUMN ────────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.only(right: 90), // space for toggle
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.inventory_2, size: 18, color: Colors.blue[700]),
+                                const SizedBox(width: 6),
+                                Text("Pick: ",
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                                Expanded(
+                                  child: Text(
+                                    currentPickName ?? widget.pickName,
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+
+                            if (deliveryNote != null && deliveryNote.toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.local_shipping, size: 15, color: Colors.orange[700]),
+                                    const SizedBox(width: 6),
+                                    Text("DN: ",
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                                    Expanded(
+                                      child: Text(
+                                        deliveryNote,
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.orange[900]),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
+
+                            if (salesInvoice != null && salesInvoice.toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.receipt_long, size: 15, color: Colors.green[700]),
+                                    const SizedBox(width: 6),
+                                    Text("Invoice: ",
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                                    Expanded(
+                                      child: Text(
+                                        salesInvoice,
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green[900]),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            if (customer != null && customer.toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.person, size: 15, color: Colors.deepPurple[700]),
+                                    const SizedBox(width: 6),
+                                    Text("Customer: ",
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey[600])),
+                                    Expanded(
+                                      child: Text(
+                                        customer,
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.deepPurple[900]),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
-                      if (salesInvoice != null && salesInvoice.toString().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
+                      ),
+
+                      /// ─── TOGGLE — bottom right corner ────────────────────
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.receipt_long, size: 18, color: Colors.green[700]),
-                              const SizedBox(width: 8),
-                              Text("Invoice: ",
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey[600])),
-                              Expanded(
-                                child: Text(
-                                  salesInvoice,
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.green[900]),
-                                  overflow: TextOverflow.ellipsis,
+                              /// SCAN
+                              GestureDetector(
+                                onTap: () => setState(() => _isManualMode = false),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: !_isManualMode ? Colors.blue[700] : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.qr_code_scanner, size: 11,
+                                          color: !_isManualMode ? Colors.white : Colors.grey[500]),
+                                      const SizedBox(width: 3),
+                                      Text("Scan",
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: !_isManualMode ? Colors.white : Colors.grey[500],
+                                          )),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              /// MANUAL
+                              GestureDetector(
+                                onTap: () => setState(() => _isManualMode = true),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _isManualMode ? Colors.blue[700] : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit, size: 11,
+                                          color: _isManualMode ? Colors.white : Colors.grey[500]),
+                                      const SizedBox(width: 3),
+                                      Text("Manual",
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: _isManualMode ? Colors.white : Colors.grey[500],
+                                          )),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      if (customer != null && customer.toString().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            children: [
-                              Icon(Icons.person, size: 18, color: Colors.deepPurple[700]),
-                              const SizedBox(width: 8),
-                              Text("Customer: ",
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey[600])),
-                              Expanded(
-                                child: Text(
-                                  customer,
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.deepPurple[900]),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      ),
                     ],
                   ),
                 ),
-
                 /// 🔹 COMPACT: WAREHOUSE + CONTAINER + SCAN ITEM
+                // Material(
+                //   elevation: 2,
+                //   color: Colors.white,
+                //   child: Padding(
+                //     padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                //     child: Column(
+                //       crossAxisAlignment: CrossAxisAlignment.start,
+                //       children: [
+                //
+                //         /// ROW 1: Warehouse + Container side by side
+                //         Row(
+                //           children: [
+                //
+                //             /// WAREHOUSE
+                //             Expanded(
+                //               child: Column(
+                //                 crossAxisAlignment: CrossAxisAlignment.start,
+                //                 children: [
+                //                   Row(
+                //                     children: const [
+                //                       Icon(Icons.warehouse, size: 14, color: Colors.grey),
+                //                       SizedBox(width: 4),
+                //                       Text("Warehouse",
+                //                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                //                     ],
+                //                   ),
+                //                   const SizedBox(height: 4),
+                //                   TextFormField(
+                //                     controller: _warehouseController,
+                //                     focusNode: _warehouseFocus,
+                //                     onChanged: (value) {
+                //                       final provider = context.read<SalesOrderProvider>();
+                //                       if (value.trim().isEmpty) {
+                //                         provider.clearWarehouseResultss();
+                //                       } else {
+                //                         provider.searchWarehouses(value.trim());
+                //                       }
+                //                     },
+                //                     onTap: () {
+                //                       _markDirty();
+                //                       _warehouseController.selection = TextSelection(
+                //                         baseOffset: 0,
+                //                         extentOffset: _warehouseController.text.length,
+                //                       );
+                //                     },
+                //                     decoration: const InputDecoration(
+                //                       hintText: "Search warehouse",
+                //                       isDense: true,
+                //                       filled: true,
+                //                       fillColor: Color(0xFFF3F4F6),
+                //                       contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                //                       border: OutlineInputBorder(
+                //                         borderRadius: BorderRadius.all(Radius.circular(8)),
+                //                         borderSide: BorderSide.none,
+                //                       ),
+                //                     ),
+                //                   ),
+                //                   Consumer<SalesOrderProvider>(
+                //                     builder: (context, provider, _) {
+                //                       if (!_warehouseFocus.hasFocus || provider.warehouseResultss.isEmpty) {
+                //                         return const SizedBox.shrink();
+                //                       }
+                //                       return Container(
+                //                         margin: const EdgeInsets.only(top: 4),
+                //                         constraints: const BoxConstraints(maxHeight: 180),
+                //                         decoration: BoxDecoration(
+                //                           color: Colors.white,
+                //                           borderRadius: BorderRadius.circular(8),
+                //                           border: Border.all(color: Colors.grey.shade300),
+                //                         ),
+                //                         child: ListView.builder(
+                //                           itemCount: provider.warehouseResultss.length,
+                //                           itemBuilder: (context, index) {
+                //                             final warehouse = provider.warehouseResultss[index];
+                //                             return ListTile(
+                //                               dense: true,
+                //                               title: Text(warehouse, style: const TextStyle(fontSize: 13)),
+                //                               onTap: () {
+                //                                 _warehouseController.text = warehouse;
+                //                                 context.read<SalesOrderProvider>().clearWarehouseResultss();
+                //                                 _warehouseFocus.unfocus();
+                //                               },
+                //                             );
+                //                           },
+                //                         ),
+                //                       );
+                //                     },
+                //                   ),
+                //                 ],
+                //               ),
+                //             ),
+                //
+                //             const SizedBox(width: 10),
+                //
+                //             /// CONTAINER
+                //             Expanded(
+                //               child: Column(
+                //                 crossAxisAlignment: CrossAxisAlignment.start,
+                //                 children: [
+                //                   Row(
+                //                     children: const [
+                //                       Icon(Icons.inventory_2_outlined, size: 14, color: Colors.grey),
+                //                       SizedBox(width: 4),
+                //                       Text("Container",
+                //                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                //                     ],
+                //                   ),
+                //                   const SizedBox(height: 4),
+                //                   TextFormField(
+                //                     controller: _boxController,
+                //                     focusNode: _boxFocus,
+                //                     textInputAction: TextInputAction.next,
+                //                     onTap: () {
+                //                       _markDirty();
+                //                       _boxController.selection = TextSelection(
+                //                         baseOffset: 0,
+                //                         extentOffset: _boxController.text.length,
+                //                       );
+                //                     },
+                //                     onFieldSubmitted: (_) => _itemCodeFocus.requestFocus(),
+                //                     decoration: InputDecoration(
+                //                       hintText: "Scan container",
+                //                       isDense: true,
+                //                       filled: true,
+                //                       fillColor: const Color(0xFFF3F4F6),
+                //                       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                //                       border: const OutlineInputBorder(
+                //                         borderRadius: BorderRadius.all(Radius.circular(8)),
+                //                         borderSide: BorderSide.none,
+                //                       ),
+                //                       suffixIcon: IconButton(
+                //                         icon: const Icon(Icons.qr_code_scanner, size: 18),
+                //                         padding: EdgeInsets.zero,
+                //                         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                //                         onPressed: () async {
+                //                           final scannedValue = await Navigator.push<String>(
+                //                             context,
+                //                             MaterialPageRoute(builder: (_) => const QrScannerPage()),
+                //                           );
+                //                           if (!mounted) return;
+                //                           if (scannedValue != null && scannedValue.isNotEmpty) {
+                //                             _boxController.text = scannedValue.trim();
+                //                             _itemCodeFocus.requestFocus();
+                //                           }
+                //                         },
+                //                       ),
+                //                     ),
+                //                   ),
+                //                 ],
+                //               ),
+                //             ),
+                //           ],
+                //         ),
+                //
+                //         const SizedBox(height: 10),
+                //
+                //         /// ROW 2: SCAN ITEM (full width)
+                //         Row(
+                //           children: const [
+                //             Icon(Icons.qr_code, size: 14, color: Colors.grey),
+                //             SizedBox(width: 4),
+                //             Text("Scan Item",
+                //                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                //           ],
+                //         ),
+                //         const SizedBox(height: 4),
+                //         TextFormField(
+                //           controller: _itemCodeController,
+                //           focusNode: _itemCodeFocus,
+                //           textInputAction: TextInputAction.done,
+                //           onTap: () {
+                //             _itemCodeController.selection = TextSelection(
+                //               baseOffset: 0,
+                //               extentOffset: _itemCodeController.text.length,
+                //             );
+                //           },
+                //           onFieldSubmitted: (value) {
+                //             if (value.trim().isNotEmpty) _validateAndPickItem(value.trim());
+                //           },
+                //           decoration: InputDecoration(
+                //             hintText: "Scan or enter item barcode",
+                //             isDense: true,
+                //             filled: true,
+                //             fillColor: const Color(0xFFF3F4F6),
+                //             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                //             border: const OutlineInputBorder(
+                //               borderRadius: BorderRadius.all(Radius.circular(8)),
+                //               borderSide: BorderSide.none,
+                //             ),
+                //             suffixIcon: Row(
+                //               mainAxisSize: MainAxisSize.min,
+                //               children: [
+                //                 IconButton(
+                //                   icon: const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                //                   tooltip: "Validate",
+                //                   padding: EdgeInsets.zero,
+                //                   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                //                   onPressed: () {
+                //                     final value = _itemCodeController.text.trim();
+                //                     if (value.isNotEmpty) _validateAndPickItem(value);
+                //                   },
+                //                 ),
+                //                 IconButton(
+                //                   icon: const Icon(Icons.qr_code_scanner, size: 20),
+                //                   padding: EdgeInsets.zero,
+                //                   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                //                   onPressed: () async {
+                //                     final scannedValue = await Navigator.push<String>(
+                //                       context,
+                //                       MaterialPageRoute(builder: (_) => const QrScannerPage()),
+                //                     );
+                //                     if (!mounted) return;
+                //                     if (scannedValue != null && scannedValue.isNotEmpty) {
+                //                       _itemCodeController.text = scannedValue.trim();
+                //                       _validateAndPickItem(scannedValue.trim());
+                //                     }
+                //                   },
+                //                 ),
+                //               ],
+                //             ),
+                //           ),
+                //         ),
+                //       ],
+                //     ),
+                //   ),
+                // ),
                 Material(
                   elevation: 2,
                   color: Colors.white,
@@ -1331,154 +1851,178 @@ class _PickScannerPageState extends State<PickScannerPage > {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
 
-                        /// ROW 1: Warehouse + Container side by side
+                        /// WAREHOUSE
                         Row(
-                          children: [
-
-                            /// WAREHOUSE
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: const [
-                                      Icon(Icons.warehouse, size: 14, color: Colors.grey),
-                                      SizedBox(width: 4),
-                                      Text("Warehouse",
-                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  TextFormField(
-                                    controller: _warehouseController,
-                                    focusNode: _warehouseFocus,
-                                    onChanged: (value) {
-                                      final provider = context.read<SalesOrderProvider>();
-                                      if (value.trim().isEmpty) {
-                                        provider.clearWarehouseResultss();
-                                      } else {
-                                        provider.searchWarehouses(value.trim());
-                                      }
-                                    },
-                                    onTap: () {
-                                      _markDirty();
-                                      _warehouseController.selection = TextSelection(
-                                        baseOffset: 0,
-                                        extentOffset: _warehouseController.text.length,
-                                      );
-                                    },
-                                    decoration: const InputDecoration(
-                                      hintText: "Search warehouse",
-                                      isDense: true,
-                                      filled: true,
-                                      fillColor: Color(0xFFF3F4F6),
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(8)),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                    ),
-                                  ),
-                                  Consumer<SalesOrderProvider>(
-                                    builder: (context, provider, _) {
-                                      if (!_warehouseFocus.hasFocus || provider.warehouseResultss.isEmpty) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Container(
-                                        margin: const EdgeInsets.only(top: 4),
-                                        constraints: const BoxConstraints(maxHeight: 180),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Colors.grey.shade300),
-                                        ),
-                                        child: ListView.builder(
-                                          itemCount: provider.warehouseResultss.length,
-                                          itemBuilder: (context, index) {
-                                            final warehouse = provider.warehouseResultss[index];
-                                            return ListTile(
-                                              dense: true,
-                                              title: Text(warehouse, style: const TextStyle(fontSize: 13)),
-                                              onTap: () {
-                                                _warehouseController.text = warehouse;
-                                                context.read<SalesOrderProvider>().clearWarehouseResultss();
-                                                _warehouseFocus.unfocus();
-                                              },
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(width: 10),
-
-                            /// CONTAINER
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: const [
-                                      Icon(Icons.inventory_2_outlined, size: 14, color: Colors.grey),
-                                      SizedBox(width: 4),
-                                      Text("Container",
-                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  TextFormField(
-                                    controller: _boxController,
-                                    focusNode: _boxFocus,
-                                    textInputAction: TextInputAction.next,
-                                    onTap: () {
-                                      _markDirty();
-                                      _boxController.selection = TextSelection(
-                                        baseOffset: 0,
-                                        extentOffset: _boxController.text.length,
-                                      );
-                                    },
-                                    onFieldSubmitted: (_) => _itemCodeFocus.requestFocus(),
-                                    decoration: InputDecoration(
-                                      hintText: "Scan container",
-                                      isDense: true,
-                                      filled: true,
-                                      fillColor: const Color(0xFFF3F4F6),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                      border: const OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(8)),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                      suffixIcon: IconButton(
-                                        icon: const Icon(Icons.qr_code_scanner, size: 18),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                        onPressed: () async {
-                                          final scannedValue = await Navigator.push<String>(
-                                            context,
-                                            MaterialPageRoute(builder: (_) => const QrScannerPage()),
-                                          );
-                                          if (!mounted) return;
-                                          if (scannedValue != null && scannedValue.isNotEmpty) {
-                                            _boxController.text = scannedValue.trim();
-                                            _itemCodeFocus.requestFocus();
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          children: const [
+                            Icon(Icons.warehouse, size: 14, color: Colors.grey),
+                            SizedBox(width: 4),
+                            Text("Warehouse",
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                           ],
+                        ),
+                        const SizedBox(height: 4),
+                  CompositedTransformTarget(
+                    link: _warehouseLayerLink,
+                    child: TextFormField(
+                      controller: _warehouseController,
+                          focusNode: _warehouseFocus,
+                          // onChanged: (value) {
+                          //   _markDirty();
+                          //   final provider = context.read<SalesOrderProvider>();
+                          //   if (value.trim().isEmpty) {
+                          //     provider.clearWarehouseResultss();
+                          //   } else {
+                          //     provider.searchWarehouses(value.trim());
+                          //   }
+                          // },
+                      onChanged: (value) async {
+                        _markDirty();
+
+                        final provider = context.read<SalesOrderProvider>();
+
+                        if (value.trim().isEmpty) {
+                          provider.clearWarehouseResultss();
+                          _removeWarehouseOverlay();
+                          return;
+                        }
+
+                        await provider.searchWarehouses(value.trim());
+
+                        if (provider.warehouseResultss.isNotEmpty &&
+                            _warehouseFocus.hasFocus) {
+                          _showWarehouseOverlay();
+                        } else {
+                          _removeWarehouseOverlay();
+                        }
+                      },
+                          onTap: () {
+                            _warehouseController.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: _warehouseController.text.length,
+                            );
+                          },
+                          decoration: const InputDecoration(
+                            hintText: "Search warehouse",
+                            isDense: true,
+                            filled: true,
+                            fillColor: Color(0xFFF3F4F6),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(8)),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                  ),
+
+
+                        /// WAREHOUSE DROPDOWN
+                        // Consumer<SalesOrderProvider>(
+                        //   builder: (context, provider, _) {
+                        //     if (!_warehouseFocus.hasFocus || provider.warehouseResultss.isEmpty) {
+                        //       return const SizedBox.shrink();
+                        //     }
+                        //     return Container(
+                        //       margin: const EdgeInsets.only(top: 4),
+                        //       constraints: const BoxConstraints(maxHeight: 180),
+                        //       decoration: BoxDecoration(
+                        //         color: Colors.white,
+                        //         borderRadius: BorderRadius.circular(8),
+                        //         border: Border.all(color: Colors.grey.shade300),
+                        //         boxShadow: [
+                        //           BoxShadow(
+                        //             color: Colors.black.withOpacity(0.08),
+                        //             blurRadius: 6,
+                        //             offset: const Offset(0, 3),
+                        //           ),
+                        //         ],
+                        //       ),
+                        //       child: ListView.builder(
+                        //         shrinkWrap: true,
+                        //         itemCount: provider.warehouseResultss.length,
+                        //         itemBuilder: (context, index) {
+                        //           final warehouse = provider.warehouseResultss[index];
+                        //           return Material(
+                        //             color: Colors.white,
+                        //             child: InkWell(
+                        //               onTap: () {
+                        //                 _markDirty();
+                        //                 _warehouseController.text = warehouse;
+                        //                 context.read<SalesOrderProvider>().clearWarehouseResultss();
+                        //                 _warehouseFocus.unfocus();
+                        //               },
+                        //               child: Padding(
+                        //                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        //                 child: Text(
+                        //                   warehouse,
+                        //                   style: const TextStyle(fontSize: 13),
+                        //                 ),
+                        //               ),
+                        //             ),
+                        //           );
+                        //         },
+                        //       ),
+                        //     );
+                        //   },
+                        // ),
+
+                        const SizedBox(height: 10),
+
+                        /// CONTAINER
+                        Row(
+                          children: const [
+                            Icon(Icons.inventory_2_outlined, size: 14, color: Colors.grey),
+                            SizedBox(width: 4),
+                            Text("Container",
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        TextFormField(
+                          controller: _boxController,
+                          focusNode: _boxFocus,
+                          textInputAction: TextInputAction.next,
+                          onTap: () {
+                            _markDirty();
+                            _boxController.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: _boxController.text.length,
+                            );
+                          },
+                          onFieldSubmitted: (_) => _itemCodeFocus.requestFocus(),
+                          decoration: InputDecoration(
+                            hintText: "Scan container",
+                            isDense: true,
+                            filled: true,
+                            fillColor: const Color(0xFFF3F4F6),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(8)),
+                              borderSide: BorderSide.none,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.qr_code_scanner, size: 18),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: () async {
+                                final scannedValue = await Navigator.push<String>(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const QrScannerPage()),
+                                );
+                                if (!mounted) return;
+                                if (scannedValue != null && scannedValue.isNotEmpty) {
+                                  _markDirty();
+                                  _boxController.text = scannedValue.trim();
+                                  _itemCodeFocus.requestFocus();
+                                }
+                              },
+                            ),
+                          ),
                         ),
 
                         const SizedBox(height: 10),
 
-                        /// ROW 2: SCAN ITEM (full width)
+                        /// SCAN ITEM
                         Row(
                           children: const [
                             Icon(Icons.qr_code, size: 14, color: Colors.grey),
@@ -1715,94 +2259,208 @@ class _PickScannerPageState extends State<PickScannerPage > {
                                   ),
                                 ),
                               /// BOX BREAKDOWN
-                              if ((allocations != null &&
-                                  allocations.entries.any((e) => e.key.trim().isNotEmpty)) ||
-                                  unassignedQty > 0) ...[
-                                const Divider(height: 12),
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _expandedBoxSection[index] =
-                                      !(_expandedBoxSection[index] ?? false);
-                                    });
-                                  },
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text("Package Information",
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.grey)),
-                                      Icon(
-                                        (_expandedBoxSection[index] ?? false)
-                                            ? Icons.expand_less
-                                            : Icons.expand_more,
-                                        size: 18,
+                              // if ((allocations != null &&
+                              //     allocations.entries.any((e) => e.key.trim().isNotEmpty)) ||
+                              //     unassignedQty > 0) ...[
+                              //   const Divider(height: 12),
+                              //   InkWell(
+                              //     onTap: () {
+                              //       setState(() {
+                              //         _expandedBoxSection[index] =
+                              //         !(_expandedBoxSection[index] ?? false);
+                              //       });
+                              //     },
+                              //     child: Row(
+                              //       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              //       children: [
+                              //         const Text("Package Information",
+                              //             style: TextStyle(
+                              //                 fontSize: 12,
+                              //                 fontWeight: FontWeight.w600,
+                              //                 color: Colors.grey)),
+                              //         Icon(
+                              //           (_expandedBoxSection[index] ?? false)
+                              //               ? Icons.expand_less
+                              //               : Icons.expand_more,
+                              //           size: 18,
+                              //           color: Colors.grey,
+                              //         ),
+                              //       ],
+                              //     ),
+                              //   ),
+                              //   if (_expandedBoxSection[index] ?? false) ...[
+                              //     const SizedBox(height: 6),
+                              //     if (allocations != null)
+                              //       ...allocations.entries
+                              //           .where((e) => e.key.trim().isNotEmpty)
+                              //           .map((entry) {
+                              //         return Container(
+                              //           margin: const EdgeInsets.only(bottom: 4),
+                              //           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              //           decoration: BoxDecoration(
+                              //             color: Colors.blue.shade50,
+                              //             borderRadius: BorderRadius.circular(8),
+                              //           ),
+                              //           child: Row(
+                              //             children: [
+                              //               Expanded(
+                              //                 child: Text("Box: ${entry.key}",
+                              //                     style: const TextStyle(
+                              //                         fontSize: 12, fontWeight: FontWeight.w500)),
+                              //               ),
+                              //               Text("Qty: ${entry.value}",
+                              //                   style: const TextStyle(
+                              //                       fontSize: 12, fontWeight: FontWeight.w600)),
+                              //               const SizedBox(width: 6),
+                              //               InkWell(
+                              //                 onTap: () => _removeFromBox(index, entry.key, entry.value),
+                              //                 child: const Icon(Icons.close, size: 16, color: Colors.red),
+                              //               ),
+                              //             ],
+                              //           ),
+                              //         );
+                              //       }).toList(),
+                              //     if (unassignedQty > 0)
+                              //       Container(
+                              //         margin: const EdgeInsets.only(bottom: 4),
+                              //         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              //         decoration: BoxDecoration(
+                              //           color: Colors.orange.shade50,
+                              //           borderRadius: BorderRadius.circular(8),
+                              //         ),
+                              //         child: Row(
+                              //           children: [
+                              //             const Expanded(
+                              //               child: Text("Unassigned",
+                              //                   style: TextStyle(
+                              //                       fontSize: 12, fontWeight: FontWeight.w500)),
+                              //             ),
+                              //             Text("Qty: $unassignedQty",
+                              //                 style: const TextStyle(
+                              //                     fontSize: 12, fontWeight: FontWeight.w600)),
+                              //             const SizedBox(width: 6),
+                              //             InkWell(
+                              //               onTap: () => _removeFromUnassigned(index, unassignedQty),
+                              //               child: const Icon(Icons.close, size: 16, color: Colors.red),
+                              //             ),
+                              //           ],
+                              //         ),
+                              //       ),
+                              //   ],
+                              // ],
+                              /// BOX BREAKDOWN — always visible
+                              const Divider(height: 12),
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _expandedBoxSection[index] =
+                                    !(_expandedBoxSection[index] ?? false);
+                                  });
+                                },
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      "Package Information",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
                                         color: Colors.grey,
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    Icon(
+                                      (_expandedBoxSection[index] ?? false)
+                                          ? Icons.expand_less
+                                          : Icons.expand_more,
+                                      size: 18,
+                                      color: Colors.grey,
+                                    ),
+                                  ],
                                 ),
-                                if (_expandedBoxSection[index] ?? false) ...[
-                                  const SizedBox(height: 6),
-                                  if (allocations != null)
-                                    ...allocations.entries
-                                        .where((e) => e.key.trim().isNotEmpty)
-                                        .map((entry) {
-                                      return Container(
-                                        margin: const EdgeInsets.only(bottom: 4),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text("Box: ${entry.key}",
-                                                  style: const TextStyle(
-                                                      fontSize: 12, fontWeight: FontWeight.w500)),
-                                            ),
-                                            Text("Qty: ${entry.value}",
-                                                style: const TextStyle(
-                                                    fontSize: 12, fontWeight: FontWeight.w600)),
-                                            const SizedBox(width: 6),
-                                            InkWell(
-                                              onTap: () => _removeFromBox(index, entry.key, entry.value),
-                                              child: const Icon(Icons.close, size: 16, color: Colors.red),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                  if (unassignedQty > 0)
-                                    Container(
+                              ),
+
+                              if (_expandedBoxSection[index] ?? false) ...[
+                                const SizedBox(height: 6),
+
+                                /// EXISTING BOX ENTRIES
+                                if (allocations != null)
+                                  ...allocations.entries
+                                      .where((e) => e.key.trim().isNotEmpty)
+                                      .map((entry) {
+                                    return Container(
                                       margin: const EdgeInsets.only(bottom: 4),
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.shade50,
+                                        color: Colors.blue.shade50,
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Row(
                                         children: [
-                                          const Expanded(
-                                            child: Text("Unassigned",
-                                                style: TextStyle(
-                                                    fontSize: 12, fontWeight: FontWeight.w500)),
+                                          Expanded(
+                                            child: Text(
+                                              "Box: ${entry.key}",
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                            ),
                                           ),
-                                          Text("Qty: $unassignedQty",
-                                              style: const TextStyle(
-                                                  fontSize: 12, fontWeight: FontWeight.w600)),
+                                          Text(
+                                            "Qty: ${entry.value}",
+                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                          ),
                                           const SizedBox(width: 6),
                                           InkWell(
-                                            onTap: () => _removeFromUnassigned(index, unassignedQty),
+                                            onTap: () => _removeFromBox(index, entry.key, entry.value),
                                             child: const Icon(Icons.close, size: 16, color: Colors.red),
                                           ),
                                         ],
                                       ),
+                                    );
+                                  }).toList(),
+
+                                /// UNASSIGNED QTY
+                                if (unassignedQty > 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                ],
+                                    child: Row(
+                                      children: [
+                                        const Expanded(
+                                          child: Text(
+                                            "Unassigned",
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                          ),
+                                        ),
+                                        Text(
+                                          "Qty: $unassignedQty",
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          onTap: () => _removeFromUnassigned(index, unassignedQty),
+                                          child: const Icon(Icons.close, size: 16, color: Colors.red),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                /// ADD BOX BUTTON
+                                if (_isManualMode)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      foregroundColor: Colors.blue[700],
+                                    ),
+                                    onPressed: () => _showAddBoxDialog(index),
+                                    icon: const Icon(Icons.add_box_outlined, size: 16),
+                                    label: const Text("Add Box", style: TextStyle(fontSize: 12)),
+                                  ),
+                                ),
                               ],
                             ],
                           ),
@@ -1821,17 +2479,6 @@ class _PickScannerPageState extends State<PickScannerPage > {
 
 }
 
-// class PickValidationSummary {
-//   final String itemName;
-//   final int qty;
-//   final List<String> serials;
-//
-//   PickValidationSummary({
-//     required this.itemName,
-//     required this.qty,
-//     required this.serials,
-//   });
-// }
 class PickValidationSummary {
   final String itemName;
   final int actualQty;
@@ -1998,5 +2645,127 @@ class _SerialNumberSelectionDialogState
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+}
+class _AddBoxDialog extends StatefulWidget {
+  final void Function(String boxName, int qty) onAdd;
+  final int maxQty; // ← new
+
+  const _AddBoxDialog({
+    required this.onAdd,
+    required this.maxQty, // ← new
+  });
+
+  @override
+  State<_AddBoxDialog> createState() => _AddBoxDialogState();
+}
+
+class _AddBoxDialogState extends State<_AddBoxDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _boxController = TextEditingController();
+  final _qtyController = TextEditingController();
+
+  @override
+  void dispose() {
+    _boxController.dispose();
+    _qtyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(
+        "Add Box",
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+      ),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            /// REMAINING QTY HINT
+            if (widget.maxQty <= 0)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Text(
+                  "Maximum quantity already reached",
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Text(
+                  "Remaining: ${widget.maxQty} unit(s) available",
+                  style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                ),
+              ),
+
+            TextFormField(
+              controller: _boxController,
+              decoration: const InputDecoration(
+                labelText: "Box / Container Name",
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) =>
+              (v == null || v.trim().isEmpty) ? "Box name is required" : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _qtyController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: "Quantity (max ${widget.maxQty})",
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return "Quantity is required";
+                final qty = int.tryParse(v.trim());
+                if (qty == null || qty <= 0) return "Enter a valid quantity";
+                if (qty > widget.maxQty) {
+                  return "Cannot exceed remaining qty (${widget.maxQty})";
+                }
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: widget.maxQty <= 0
+              ? null // ← disable button if no qty remaining
+              : () {
+            if (!_formKey.currentState!.validate()) return;
+            final boxName = _boxController.text.trim();
+            final qty = int.parse(_qtyController.text.trim());
+            widget.onAdd(boxName, qty);
+            Navigator.pop(context);
+          },
+          child: const Text("Add"),
+        ),
+      ],
+    );
   }
 }

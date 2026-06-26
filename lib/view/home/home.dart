@@ -46,7 +46,6 @@ import '../pos_invoice/PosInvoice.dart';
 import '../pos_invoice/PosOpeningEntry.dart';
 import '../projects/project_list_screen.dart';
 import '../sales_manager/SalesManagerScreen.dart';
-import '../sales_manager/expense_tracker/ExpenseTrackerScreen.dart';
 import '../sales_quotation/SalesQuotation.dart';
 import '../task/task_screen.dart';
 
@@ -1378,17 +1377,42 @@ class _CustomDialogState extends State<CustomDialog> {
       builder: (context, provider, child) {
         final isCheckedIn = provider.isCheckedIn; // ✅ always read latest status
         return AlertDialog(
-          title: const Center(
-            child: Text(
-              'Check In / Check Out',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color.fromARGB(255, 3, 28, 48),
+          // title: const Center(
+          //   child: Text(
+          //     'Check In / Check Out',
+          //     textAlign: TextAlign.center,
+          //     style: TextStyle(
+          //       fontWeight: FontWeight.bold,
+          //       color: Color.fromARGB(255, 3, 28, 48),
+          //     ),
+          //   ),
+          // ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Expanded(
+                child: Text(
+                  'Check In / Out',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Color.fromARGB(255, 3, 28, 48),
+                  ),
+                ),
               ),
-            ),
+              InkWell(
+                onTap: _isLoading ? null : () => Navigator.of(context).pop(),
+                borderRadius: BorderRadius.circular(20),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 22, color: Colors.grey),
+                ),
+              ),
+            ],
           ),
-
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0), // ✅ less right padding so icon sits closer to edge
           // ✅ Make content scrollable and keyboard-safe
           content: SingleChildScrollView(
             padding: EdgeInsets.only(

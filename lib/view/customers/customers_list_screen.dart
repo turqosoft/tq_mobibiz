@@ -11,6 +11,7 @@ import 'package:sales_ordering_app/utils/app_colors.dart';
 import 'package:sales_ordering_app/utils/common/common_widgets.dart';
 import '../../service/apiservices.dart';
 import '../../utils/sharedpreference.dart';
+import '../new_Transcation/get_sales_order.dart';
 import '../sales_invoice.dart/SalesInvoice.dart';
 import 'add_customer.dart';
 import 'ledger_pdf_builder.dart';
@@ -1022,6 +1023,66 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                         icon: Icons.picture_as_pdf,
                         label: "AR",
                         color: Colors.red,
+                        // onPressed: () async {
+                        //   final result = await showReceivableFilterDialog(context);
+                        //   if (result == null) return;
+                        //
+                        //   final minOverdueDays = result.daysBefore;
+                        //   final postingDate = formatDateForApi(DateTime.now());
+                        //
+                        //   showLoadingDialog(context);
+                        //
+                        //   final fullName = await _sharedPrefService.getFullName() ?? "";
+                        //   try {
+                        //     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+                        //     final api = provider.apiService!;
+                        //     final company = await _sharedPrefService.getCompany();
+                        //     final party = customer.name!;
+                        //
+                        //     final report = await api.fetchAccountsReceivable(
+                        //       context,
+                        //       company!,
+                        //       postingDate,
+                        //       party,
+                        //       result.range,
+                        //     );
+                        //
+                        //     if (report == null) return;
+                        //
+                        //     final List<dynamic> originalRows = report["data"] as List<dynamic>;
+                        //     final filteredRows = originalRows.where((row) {
+                        //       final age = (row["age"] ?? 0).toInt();
+                        //       return age >= minOverdueDays;
+                        //     }).toList();
+                        //     report["data"] = filteredRows;
+                        //
+                        //     final rangeLabel = buildRangeLabel(result.range);
+                        //     final letterheadContent = await api.fetchLetterHeadContent(context);
+                        //
+                        //     final html = buildAccountsReceivableHtml(
+                        //       report,
+                        //       party,
+                        //       postingDate,
+                        //       rangeLabel,
+                        //       company,
+                        //       fullName,
+                        //       letterheadContent,
+                        //       // provider.domain,
+                        //       provider.baseHost,
+                        //     );
+                        //
+                        //     final pdfBytes = await api.generatePdfFromHtml(context, html);
+                        //
+                        //     if (pdfBytes != null) {
+                        //       await saveAndOpenPdf(
+                        //         pdfBytes,
+                        //         "Accounts_Receivable_${party}_$postingDate.pdf",
+                        //       );
+                        //     }
+                        //   } finally {
+                        //     Navigator.pop(context);
+                        //   }
+                        // },
                         onPressed: () async {
                           final result = await showReceivableFilterDialog(context);
                           if (result == null) return;
@@ -1031,9 +1092,12 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
 
                           showLoadingDialog(context);
 
-                          final fullName = await _sharedPrefService.getFullName() ?? "";
+                          final fullName =
+                              await _sharedPrefService.getFullName() ?? "";
+
                           try {
-                            final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+                            final provider =
+                            Provider.of<SalesOrderProvider>(context, listen: false);
                             final api = provider.apiService!;
                             final company = await _sharedPrefService.getCompany();
                             final party = customer.name!;
@@ -1048,41 +1112,89 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
 
                             if (report == null) return;
 
-                            final List<dynamic> originalRows = report["data"] as List<dynamic>;
+                            final List<dynamic> originalRows =
+                            report["data"] as List<dynamic>;
                             final filteredRows = originalRows.where((row) {
                               final age = (row["age"] ?? 0).toInt();
-                              return age >= minOverdueDays;
+                              return minOverdueDays <= 0 || age >= minOverdueDays;
                             }).toList();
-                            report["data"] = filteredRows;
 
                             final rangeLabel = buildRangeLabel(result.range);
-                            final letterheadContent = await api.fetchLetterHeadContent(context);
+                            final letterheadContent =
+                            await api.fetchLetterHeadContent(context);
 
-                            final html = buildAccountsReceivableHtml(
-                              report,
-                              party,
-                              postingDate,
-                              rangeLabel,
-                              company,
-                              fullName,
-                              letterheadContent,
-                              provider.domain,
-                            );
-
-                            final pdfBytes = await api.generatePdfFromHtml(context, html);
-
-                            if (pdfBytes != null) {
-                              await saveAndOpenPdf(
-                                pdfBytes,
-                                "Accounts_Receivable_${party}_$postingDate.pdf",
-                              );
-                            }
-                          } finally {
+                            // 👇 Close loading dialog before showing preview
                             Navigator.pop(context);
+
+                            // 👇 Show preview dialog
+                            await showDialog(
+                              context: context,
+                              barrierDismissible: true,
+                              builder: (_) => AccountsReceivablePreviewDialog(
+                                party: party,
+                                company: company,
+                                postingDate: postingDate,
+                                rangeLabel: rangeLabel,
+                                rows: filteredRows,
+                                fullName: fullName,
+                                onDownload: () async {
+                                  // 👇 PDF generation happens only when user taps Download
+                                  report["data"] = filteredRows;
+                                  final html = buildAccountsReceivableHtml(
+                                    report,
+                                    party,
+                                    postingDate,
+                                    rangeLabel,
+                                    company,
+                                    fullName,
+                                    letterheadContent,
+                                    provider.baseHost,
+                                  );
+                                  final pdfBytes =
+                                  await api.generatePdfFromHtml(context, html);
+                                  if (pdfBytes != null) {
+                                    await saveAndOpenPdf(
+                                      pdfBytes,
+                                      "Accounts_Receivable_${party}_$postingDate.pdf",
+                                    );
+                                  }
+                                },
+                              ),
+                            );
+                          } catch (e) {
+                            Navigator.pop(context); // close loading on error
+                            debugPrint('AR error: $e');
                           }
                         },
                       ),
+                      // 👇 NEW: Sales Order button
+                      _buildCompactActionButton(
+                        icon: Icons.shopping_cart_outlined,
+                        label: "SO",
+                        color: Colors.green,
+                        onPressed: () {
+                          // 👇 fallback to customer.name if customerName is null
+                          final displayName = (customer.customerName != null &&
+                              customer.customerName!.isNotEmpty)
+                              ? customer.customerName!
+                              : customer.name ?? '';
 
+                          debugPrint('SO button tapped');
+                          debugPrint('customer.name: ${customer.name}');
+                          debugPrint('customer.customerName: ${customer.customerName}');
+                          debugPrint('displayName resolved to: $displayName');
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SalesOrderPage(
+                                initialCustomerName: displayName,  // 👈 never null now
+                                initialCustomerId: customer.name,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                       _buildCompactActionButton(
                         icon: Icons.location_on,
                         label: "Map",
@@ -1278,16 +1390,30 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
     );
   }
 }
+Future<void> saveAndOpenPdf(List<int> pdfBytes, String fileName) async {
+  final dir = await getApplicationDocumentsDirectory();
+  final file = File("${dir.path}/$fileName.pdf");
+  await file.writeAsBytes(pdfBytes, flush: true);
+  await OpenFilex.open(file.path);
+}
+
 void _showPaymentCollectionDialog(BuildContext context, customer) {
   final TextEditingController amountController = TextEditingController();
   final TextEditingController remarksController = TextEditingController();
+  final TextEditingController chequeNoController = TextEditingController();
+  final TextEditingController beingController = TextEditingController();
+  final TextEditingController drawnOnController = TextEditingController();
   DateTime selectedDate = DateTime.now();
+  DateTime? chequeDate;
   String? selectedModeOfPayment;
   bool isSettled = false;
   bool isSubmitting = false;
   List<String> paymentModes = [];
   bool isLoadingModes = true;
-
+  int selectedTab = 0; // 0 = New Payment, 1 = History
+  List<Map<String, dynamic>> paymentHistory = [];
+  bool isLoadingHistory = false;
+  bool _historyFetchInitiated = false;
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -1308,18 +1434,45 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
               });
             });
           }
+// ✅ Only trigger once, not on every rebuild
+          if (selectedTab == 1 && !_historyFetchInitiated) {
+            _historyFetchInitiated = true;
+            isLoadingHistory = true;
 
+            Future.microtask(() {
+              Provider.of<SalesOrderProvider>(context, listen: false)
+                  .apiService!
+                  .fetchPaymentCollections(customerName: customer.name ?? '')
+                  .then((list) {
+                setStateSheet(() {
+                  paymentHistory = list;
+                  isLoadingHistory = false;
+                });
+              }).catchError((_) {
+                setStateSheet(() => isLoadingHistory = false);
+              });
+            });
+          }
           final displayDate = DateFormat('dd MMM yyyy').format(selectedDate);
           final apiDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+          final displayChequeDate = chequeDate != null
+              ? DateFormat('dd MMM yyyy').format(chequeDate!)
+              : "Select Date";
+          final apiChequeDate = chequeDate != null
+              ? DateFormat('yyyy-MM-dd').format(chequeDate!)
+              : null;
 
+// ✅ Show extra fields for any mode except Cash
+          final isCash = selectedModeOfPayment?.toLowerCase().trim() == 'cash';
+          final showExtraFields = selectedModeOfPayment != null && !isCash;
           return Padding(
             padding: EdgeInsets.only(
-                // bottom: MediaQuery.of(context).viewInsets.bottom),
               bottom: MediaQuery.of(context).viewInsets.bottom +
-              MediaQuery.of(context).padding.bottom,),
+                  MediaQuery.of(context).padding.bottom,
+            ),
             child: Container(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.88,
+                maxHeight: MediaQuery.of(context).size.height * 0.92,
               ),
               decoration: const BoxDecoration(
                 color: Colors.white,
@@ -1329,7 +1482,7 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
                 mainAxisSize: MainAxisSize.min,
                 children: [
 
-                  // ── Drag handle ────────────────────────────────────────
+                  // ── Drag handle ──────────────────────────────────────
                   Container(
                     margin: const EdgeInsets.only(top: 10, bottom: 2),
                     width: 36,
@@ -1340,7 +1493,7 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
                     ),
                   ),
 
-                  // ── Header ─────────────────────────────────────────────
+                  // ── Header ──────────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                     child: Row(
@@ -1428,10 +1581,38 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
                     padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Divider(height: 1, thickness: 0.8),
                   ),
-
-                  // ── Scrollable form ────────────────────────────────────
+// ── Tab Bar ─────────────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildTab(
+                            label: "New Payment",
+                            icon: Icons.add_circle_outline_rounded,
+                            selected: selectedTab == 0,
+                            onTap: () => setStateSheet(() => selectedTab = 0),
+                          ),
+                          _buildTab(
+                            label: "History",
+                            icon: Icons.history_rounded,
+                            selected: selectedTab == 1,
+                            onTap: () => setStateSheet(() => selectedTab = 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // ── Scrollable form ──────────────────────────────────
                   Flexible(
-                    child: SingleChildScrollView(
+                    child: selectedTab == 0
+
+                    // ── your existing form — completely unchanged ─────────
+                        ? SingleChildScrollView(
                       physics: const ClampingScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                       child: Column(
@@ -1465,6 +1646,178 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
 
                           const SizedBox(height: 12),
 
+                          // Being
+                          _buildCompactLabel("Being"),
+                          const SizedBox(height: 5),
+                          _buildInputField(
+                            controller: beingController,
+                            hint: "Purpose of payment...",
+                            icon: Icons.description_outlined,
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // // ✅ Cheque fields — shown only for cheque mode
+                          // if (isChequeMode) ...[
+                          //
+                          //   // Cheque No
+                          //   _buildCompactLabel("Cheque No"),
+                          //   const SizedBox(height: 5),
+                          //   _buildInputField(
+                          //     controller: chequeNoController,
+                          //     hint: "Enter cheque number",
+                          //     icon: Icons.confirmation_number_outlined,
+                          //     keyboardType: TextInputType.number,
+                          //   ),
+                          //
+                          //   const SizedBox(height: 12),
+                          //
+                          //   // Cheque Date
+                          //   _buildCompactLabel("Cheque Date"),
+                          //   const SizedBox(height: 5),
+                          //   GestureDetector(
+                          //     onTap: () async {
+                          //       final picked = await showDatePicker(
+                          //         context: context,
+                          //         initialDate: chequeDate ?? DateTime.now(),
+                          //         firstDate: DateTime(2020),
+                          //         lastDate: DateTime(2100),
+                          //         builder: (ctx, child) => Theme(
+                          //           data: Theme.of(ctx).copyWith(
+                          //             colorScheme: ColorScheme.light(
+                          //                 primary: AppColors.primaryColor),
+                          //           ),
+                          //           child: child!,
+                          //         ),
+                          //       );
+                          //       if (picked != null) {
+                          //         setStateSheet(() => chequeDate = picked);
+                          //       }
+                          //     },
+                          //     child: Container(
+                          //       padding: const EdgeInsets.symmetric(
+                          //           horizontal: 12, vertical: 13),
+                          //       decoration: BoxDecoration(
+                          //         color: Colors.grey[50],
+                          //         borderRadius: BorderRadius.circular(10),
+                          //         border:
+                          //         Border.all(color: Colors.grey.shade200),
+                          //       ),
+                          //       child: Row(
+                          //         children: [
+                          //           Icon(Icons.calendar_month_outlined,
+                          //               size: 18, color: Colors.grey[500]),
+                          //           const SizedBox(width: 10),
+                          //           Text(
+                          //             displayChequeDate,
+                          //             style: TextStyle(
+                          //               fontSize: 13,
+                          //               color: chequeDate != null
+                          //                   ? Colors.black87
+                          //                   : Colors.grey[400],
+                          //             ),
+                          //           ),
+                          //           const Spacer(),
+                          //           Icon(Icons.edit_outlined,
+                          //               size: 14, color: Colors.grey[400]),
+                          //         ],
+                          //       ),
+                          //     ),
+                          //   ),
+                          //
+                          //   const SizedBox(height: 12),
+                          //
+                          //   // Drawn On (Bank name)
+                          //   _buildCompactLabel("Drawn On"),
+                          //   const SizedBox(height: 5),
+                          //   _buildInputField(
+                          //     controller: drawnOnController,
+                          //     hint: "Bank name...",
+                          //     icon: Icons.account_balance_outlined,
+                          //   ),
+                          //
+                          //   const SizedBox(height: 12),
+                          // ],
+// ✅ Cheque/Other payment fields — hidden only for Cash
+                          if (showExtraFields) ...[
+
+                            // Cheque/Reference No
+                            _buildCompactLabel("Cheque/Reference No"),
+                            const SizedBox(height: 5),
+                            _buildInputField(
+                              controller: chequeNoController,
+                              hint: "Enter cheque/reference number",
+                              icon: Icons.confirmation_number_outlined,
+                              keyboardType: TextInputType.text,
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Cheque/Transaction Date
+                            _buildCompactLabel("Cheque/Transaction Date"),
+                            const SizedBox(height: 5),
+                            GestureDetector(
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: chequeDate ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2100),
+                                  builder: (ctx, child) => Theme(
+                                    data: Theme.of(ctx).copyWith(
+                                      colorScheme: ColorScheme.light(
+                                          primary: AppColors.primaryColor),
+                                    ),
+                                    child: child!,
+                                  ),
+                                );
+                                if (picked != null) {
+                                  setStateSheet(() => chequeDate = picked);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 13),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.calendar_month_outlined,
+                                        size: 18, color: Colors.grey[500]),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      displayChequeDate,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: chequeDate != null
+                                            ? Colors.black87
+                                            : Colors.grey[400],
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Icon(Icons.edit_outlined,
+                                        size: 14, color: Colors.grey[400]),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Drawn On (Bank name)
+                            _buildCompactLabel("Drawn On"),
+                            const SizedBox(height: 5),
+                            _buildInputField(
+                              controller: drawnOnController,
+                              hint: "Bank name...",
+                              icon: Icons.account_balance_outlined,
+                            ),
+
+                            const SizedBox(height: 12),
+                          ],
                           // Remarks
                           _buildCompactLabel("Remarks (Optional)"),
                           const SizedBox(height: 5),
@@ -1475,7 +1828,6 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
                             maxLines: 2,
                           ),
 
-                          const SizedBox(height: 12),
                           const SizedBox(height: 16),
 
                           // Action buttons
@@ -1491,8 +1843,8 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
                                     shape: RoundedRectangleBorder(
                                         borderRadius:
                                         BorderRadius.circular(10)),
-                                    side: BorderSide(
-                                        color: Colors.grey.shade300),
+                                    side:
+                                    BorderSide(color: Colors.grey.shade300),
                                   ),
                                   child: const Text("Cancel",
                                       style: TextStyle(
@@ -1505,48 +1857,201 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
                               Expanded(
                                 flex: 2,
                                 child: ElevatedButton(
+                                  // onPressed: isSubmitting
+                                  //     ? null
+                                  //     : () async {
+                                  //   final amount = double.tryParse(
+                                  //       amountController.text);
+                                  //   if (amount == null || amount <= 0) {
+                                  //     Fluttertoast.showToast(
+                                  //         msg: "Enter a valid amount");
+                                  //     return;
+                                  //   }
+                                  //   if (selectedModeOfPayment == null) {
+                                  //     Fluttertoast.showToast(
+                                  //         msg: "Select payment mode");
+                                  //     return;
+                                  //   }
+                                  //   // ✅ Validate cheque fields if cheque mode
+                                  //   if (isChequeMode &&
+                                  //       chequeNoController.text
+                                  //           .trim()
+                                  //           .isEmpty) {
+                                  //     Fluttertoast.showToast(
+                                  //         msg: "Enter cheque number");
+                                  //     return;
+                                  //   }
+                                  //
+                                  //   setStateSheet(
+                                  //           () => isSubmitting = true);
+                                  //
+                                  //   final provider =
+                                  //   Provider.of<SalesOrderProvider>(
+                                  //       context,
+                                  //       listen: false);
+                                  //
+                                  //   // ✅ Build payload with conditional cheque fields
+                                  //   final payload = {
+                                  //     "docstatus": 1,
+                                  //     "customer": customer.name,
+                                  //     "mode_of_payment":
+                                  //     selectedModeOfPayment,
+                                  //     "date": apiDate,
+                                  //     "amount": amount,
+                                  //     "is_settled": isSettled ? 1 : 0,
+                                  //     "remarks":
+                                  //     remarksController.text.trim(),
+                                  //     "being": beingController.text.trim(),
+                                  //     if (isChequeMode) ...{
+                                  //       "cash_cheque_no":
+                                  //       chequeNoController.text.trim(),
+                                  //       if (apiChequeDate != null)
+                                  //         "cheque_date": apiChequeDate,
+                                  //       "drawn_on":
+                                  //       drawnOnController.text.trim(),
+                                  //     },
+                                  //   };
+                                  //
+                                  //   final docName = await provider
+                                  //       .createPaymentCollection(
+                                  //       payload, context);
+                                  // onPressed: isSubmitting
+                                  //     ? null
+                                  //     : () async {
+                                  //   final amount = double.tryParse(amountController.text);
+                                  //   if (amount == null || amount <= 0) {
+                                  //     Fluttertoast.showToast(msg: "Enter a valid amount");
+                                  //     return;
+                                  //   }
+                                  //   if (selectedModeOfPayment == null) {
+                                  //     Fluttertoast.showToast(msg: "Select payment mode");
+                                  //     return;
+                                  //   }
+                                  //   // ✅ Validate extra fields if not cash
+                                  //   if (showExtraFields &&
+                                  //       chequeNoController.text.trim().isEmpty) {
+                                  //     Fluttertoast.showToast(msg: "Enter cheque/reference number");
+                                  //     return;
+                                  //   }
+                                  //
+                                  //   setStateSheet(() => isSubmitting = true);
+                                  //
+                                  //   final provider = Provider.of<SalesOrderProvider>(
+                                  //       context, listen: false);
+                                  //
+                                  //   // ✅ Build payload — extra fields only when not cash
+                                  //   final payload = {
+                                  //     "docstatus": 1,
+                                  //     "customer": customer.name,
+                                  //     "mode_of_payment": selectedModeOfPayment,
+                                  //     "date": apiDate,
+                                  //     "amount": amount,
+                                  //     "is_settled": isSettled ? 1 : 0,
+                                  //     "remarks": remarksController.text.trim(),
+                                  //     "being": beingController.text.trim(),
+                                  //     if (showExtraFields) ...{
+                                  //       "cash_cheque_no": chequeNoController.text.trim(),
+                                  //       if (apiChequeDate != null) "cheque_date": apiChequeDate,
+                                  //       "drawn_on": drawnOnController.text.trim(),
+                                  //     },
+                                  //   };
+                                  //
+                                  //   final docName = await provider.createPaymentCollection(payload, context);
+                                  //
+                                  //   setStateSheet(
+                                  //           () => isSubmitting = false);
+                                  //   Navigator.of(sheetContext).pop();
+                                  //
+                                  //   if (docName != null) {
+                                  //     Fluttertoast.showToast(
+                                  //         msg:
+                                  //         "Payment collected! Downloading PDF...");
+                                  //
+                                  //     final pdfBytes = await provider
+                                  //         .apiService!
+                                  //         .downloadPaymentCollectionPdf(
+                                  //       docName: docName,
+                                  //       context: context,
+                                  //     );
+                                  //
+                                  //     if (pdfBytes != null) {
+                                  //       try {
+                                  //         final dir =
+                                  //         await getApplicationDocumentsDirectory();
+                                  //         final safeFileName =
+                                  //             "Payment_Collection_${docName.replaceAll('/', '_')}.pdf";
+                                  //         final file = File(
+                                  //             "${dir.path}/$safeFileName");
+                                  //         await file.writeAsBytes(pdfBytes,
+                                  //             flush: true);
+                                  //         await OpenFilex.open(file.path);
+                                  //       } catch (e) {
+                                  //         debugPrint(
+                                  //             "Error saving PDF: $e");
+                                  //         Fluttertoast.showToast(
+                                  //             msg: "Failed to open PDF");
+                                  //       }
+                                  //     } else {
+                                  //       Fluttertoast.showToast(
+                                  //           msg:
+                                  //           "Failed to download PDF");
+                                  //     }
+                                  //   } else {
+                                  //     Fluttertoast.showToast(
+                                  //         msg:
+                                  //         "Failed to create payment");
+                                  //   }
+                                  // },
                                   onPressed: isSubmitting
                                       ? null
                                       : () async {
-                                    final amount = double.tryParse(
-                                        amountController.text);
+                                    final amount = double.tryParse(amountController.text);
                                     if (amount == null || amount <= 0) {
-                                      Fluttertoast.showToast(
-                                          msg: "Enter a valid amount");
+                                      Fluttertoast.showToast(msg: "Enter a valid amount");
                                       return;
                                     }
                                     if (selectedModeOfPayment == null) {
-                                      Fluttertoast.showToast(
-                                          msg: "Select payment mode");
+                                      Fluttertoast.showToast(msg: "Select payment mode");
                                       return;
                                     }
-                                    setStateSheet(
-                                            () => isSubmitting = true);
-                                    final provider =
-                                    Provider.of<SalesOrderProvider>(
-                                        context,
-                                        listen: false);
-                                    final success = await provider
-                                        .createPaymentCollection(
-                                      {
-                                        "docstatus": 1,
-                                        "customer": customer.name,
-                                        "mode_of_payment":
-                                        selectedModeOfPayment,
-                                        "date": apiDate,
-                                        "amount": amount,
-                                        "is_settled": isSettled ? 1 : 0,
-                                        "remarks":
-                                        remarksController.text.trim(),
+                                    // ✅ Validate extra fields if not cash
+                                    if (showExtraFields &&
+                                        chequeNoController.text.trim().isEmpty) {
+                                      Fluttertoast.showToast(msg: "Enter cheque/reference number");
+                                      return;
+                                    }
+
+                                    setStateSheet(() => isSubmitting = true);
+
+                                    final provider = Provider.of<SalesOrderProvider>(
+                                        context, listen: false);
+
+                                    // ✅ Build payload — extra fields only when not cash
+                                    final payload = {
+                                      "docstatus": 1,
+                                      "customer": customer.name,
+                                      "mode_of_payment": selectedModeOfPayment,
+                                      "date": apiDate,
+                                      "amount": amount,
+                                      "is_settled": isSettled ? 1 : 0,
+                                      "remarks": remarksController.text.trim(),
+                                      "being": beingController.text.trim(),
+                                      if (showExtraFields) ...{
+                                        "cash_cheque_no": chequeNoController.text.trim(),
+                                        if (apiChequeDate != null) "cheque_date": apiChequeDate,
+                                        "drawn_on": drawnOnController.text.trim(),
                                       },
-                                      context,
-                                    );
-                                    setStateSheet(
-                                            () => isSubmitting = false);
+                                    };
+
+                                    final docName = await provider.createPaymentCollection(payload, context);
+
+                                    setStateSheet(() => isSubmitting = false);
                                     Navigator.of(sheetContext).pop();
+
+                                    // ✅ Simple success/failure message — no PDF download
                                     Fluttertoast.showToast(
-                                      msg: success
-                                          ? "Payment collected successfully!"
+                                      msg: docName != null
+                                          ? "Payment collection created successfully"
                                           : "Failed to create payment",
                                     );
                                   },
@@ -1587,9 +2092,175 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
 
                           const SizedBox(height: 8),
                         ],
+                      ),)
+                    // ── History tab ──────────────────────────────────────
+                        : isLoadingHistory
+                        ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32),
+                        child: CircularProgressIndicator(),
                       ),
+                    )
+                        : paymentHistory.isEmpty
+                        ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.receipt_long_outlined,
+                                size: 40, color: Colors.grey[300]),
+                            const SizedBox(height: 10),
+                            Text(
+                              "No payment collections found",
+                              style: TextStyle(
+                                  color: Colors.grey[500], fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                        : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                      itemCount: paymentHistory.length,
+                      itemBuilder: (context, index) {
+                        final payment = paymentHistory[index];
+                        final date = payment['date'] ?? '';
+                        final amount = payment['amount'] ?? 0.0;
+                        final mode = payment['mode_of_payment'] ?? '';
+                        final name = payment['name'] ?? '';
+                        final docStatus = (payment['docstatus'] ?? 0) as int;                        final remarks = payment['remarks'] ?? '';
+                        final being = payment['being'] ?? '';
+
+                        String displayPaymentDate = date;
+                        try {
+                          displayPaymentDate = DateFormat('dd MMM yyyy')
+                              .format(DateTime.parse(date));
+                        } catch (_) {}
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade200),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Name + settled badge
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: _getDocStatusColor(docStatus).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      _getDocStatusLabel(docStatus),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: _getDocStatusColor(docStatus),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              // Amount + mode + date
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  // Amount
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.currency_rupee_rounded,
+                                          size: 13, color: Colors.green[600]),
+                                      Text(
+                                        amount.toStringAsFixed(2),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  // Mode
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(_getPaymentModeIcon(mode),
+                                          size: 13, color: Colors.grey[500]),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        mode,
+                                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                      ),
+                                    ],
+                                  ),
+                                  // Date
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.calendar_today_outlined,
+                                          size: 12, color: Colors.grey[400]),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        displayPaymentDate,
+                                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              if (being.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(being,
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.grey[600]),
+                                    overflow: TextOverflow.ellipsis),
+                              ],
+                              if (remarks.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(remarks,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[400],
+                                        fontStyle: FontStyle.italic),
+                                    overflow: TextOverflow.ellipsis),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
+
+
                 ],
               ),
             ),
@@ -1597,6 +2268,75 @@ void _showPaymentCollectionDialog(BuildContext context, customer) {
         },
       );
     },
+  );
+}
+String _getDocStatusLabel(int docStatus) {
+  switch (docStatus) {
+    case 1:
+      return "Submitted";
+    case 2:
+      return "Cancelled";
+    default:
+      return "Draft";
+  }
+}
+
+Color _getDocStatusColor(int docStatus) {
+  switch (docStatus) {
+    case 1:
+      return Colors.green;
+    case 2:
+      return Colors.red;
+    default:
+      return Colors.orange;
+  }
+}
+Widget _buildTab({
+  required String label,
+  required IconData icon,
+  required bool selected,
+  required VoidCallback onTap,
+}) {
+  return Expanded(
+    child: GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.all(4),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: selected
+              ? [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            )
+          ]
+              : [],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: selected ? AppColors.primaryColor : Colors.grey),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight:
+                selected ? FontWeight.w600 : FontWeight.normal,
+                color: selected ? AppColors.primaryColor : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 }
 Widget _buildCompactLabel(String label) {
@@ -1666,6 +2406,44 @@ Widget _buildInputField({
   );
 }
 
+// Widget _buildDropdownField({
+//   required String? value,
+//   required List<String> items,
+//   required IconData icon,
+//   required ValueChanged<String?> onChanged,
+// }) {
+//   return Container(
+//     padding: const EdgeInsets.symmetric(horizontal: 10),
+//     decoration: BoxDecoration(
+//       color: Colors.grey[50],
+//       borderRadius: BorderRadius.circular(10),
+//       border: Border.all(color: Colors.grey.shade200),
+//     ),
+//     child: DropdownButtonHideUnderline(
+//       child: DropdownButton<String>(
+//         value: value,
+//         isExpanded: true,
+//         icon: Icon(Icons.keyboard_arrow_down_rounded,
+//             color: AppColors.primaryColor, size: 20),
+//         style: const TextStyle(fontSize: 13, color: Colors.black87),
+//         items: items.map((mode) {
+//           return DropdownMenuItem(
+//             value: mode,
+//             child: Row(
+//               children: [
+//                 Icon(_getPaymentModeIcon(mode),
+//                     size: 16, color: AppColors.primaryColor),
+//                 const SizedBox(width: 8),
+//                 Text(mode),
+//               ],
+//             ),
+//           );
+//         }).toList(),
+//         onChanged: onChanged,
+//       ),
+//     ),
+//   );
+// }
 Widget _buildDropdownField({
   required String? value,
   required List<String> items,
@@ -1673,7 +2451,7 @@ Widget _buildDropdownField({
   required ValueChanged<String?> onChanged,
 }) {
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 10), // ✅ reduced from 14 to give more room
     decoration: BoxDecoration(
       color: Colors.grey[50],
       borderRadius: BorderRadius.circular(10),
@@ -1686,15 +2464,43 @@ Widget _buildDropdownField({
         icon: Icon(Icons.keyboard_arrow_down_rounded,
             color: AppColors.primaryColor, size: 20),
         style: const TextStyle(fontSize: 13, color: Colors.black87),
+        // ✅ selectedItemBuilder controls what shows in the closed field
+        selectedItemBuilder: (context) {
+          return items.map((mode) {
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_getPaymentModeIcon(mode),
+                      size: 16, color: AppColors.primaryColor),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      mode,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList();
+        },
         items: items.map((mode) {
           return DropdownMenuItem(
             value: mode,
             child: Row(
+              mainAxisSize: MainAxisSize.min, // ✅ prevent row from expanding beyond content
               children: [
                 Icon(_getPaymentModeIcon(mode),
                     size: 16, color: AppColors.primaryColor),
                 const SizedBox(width: 8),
-                Text(mode),
+                Flexible(  // ✅ allow text to shrink instead of overflowing
+                  child: Text(
+                    mode,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           );
@@ -2547,6 +3353,409 @@ class _InvoiceListDialogState extends State<_InvoiceListDialog> {
           ),
         );
       },
+    );
+  }
+}
+
+class AccountsReceivablePreviewDialog extends StatefulWidget {
+  final String party;
+  final String company;
+  final String postingDate;
+  final String rangeLabel;
+  final List<dynamic> rows;
+  final String fullName;
+  final Future<void> Function() onDownload;
+
+  const AccountsReceivablePreviewDialog({
+    super.key,
+    required this.party,
+    required this.company,
+    required this.postingDate,
+    required this.rangeLabel,
+    required this.rows,
+    required this.fullName,
+    required this.onDownload,
+  });
+
+  @override
+  State<AccountsReceivablePreviewDialog> createState() =>
+      _AccountsReceivablePreviewDialogState();
+}
+
+class _AccountsReceivablePreviewDialogState
+    extends State<AccountsReceivablePreviewDialog> {
+  bool _isDownloading = false;
+
+  double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    return double.tryParse(value.toString()) ?? 0.0;
+  }
+
+  String _formatCurrency(dynamic value) {
+    return '₹${_toDouble(value).toStringAsFixed(2)}';
+  }
+
+  Color _ageColor(int age) {
+    if (age <= 30) return Colors.green;
+    if (age <= 60) return Colors.orange;
+    if (age <= 90) return Colors.deepOrange;
+    return Colors.red;
+  }
+  String _formatDate(String date) {
+    if (date.isEmpty) return '—';
+    try {
+      final parsed = DateTime.parse(date);
+      return "${parsed.day.toString().padLeft(2, '0')}-"
+          "${parsed.month.toString().padLeft(2, '0')}-"
+          "${parsed.year}";
+    } catch (_) {
+      return date;
+    }
+  }
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.rows.fold<double>(
+      0.0,
+          (sum, row) => sum + _toDouble(
+        row['outstanding_amount'] ?? row['outstanding'] ?? 0,
+      ),
+    );
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      insetPadding:
+      const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Header ──────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.06),
+              borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(14)),
+              border: Border(
+                bottom:
+                BorderSide(color: Colors.red.withOpacity(0.15)),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf,
+                    color: Colors.red, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Accounts Receivable',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.party,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      // Summary chips row
+                      Row(
+                        children: [
+                          _buildHeaderChip(
+                            'Date: ${_formatDate(widget.postingDate)}', // 👈 wrap with _formatDate
+                            Icons.calendar_today,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildHeaderChip(
+                            '${widget.rows.length} invoice${widget.rows.length == 1 ? '' : 's'}',
+                            Icons.receipt_long,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                  color: Colors.grey.shade600,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Invoice rows ─────────────────────────────────
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.50,
+            ),
+            child: widget.rows.isEmpty
+                ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_outline,
+                      color: Colors.green.shade400, size: 36),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No outstanding invoices',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            )
+                : ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              itemCount: widget.rows.length,
+              separatorBuilder: (_, __) => Divider(
+                  height: 1, color: Colors.grey.shade100),
+              itemBuilder: (context, index) {
+                final row = widget.rows[index];
+                final age = (row['age'] ?? 0).toInt();
+                final voucher =
+                    row['voucher_no']?.toString() ?? '—';
+                final outstanding =
+                _toDouble(row['outstanding_amount'] ?? row['outstanding'] ?? 0);
+
+                final invoiceDate = _formatDate(row['posting_date']?.toString() ?? '');
+                final dueDate = _formatDate(row['due_date']?.toString() ?? '');
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Invoice number + age badge
+                      Row(
+                        mainAxisAlignment:
+                        MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                  Icons.description_outlined,
+                                  color: Colors.red,
+                                  size: 15),
+                              const SizedBox(width: 6),
+                              Text(
+                                voucher,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Age badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _ageColor(age)
+                                  .withOpacity(0.12),
+                              borderRadius:
+                              BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _ageColor(age)
+                                    .withOpacity(0.4),
+                              ),
+                            ),
+                            child: Text(
+                              '$age days',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: _ageColor(age),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      // Dates row
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today,
+                              size: 11, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Invoiced: $invoiceDate',
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey),
+                          ),
+                          const SizedBox(width: 10),
+                          const Icon(Icons.event,
+                              size: 11, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Due: $dueDate',
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      // Outstanding amount
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          _formatCurrency(outstanding),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // ── Total + actions ──────────────────────────────
+          Container(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius:
+              const BorderRadius.vertical(bottom: Radius.circular(14)),
+              border: Border(
+                top: BorderSide(color: Colors.grey.shade200),
+              ),
+            ),
+            child: Column(
+              children: [
+                // Total outstanding
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total outstanding',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      _formatCurrency(total),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Close'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _isDownloading
+                            ? null
+                            : () async {
+                          setState(
+                                  () => _isDownloading = true);
+                          try {
+                            await widget.onDownload();
+                            if (mounted) Navigator.pop(context);
+                          } finally {
+                            if (mounted) {
+                              setState(() =>
+                              _isDownloading = false);
+                            }
+                          }
+                        },
+                        icon: _isDownloading
+                            ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                            : const Icon(Icons.download, size: 16),
+                        label: Text(
+                            _isDownloading ? 'Generating…' : 'Download PDF'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderChip(String label, IconData icon) {
+    return Container(
+      padding:
+      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: Colors.red),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+                fontSize: 11,
+                color: Colors.red,
+                fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
     );
   }
 }

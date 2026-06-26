@@ -12,106 +12,6 @@ class EstimateTabScreen extends StatefulWidget {
   State<EstimateTabScreen> createState() => _EstimateTabScreenState();
 }
 
-// class _EstimateTabScreenState extends State<EstimateTabScreen>
-//     with SingleTickerProviderStateMixin {
-//   late TabController _tabController;
-//   DateTime _fromDate = DateTime.now();
-//   DateTime _toDate = DateTime.now();
-//   // static const _primary = Color(0xFF1565C0);
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     _tabController = TabController(length: 2, vsync: this);
-//     _tabController.addListener(() {
-//       if (_tabController.index == 1 && !_tabController.indexIsChanging) {
-//         context.read<SalesOrderProvider>().fetchEstimateList(
-//           fromDate: _fromDate,
-//           toDate: _toDate,
-//         );
-//       }
-//     });
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       context.read<SalesOrderProvider>().fetchEstimateList(
-//         fromDate: _fromDate,
-//         toDate: _toDate,
-//       );
-//     });
-//   }
-//
-//   @override
-//   void dispose() {
-//     _tabController.dispose();
-//     super.dispose();
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: const Color(0xFFF8FAFB),
-//       appBar: AppBar(
-//         backgroundColor: AppColors.primaryColor,
-//         foregroundColor: Colors.white,
-//         elevation: 0,
-//         title: const Text(
-//           'Estimates',
-//           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-//         ),
-//         bottom: TabBar(
-//           controller: _tabController,
-//           indicatorColor: Colors.white,
-//           indicatorWeight: 3,
-//           labelColor: Colors.white,
-//           unselectedLabelColor: Colors.white60,
-//           labelStyle:
-//           const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-//           unselectedLabelStyle:
-//           const TextStyle(fontWeight: FontWeight.w400, fontSize: 13),
-//           tabs: const [
-//             Tab(icon: Icon(Icons.add_circle_outline, size: 18), text: 'Create'),
-//             Tab(icon: Icon(Icons.list_alt_outlined, size: 18), text: 'My Estimates'),
-//           ],
-//         ),
-//       ),
-//       body: TabBarView(
-//         controller: _tabController,
-//         physics: const NeverScrollableScrollPhysics(),
-//         children: [
-//           CreateEstimateScreen(
-//             showAppBar: false,
-//             onSubmitSuccess: () {
-//               // ✅ Switch to list tab and refresh
-//               _tabController.animateTo(1);
-//               context.read<SalesOrderProvider>().fetchEstimateList(
-//                 fromDate: _fromDate,
-//                 toDate: _toDate,
-//               );
-//             },
-//           ),
-//           _EstimateListTab(
-//             onCreateTap: () => _tabController.animateTo(0),
-//             fromDate: _fromDate,
-//             toDate: _toDate,
-//             onFromDateChanged: (date) {
-//               setState(() => _fromDate = date);
-//               context.read<SalesOrderProvider>().fetchEstimateList(
-//                 fromDate: date,
-//                 toDate: _toDate,
-//               );
-//             },
-//             onToDateChanged: (date) {
-//               setState(() => _toDate = date);
-//               context.read<SalesOrderProvider>().fetchEstimateList(
-//                 fromDate: _fromDate,
-//                 toDate: date,
-//               );
-//             },
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
 class _EstimateTabScreenState extends State<EstimateTabScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
@@ -485,6 +385,7 @@ class _EstimateCard extends StatelessWidget {
     required this.fromDate,   // ← add
     required this.toDate,     // ← add
   });
+
   @override
   Widget build(BuildContext context) {
     final docstatus = estimate["docstatus"] ?? 0;
@@ -596,33 +497,6 @@ class _EstimateCard extends StatelessWidget {
 
             Divider(height: 1, color: _divider),
 
-            // ── Details grid (unchanged) ──────────────────────
-            // Padding(
-            //   padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            //   child: Column(
-            //     children: [
-            //       Row(
-            //         children: [
-            //           _infoChip(Icons.inventory_2_outlined,
-            //               estimate["item_name"] ?? estimate["item_code"] ?? '—'),
-            //           const SizedBox(width: 8),
-            //           _infoChip(Icons.phone_outlined,
-            //               estimate["contact"] ?? '—'),
-            //         ],
-            //       ),
-            //       const SizedBox(height: 8),
-            //       Row(
-            //         children: [
-            //           _infoChip(Icons.event_available_outlined,
-            //               'Valid: ${_formatDate(estimate["valid_till"] ?? '')}'),
-            //           const SizedBox(width: 8),
-            //           _infoChip(Icons.percent_rounded,
-            //               'GST ${estimate["gst_perc"] ?? 0}%'),
-            //         ],
-            //       ),
-            //     ],
-            //   ),
-            // ),
 // ── Details grid ─────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -679,16 +553,17 @@ class _EstimateCard extends StatelessWidget {
                         child: _detailRow(
                           icon: Icons.currency_rupee_rounded,
                           label: 'Rate',
-                          value: '₹ ${double.tryParse(estimate["rate"]?.toString() ?? '0') ?? 0.0}',                        ),
+                          // value: '₹ ${double.tryParse(estimate["rate"]?.toString() ?? '0') ?? 0.0}',
+                          value: estimate["rate"].toString(),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _detailRow(
                           icon: Icons.calculate_outlined,
                           label: 'GST Amt',
-                          // value: '₹ ${(estimate["gst_amount"] ?? 0.0).toDouble().toStringAsFixed(2)}',
-                          value: '₹ ${double.tryParse(estimate["gst_amount"]?.toString() ?? '0') ?? 0.0}',
-
+                          // value: '₹ ${double.tryParse(estimate["gst_amount"]?.toString() ?? '0') ?? 0.0}',
+                          value: estimate["gst_amount"].toString(),
                         ),
                       ),
                     ],

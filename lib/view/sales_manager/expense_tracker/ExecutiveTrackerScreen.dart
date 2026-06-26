@@ -50,85 +50,20 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
   DateTime? endTime;
   double? endLat;
   double? endLong;
-
+  Timer? _midnightTimer;
   // --- Bottom navigation screens ---
   final List<Widget> pages = [];
-
+  String? _vehicleType;
   List<TextEditingController> distanceControllers = [];
 
   double? _startOdometer;
   double? _endOdometer;
+  int _activeTab = 0;
 
   @override
   void initState() {
     super.initState();
 
-//     WidgetsBinding.instance.addPostFrameCallback((_) async {
-//       Provider.of<SalesOrderProvider>(context, listen: false)
-//           .fetchTodaySiteVisits();
-//       final provider =
-//       Provider.of<SalesOrderProvider>(context, listen: false);
-//
-//       if (widget.isEditMode && widget.eemData != null) {
-//         _restoreFromEEM(provider, widget.eemData!);
-//       } else {
-//         provider.restoreTrackingState(context);
-//         _addExpenseRow();
-//
-//         // ── Restore unsubmitted EEM if exists ──────────────
-//         final savedExpenses = await provider.restoreUnsubmittedEEM();
-//
-//         if (savedExpenses != null) {
-//           // ── Always restore odometer regardless of expenses ──
-//           final eem = await provider.apiService
-//               ?.fetchLatestUnsubmittedEEM(provider.eemEmployee!);
-//
-//           if (eem != null) {
-//             setState(() {
-//               // Restore start odometer
-// // Restore start odometer
-//               final startRaw = eem["start_odometerkm"]?.toString() ?? "";
-//               final startParsed = startRaw.isNotEmpty ? double.tryParse(startRaw) : null;
-// // Treat 0.0 as not set
-//               _startOdometer = (startParsed != null && startParsed > 0) ? startParsed : null;
-//
-//               // Restore end odometer
-// // Restore end odometer
-//               final endRaw = eem["end_odometerkm"]?.toString() ?? "";
-//               final endParsed = endRaw.isNotEmpty ? double.tryParse(endRaw) : null;
-// // Treat 0.0 as not set
-//               _endOdometer = (endParsed != null && endParsed > 0) ? endParsed : null;
-//             });
-//           }
-//
-//           // ── Restore expense rows if any ─────────────────────
-//           if (savedExpenses.isNotEmpty) {
-//             setState(() {
-//               expenseRows.clear();
-//               for (final e in savedExpenses) {
-//                 expenseRows.add({
-//                   "name": e["name"],
-//                   "type": TextEditingController(
-//                       text: e["expense_type"] ?? ""),
-//                   "amount": TextEditingController(
-//                       text: e["amount"]?.toString() ?? ""),
-//                   "attachment": e["attachment"],
-//                   "attachmentFile": null,
-//                 });
-//               }
-//               // Always keep one empty row at the end
-//               expenseRows.add({
-//                 "name": null,
-//                 "type": TextEditingController(),
-//                 "amount": TextEditingController(),
-//                 "attachment": null,
-//                 "attachmentFile": null,
-//               });
-//             });
-//           }
-//         }
-//       }
-//     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider =
       Provider.of<SalesOrderProvider>(context, listen: false);
@@ -138,6 +73,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
         // Site visits are restored inside _restoreFromEEM
         _restoreFromEEM(provider, widget.eemData!);
       } else {
+        provider.clearEEMState();
+
         // Normal mode — fetch today's site visits
         provider.fetchTodaySiteVisits();
         provider.restoreTrackingState(context);
@@ -159,6 +96,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
               _startOdometer = (startParsed != null && startParsed > 0)
                   ? startParsed
                   : null;
+              _vehicleType = eem["vehicle_type"]?.toString();
 
               final endRaw =
                   eem["end_odometerkm"]?.toString() ?? "";
@@ -179,6 +117,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                       text: e["expense_type"] ?? ""),
                   "amount": TextEditingController(
                       text: e["amount"]?.toString() ?? ""),
+                  "description": TextEditingController(
+                      text: e["description"] ?? ""),
                   "attachment": e["attachment"],
                   "attachmentFile": null,
                 });
@@ -187,6 +127,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                 "name": null,
                 "type": TextEditingController(),
                 "amount": TextEditingController(),
+                "description": TextEditingController(),
                 "attachment": null,
                 "attachmentFile": null,
               });
@@ -203,53 +144,13 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
     ]);
 
     _addExpenseRow();
+    _scheduleMidnightReset();
+
   }
   @override
   void dispose() {
     super.dispose();
   }
-
-  // void _restoreFromEEM(
-  //     SalesOrderProvider provider,
-  //     Map<String, dynamic> eem,
-  //     ) {
-  //   /// Store EEM meta
-  //   eemName = eem["name"]?.toString();
-  //   eemDate = DateTime.tryParse(eem["date"] ?? "");
-  //
-  //   /// Restore times
-  //   startTime = DateTime.tryParse(eem["start_time"] ?? "");
-  //   endTime = DateTime.tryParse(eem["end_time"] ?? "");
-  //
-  //   /// Restore site visits
-  //   provider.setSiteVisits(
-  //     List<Map<String, dynamic>>.from(
-  //       eem["employee_site_tracking"] ?? [],
-  //     ),
-  //   );
-  //
-  //   /// Restore expenses
-  //   expenseRows.clear();
-  //   for (final e in (eem["employee_expense_tracking"] ?? [])) {
-  //     expenseRows.add({
-  //       "type": TextEditingController(text: e["expense_type"] ?? ""),
-  //       "amount": TextEditingController(
-  //         text: e["amount"]?.toString() ?? "",
-  //       ),
-  //       "attachment": e["attachment"], // ✅ Restore attachment URL
-  //       "attachmentFile": null, // ✅ No file object when restoring
-  //     });
-  //   }
-  //
-  //   if (expenseRows.isEmpty) {
-  //     _addExpenseRow();
-  //   }
-  //
-  //   setState(() {
-  //     _canSave = true;
-  //     _canSubmit = eem["docstatus"] == 0;
-  //   });
-  // }
 
   void _restoreFromEEM(
       SalesOrderProvider provider,
@@ -275,7 +176,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
     endRaw.isNotEmpty ? double.tryParse(endRaw) : null;
     _endOdometer =
     (endParsed != null && endParsed > 0) ? endParsed : null;
-
+    _vehicleType = eem["vehicle_type"]?.toString();
     /// ── Restore provider EEM state so site visits load correctly ──
     provider.eemDocName = eem["name"];
     provider.eemCreated = true;
@@ -305,6 +206,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
         "amount": TextEditingController(
           text: e["amount"]?.toString() ?? "",
         ),
+        "description": TextEditingController(
+            text: e["description"] ?? ""),
         "attachment": e["attachment"],
         "attachmentFile": null,
       });
@@ -319,13 +222,64 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       _canSubmit = eem["docstatus"] == 0;
     });
   }
+  void _scheduleMidnightReset() {
+    // Calculate duration until next midnight
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day + 1, 0, 0, 0);
+    final durationUntilMidnight = midnight.difference(now);
 
+    debugPrint("Midnight reset scheduled in: $durationUntilMidnight");
+
+    _midnightTimer = Timer(durationUntilMidnight, () {
+      if (!mounted) return;
+      _resetForNewDay();
+    });
+  }
+
+  void _resetForNewDay() {
+    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+
+    // ── Reset provider state ──────────────────────────────
+    provider.clearTrackingData();
+    provider.clearEEMState();
+
+    // ── Reset local UI state ──────────────────────────────
+    setState(() {
+      expenseRows.clear();
+      _addExpenseRow();
+
+      eemName = null;
+      eemDate = null;
+      startTime = null;
+      endTime = null;
+      startLat = null;
+      startLong = null;
+      endLat = null;
+      endLong = null;
+      _startOdometer = null;
+      _vehicleType = null;
+      _endOdometer = null;
+      _canSave = false;
+      _canSubmit = false;
+      _currentIndex = 2;
+      _activeTab = 0;
+    });
+
+    // ── Re-fetch fresh data for the new day ───────────────
+    provider.fetchTodaySiteVisits();
+
+    // ── Schedule next midnight reset ──────────────────────
+    _scheduleMidnightReset();
+
+    debugPrint("Screen reset for new day: ${DateTime.now()}");
+  }
   void _addExpenseRow() {
     setState(() {
       expenseRows.add({
         "name": null, // ERPNext row name
         "type": TextEditingController(),
         "amount": TextEditingController(),
+        "description": TextEditingController(),
         "attachment": null,
         "attachmentFile": null,
       });
@@ -481,12 +435,34 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
     );
   }
 
+  // List<Map<String, dynamic>> _collectExpenses() {
+  //   List<Map<String, dynamic>> list = [];
+  //
+  //   for (var row in expenseRows) {
+  //     final type = row["type"]!.text.trim();
+  //     final amountString = row["amount"]!.text.trim();
+  //
+  //     if (type.isEmpty || amountString.isEmpty) continue;
+  //
+  //     final amount = double.tryParse(amountString) ?? 0.0;
+  //
+  //     list.add({
+  //       "expense_type": type,
+  //       "amount": amount,
+  //       "attachment": row["attachment"], // ✅ Include attachment URL
+  //     });
+  //   }
+  //
+  //   return list;
+  // }
   List<Map<String, dynamic>> _collectExpenses() {
     List<Map<String, dynamic>> list = [];
 
     for (var row in expenseRows) {
       final type = row["type"]!.text.trim();
       final amountString = row["amount"]!.text.trim();
+      final description =
+          row["description"]?.text.trim() ?? "";
 
       if (type.isEmpty || amountString.isEmpty) continue;
 
@@ -495,7 +471,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       list.add({
         "expense_type": type,
         "amount": amount,
-        "attachment": row["attachment"], // ✅ Include attachment URL
+        "description": description,
+        "attachment": row["attachment"],
       });
     }
 
@@ -758,15 +735,15 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                       child: Divider(height: 1, thickness: 0.8),
                     ),
 
-                    // ── Scrollable form ───────────────────────────────
                     Flexible(
                       child: SingleChildScrollView(
                         physics: const ClampingScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                        padding: EdgeInsets.fromLTRB(16, isEditMode ? 10 : 14, 16, 8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
 
+                            // ── Location card ─────────────────────────────
                             if (isEditMode) ...[
                                   () {
                                 final double? lat = double.tryParse(
@@ -775,11 +752,9 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                     existingVisit["longitude"]?.toString() ?? "");
 
                                 if (lat == null || lng == null || (lat == 0 && lng == 0)) {
-                                  // No valid coordinates — show plain grey card
                                   return Container(
-                                    width: double.infinity,
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 10),
+                                        horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
                                       color: Colors.grey.shade50,
                                       borderRadius: BorderRadius.circular(10),
@@ -788,34 +763,27 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                     child: Row(
                                       children: [
                                         Icon(Icons.location_off,
-                                            size: 16, color: Colors.grey.shade400),
+                                            size: 14, color: Colors.grey.shade400),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          "No location saved",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade500,
-                                          ),
-                                        ),
+                                        Text("No location saved",
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade500)),
                                       ],
                                     ),
                                   );
                                 }
 
-                                // Valid coordinates — show map snippet
                                 return ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   child: Stack(
                                     children: [
                                       SizedBox(
-                                        height: 140,
+                                        height: 100,
                                         child: FlutterMap(
                                           options: MapOptions(
                                             initialCenter: LatLng(lat, lng),
                                             initialZoom: 15,
-                                            // interactionOptions: const InteractionOptions(
-                                            //   flags: InteractiveFlag.none, // fully locked, no gestures
-                                            // ),
                                             interactionOptions: const InteractionOptions(
                                               flags: InteractiveFlag.pinchZoom |
                                               InteractiveFlag.scrollWheelZoom |
@@ -824,75 +792,61 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                           ),
                                           children: [
                                             TileLayer(
-                                              urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                                              userAgentPackageName: 'com.example.sales_ordering_app',
+                                              urlTemplate:
+                                              "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                                              userAgentPackageName:
+                                              'com.example.sales_ordering_app',
                                             ),
-                                            MarkerLayer(
-                                              markers: [
-                                                Marker(
-                                                  point: LatLng(lat, lng),
-                                                  width: 36,
-                                                  height: 36,
-                                                  child: Icon(
-                                                    Icons.location_pin,
+                                            MarkerLayer(markers: [
+                                              Marker(
+                                                point: LatLng(lat, lng),
+                                                width: 30,
+                                                height: 30,
+                                                child: Icon(Icons.location_pin,
                                                     color: AppColors.primaryColor,
-                                                    size: 36,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                                    size: 30),
+                                              ),
+                                            ]),
                                           ],
                                         ),
                                       ),
-
-                                      // ── "Location locked" badge overlaid top-right ──
                                       Positioned(
-                                        top: 8,
-                                        right: 8,
+                                        top: 6,
+                                        right: 6,
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
+                                              horizontal: 6, vertical: 3),
                                           decoration: BoxDecoration(
                                             color: Colors.black.withOpacity(0.55),
-                                            borderRadius: BorderRadius.circular(6),
+                                            borderRadius: BorderRadius.circular(5),
                                           ),
-                                          child: Row(
+                                          child: const Row(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: const [
+                                            children: [
                                               Icon(Icons.lock_outline,
-                                                  size: 11, color: Colors.white),
-                                              SizedBox(width: 4),
-                                              Text(
-                                                "Location locked",
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
+                                                  size: 10, color: Colors.white),
+                                              SizedBox(width: 3),
+                                              Text("Locked",
+                                                  style: TextStyle(
+                                                      fontSize: 9, color: Colors.white)),
                                             ],
                                           ),
                                         ),
                                       ),
-
-                                      // ── Coordinates badge overlaid bottom-left ──────
                                       Positioned(
-                                        bottom: 8,
-                                        left: 8,
+                                        bottom: 6,
+                                        left: 6,
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
+                                              horizontal: 6, vertical: 3),
                                           decoration: BoxDecoration(
                                             color: Colors.black.withOpacity(0.55),
-                                            borderRadius: BorderRadius.circular(6),
+                                            borderRadius: BorderRadius.circular(5),
                                           ),
                                           child: Text(
-                                            "${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}",
+                                            "${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}",
                                             style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w500,
-                                            ),
+                                                fontSize: 9, color: Colors.white),
                                           ),
                                         ),
                                       ),
@@ -900,12 +854,167 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                   ),
                                 );
                               }(),
+                              const SizedBox(height: 10),
+
+                              // ── Customer + Site in one row (edit only) ──
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end, // ← align to bottom
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildCompactLabel("Customer"),
+                                        const SizedBox(height: 4),
+                                        _CustomerSearchField(
+                                          initialValue: existingVisit["customer"] ?? "",
+                                          onSelected: (name) {
+                                            customerController.text = name;
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildCompactLabel("Site"),
+                                        const SizedBox(height: 4),
+                                        _buildInputField(
+                                          controller: siteController,
+                                          hint: "Site name",
+                                          icon: Icons.map_outlined,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+
+                              // ── Remarks ──────────────────────────────────
+                              _buildCompactLabel("Remarks (Optional)"),
+                              const SizedBox(height: 4),
+                              _buildInputField(
+                                controller: remarksController,
+                                hint: "Add a note...",
+                                icon: Icons.notes_rounded,
+                                maxLines: 2,
+                              ),
+                              const SizedBox(height: 10),
+
+                              // ── Actual Distance + Distance Travelled in one row ──
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildCompactLabel("Actual Dist."),
+                                        const SizedBox(height: 4),
+                                        _buildInputField(
+                                          controller: actualDistanceController,
+                                          hint: "0.0",
+                                          icon: Icons.straighten_outlined,
+                                          keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                          suffixText: "km",
+                                          selectAllOnFocus: true,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildCompactLabel("Dist. Travelled"),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 13),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade100,
+                                            border:
+                                            Border.all(color: Colors.grey.shade300),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.route,
+                                                  size: 16, color: Colors.grey.shade500),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                "${existingVisit["distance_travelled"] ?? "0"} km",
+                                                style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: Colors.grey.shade700),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+
+                              // ── Time picker ───────────────────────────────
+                              _buildCompactLabel("Time"),
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: () async {
+                                  final picked = await showTimePicker(
+                                    context: context,
+                                    initialTime: selectedTime,
+                                    builder: (ctx, child) => Theme(
+                                      data: Theme.of(ctx).copyWith(
+                                        colorScheme: ColorScheme.light(
+                                            primary: AppColors.primaryColor),
+                                      ),
+                                      child: child!,
+                                    ),
+                                  );
+                                  if (picked != null) {
+                                    setStateSheet(() => selectedTime = picked);
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: Colors.grey.shade50,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.access_time,
+                                          size: 16, color: Colors.grey.shade600),
+                                      const SizedBox(width: 8),
+                                      Text(displayTime,
+                                          style: TextStyle(
+                                              fontSize: 13, color: Colors.grey.shade800)),
+                                      const Spacer(),
+                                      Icon(Icons.edit_outlined,
+                                          size: 14, color: Colors.grey.shade400),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
                             ] else ...[
-                              // Live fetch card in create mode
+                              // ── CREATE MODE — original layout unchanged ──
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
+                                padding:
+                                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 decoration: BoxDecoration(
                                   color: fetchedPosition != null
                                       ? Colors.green.shade50
@@ -958,7 +1067,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                         ),
                                       ),
                                     ),
-                                    // Retry button if location failed
                                     if (!isFetchingLocation && fetchedPosition == null)
                                       GestureDetector(
                                         onTap: () {
@@ -974,169 +1082,102 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                   ],
                                 ),
                               ),
-                            ],
-                            const SizedBox(height: 14),
-                            // ── Customer search ───────────────────────
-                            _buildCompactLabel("Customer "),
-                            const SizedBox(height: 5),
-                            _CustomerSearchField(
-                              initialValue: isEditMode
-                                  ? (existingVisit["customer"] ?? "")
-                                  : "",
-                              onSelected: (name) {
-                                customerController.text = name;
-                              },
-                            ),
-                            const SizedBox(height: 12),
-
-                            // ── Site ──────────────────────────────────
-                            _buildCompactLabel("Site "),
-                            const SizedBox(height: 5),
-                            _buildInputField(
-                              controller: siteController,
-                              hint: "Enter site name",
-                              icon: Icons.map_outlined,
-                            ),
-                            const SizedBox(height: 12),
-
-                            // ── Remarks ───────────────────────────────
-                            _buildCompactLabel("Remarks (Optional)"),
-                            const SizedBox(height: 5),
-                            _buildInputField(
-                              controller: remarksController,
-                              hint: "Add a note...",
-                              icon: Icons.notes_rounded,
-                              maxLines: 2,
-                            ),
-                            const SizedBox(height: 12),
-// ── Distance Travelled (read-only, edit mode only) ─
-                            if (isEditMode) ...[
-                              const SizedBox(height: 12),
-                              _buildCompactLabel("Distance Travelled"),
+                              const SizedBox(height: 14),
+                              _buildCompactLabel("Customer "),
                               const SizedBox(height: 5),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 13),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  border: Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.route,
-                                        size: 18, color: Colors.grey.shade500),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      "${existingVisit["distance_travelled"] ?? "0"} km",
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade700,
+                              _CustomerSearchField(
+                                initialValue: "",
+                                onSelected: (name) {
+                                  customerController.text = name;
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              _buildCompactLabel("Site "),
+                              const SizedBox(height: 5),
+                              _buildInputField(
+                                controller: siteController,
+                                hint: "Enter site name",
+                                icon: Icons.map_outlined,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildCompactLabel("Remarks (Optional)"),
+                              const SizedBox(height: 5),
+                              _buildInputField(
+                                controller: remarksController,
+                                hint: "Add a note...",
+                                icon: Icons.notes_rounded,
+                                maxLines: 2,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildCompactLabel("Actual Distance (optional)"),
+                              const SizedBox(height: 5),
+                              _buildInputField(
+                                controller: actualDistanceController,
+                                hint: "Enter actual distance",
+                                icon: Icons.straighten_outlined,
+                                keyboardType:
+                                const TextInputType.numberWithOptions(decimal: true),
+                                suffixText: "km",
+                                selectAllOnFocus: true,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildCompactLabel("Time"),
+                              const SizedBox(height: 5),
+                              GestureDetector(
+                                onTap: () async {
+                                  final picked = await showTimePicker(
+                                    context: context,
+                                    initialTime: selectedTime,
+                                    builder: (ctx, child) => Theme(
+                                      data: Theme.of(ctx).copyWith(
+                                        colorScheme: ColorScheme.light(
+                                            primary: AppColors.primaryColor),
                                       ),
+                                      child: child!,
                                     ),
-                                    const Spacer(),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade300,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        "Auto",
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey.shade600,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  );
+                                  if (picked != null) {
+                                    setStateSheet(() => selectedTime = picked);
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 13),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: Colors.grey.shade50,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.access_time,
+                                          size: 18, color: Colors.grey.shade600),
+                                      const SizedBox(width: 10),
+                                      Text(displayTime,
+                                          style: TextStyle(
+                                              fontSize: 13, color: Colors.grey.shade800)),
+                                      const Spacer(),
+                                      Icon(Icons.edit_outlined,
+                                          size: 15, color: Colors.grey.shade400),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
 
-// ── Actual Distance (editable) ────────────────────
-                            const SizedBox(height: 12),
-                            _buildCompactLabel(
-                                isEditMode ? "Actual Distance" : "Actual Distance (optional)"),
-                            const SizedBox(height: 5),
-                            _buildInputField(
-                              controller: actualDistanceController,
-                              hint: "Enter actual distance",
-                              icon: Icons.straighten_outlined,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              suffixText: "km",
-                              selectAllOnFocus: true,   // ← add this
-                            ),
-                            // ── Time picker ───────────────────────────
-                            _buildCompactLabel("Time"),
-                            const SizedBox(height: 5),
-                            GestureDetector(
-                              onTap: () async {
-                                final picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: selectedTime,
-                                  builder: (ctx, child) => Theme(
-                                    data: Theme.of(ctx).copyWith(
-                                      colorScheme: ColorScheme.light(
-                                          primary: AppColors.primaryColor),
-                                    ),
-                                    child: child!,
-                                  ),
-                                );
-                                if (picked != null) {
-                                  setStateSheet(() => selectedTime = picked);
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 13),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                      color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(10),
-                                  color: Colors.grey.shade50,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.access_time,
-                                        size: 18,
-                                        color: Colors.grey.shade600),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      displayTime,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade800,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Icon(Icons.edit_outlined,
-                                        size: 15,
-                                        color: Colors.grey.shade400),
-                                  ],
-                                ),
-                              ),
-                            ),
+                             SizedBox(height: isEditMode ? 14 : 20),
 
-                            const SizedBox(height: 20),
-
-                            // ── Action buttons ────────────────────────
+                            // ── Action buttons (shared) ───────────────────
                             Row(
                               children: [
                                 Expanded(
                                   child: OutlinedButton(
-                                    onPressed: () =>
-                                        Navigator.of(sheetContext).pop(),
+                                    onPressed: () => Navigator.of(sheetContext).pop(),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 12),
+                                      padding: const EdgeInsets.symmetric(vertical: 11),
                                       shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(10)),
-                                      side: BorderSide(
-                                          color: Colors.grey.shade300),
+                                          borderRadius: BorderRadius.circular(10)),
+                                      side: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     child: const Text("Cancel",
                                         style: TextStyle(
@@ -1151,18 +1192,18 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                   child: StatefulBuilder(
                                     builder: (btnCtx, setBtnState) {
                                       return ElevatedButton(
-
                                         onPressed: isSubmitting
                                             ? null
                                             : () async {
-
-                                          // ── Validation: at least one of customer or site required ──
-                                          final customerEmpty = customerController.text.trim().isEmpty;
-                                          final siteEmpty = siteController.text.trim().isEmpty;
+                                          final customerEmpty =
+                                              customerController.text.trim().isEmpty;
+                                          final siteEmpty =
+                                              siteController.text.trim().isEmpty;
 
                                           if (customerEmpty && siteEmpty) {
                                             Fluttertoast.showToast(
-                                              msg: "Please enter at least a Customer or Site.",
+                                              msg:
+                                              "Please enter at least a Customer or Site.",
                                               toastLength: Toast.LENGTH_LONG,
                                               backgroundColor: Colors.red.shade600,
                                               textColor: Colors.white,
@@ -1170,7 +1211,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                             return;
                                           }
 
-                                          // ── Location check (create mode only) ──────────
                                           if (!isEditMode && fetchedPosition == null) {
                                             Fluttertoast.showToast(
                                                 msg: "Location unavailable. Tap retry.");
@@ -1179,98 +1219,149 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
 
                                           setBtnState(() => isSubmitting = true);
 
-                                          // rest of your existing code unchanged from here...
                                           Position? finalPos;
                                           if (isEditMode && fetchedPosition == null) {
                                             finalPos = null;
                                           } else {
-                                            finalPos = await _getCurrentPosition() ?? fetchedPosition;
+                                            finalPos = await _getCurrentPosition() ??
+                                                fetchedPosition;
                                           }
 
-
-                                          // Replace the finalLat/finalLng calculation with:
                                           final double finalLat = isEditMode
                                               ? (double.tryParse(
-                                              existingVisit?["latitude"]?.toString() ?? "0") ??
+                                              existingVisit?["latitude"]
+                                                  ?.toString() ??
+                                                  "0") ??
                                               0.0)
                                               : (finalPos?.latitude ?? 0.0);
 
                                           final double finalLng = isEditMode
                                               ? (double.tryParse(
-                                              existingVisit?["longitude"]?.toString() ?? "0") ??
+                                              existingVisit?["longitude"]
+                                                  ?.toString() ??
+                                                  "0") ??
                                               0.0)
                                               : (finalPos?.longitude ?? 0.0);
 
                                           final provider =
-                                          Provider.of<SalesOrderProvider>(context, listen: false);
+                                          Provider.of<SalesOrderProvider>(
+                                              context,
+                                              listen: false);
 
-                                          bool success;
-
-                                          // ── In the submit onPressed, replace the createSiteVisit / updateSiteVisit calls ──
+                                          // ── Use String? error pattern ─────────
+                                          String? error;
 
                                           if (isEditMode) {
-                                            success = await provider.updateSiteVisit(
-                                              docName: docName!,           // child row name
-                                              customer: customerController.text.trim(),
+                                            error = await provider.updateSiteVisit(
+                                              docName: docName!,
+                                              customer:
+                                              customerController.text.trim(),
                                               site: siteController.text.trim(),
                                               latitude: finalLat,
                                               longitude: finalLng,
-                                              remarks: remarksController.text.trim().isEmpty
-                                                  ? ""
-                                                  : remarksController.text.trim(),
-                                              time: "$apiDate $apiTime",   // kept for signature compat
-                                              actualDistance: double.tryParse(        // ← add this
-                                                  actualDistanceController.text.trim()),
-                                            );
-                                          } else {
-                                            success = await provider.createSiteVisit(
-                                              context: context,
-                                              customer: customerController.text.trim(),
-                                              site: siteController.text.trim(),
-                                              latitude: finalLat,
-                                              longitude: finalLng,
-                                              remarks: remarksController.text.trim().isEmpty
+                                              remarks: remarksController.text
+                                                  .trim()
+                                                  .isEmpty
                                                   ? ""
                                                   : remarksController.text.trim(),
                                               time: "$apiDate $apiTime",
-                                              actualDistance: double.tryParse(        // ← add this
-                                                  actualDistanceController.text.trim()),
+                                              actualDistance: double.tryParse(
+                                                  actualDistanceController.text
+                                                      .trim()),
+                                            );
+                                          } else {
+                                            error = await provider.createSiteVisit(
+                                              context: context,
+                                              customer:
+                                              customerController.text.trim(),
+                                              site: siteController.text.trim(),
+                                              latitude: finalLat,
+                                              longitude: finalLng,
+                                              remarks: remarksController.text
+                                                  .trim()
+                                                  .isEmpty
+                                                  ? ""
+                                                  : remarksController.text.trim(),
+                                              time: "$apiDate $apiTime",
+                                              actualDistance: double.tryParse(
+                                                  actualDistanceController.text
+                                                      .trim()),
                                             );
                                           }
 
                                           setBtnState(() => isSubmitting = false);
-                                          Navigator.of(sheetContext).pop();
-                                          Fluttertoast.showToast(
-                                            msg: success
-                                                ? isEditMode
-                                                ? "Site Visit updated successfully!"
-                                                : "Site Visit created successfully!"
-                                                : isEditMode
-                                                ? "Failed to update Site Visit"
-                                                : "Failed to create Site Visit",
-                                          );
+
+                                          if (error == null) {
+                                            // ── Success ───────────────────────────
+                                            Navigator.of(sheetContext).pop();
+                                            Fluttertoast.showToast(
+                                              msg: isEditMode
+                                                  ? "Site Visit updated successfully!"
+                                                  : "Site Visit created successfully!",
+                                              backgroundColor: Colors.green.shade600,
+                                              textColor: Colors.white,
+                                            );
+                                          } else {
+                                            // ── Show actual error in dialog ────────
+                                            showDialog(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                    BorderRadius.circular(14)),
+                                                title: Row(
+                                                  children: [
+                                                    Icon(Icons.error_outline,
+                                                        color: Colors.red.shade600),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      isEditMode
+                                                          ? "Update Failed"
+                                                          : "Create Failed",
+                                                      style: const TextStyle(
+                                                          fontSize: 15,
+                                                          fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ],
+                                                ),
+                                                content: Text(
+                                                  error ?? "An unexpected error occurred.",
+                                                  style: const TextStyle(fontSize: 13),
+                                                ),
+                                                actions: [
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor:
+                                                      AppColors.primaryColor,
+                                                      shape: RoundedRectangleBorder(
+                                                          borderRadius:
+                                                          BorderRadius.circular(8)),
+                                                    ),
+                                                    onPressed: () => Navigator.pop(ctx),
+                                                    child: const Text("OK",
+                                                        style: TextStyle(
+                                                            color: Colors.white)),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                          AppColors.primaryColor,
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 12),
+                                          backgroundColor: AppColors.primaryColor,
+                                          padding: const EdgeInsets.symmetric(vertical: 11),
                                           shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                              BorderRadius.circular(10)),
+                                              borderRadius: BorderRadius.circular(10)),
                                           elevation: 0,
                                         ),
                                         child: isSubmitting
                                             ? const SizedBox(
                                             width: 18,
                                             height: 18,
-                                            child:
-                                            CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white))
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2, color: Colors.white))
                                             : Row(
-                                          mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                          mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
                                             Icon(
                                               isEditMode
@@ -1281,13 +1372,10 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                             ),
                                             const SizedBox(width: 5),
                                             Text(
-                                              isEditMode
-                                                  ? "Update"
-                                                  : "Submit",
+                                              isEditMode ? "Update" : "Submit",
                                               style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontWeight:
-                                                  FontWeight.bold,
+                                                  fontWeight: FontWeight.bold,
                                                   fontSize: 13),
                                             ),
                                           ],
@@ -1298,7 +1386,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                           ],
                         ),
                       ),
@@ -1330,7 +1418,22 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
   //   required IconData icon,
   //   TextInputType keyboardType = TextInputType.text,
   //   int maxLines = 1,
+  //   String? suffixText,
+  //   bool selectAllOnFocus = false,  // ← add this
   // }) {
+  //   final focusNode = selectAllOnFocus ? FocusNode() : null;
+  //
+  //   if (focusNode != null) {
+  //     focusNode.addListener(() {
+  //       if (focusNode.hasFocus) {
+  //         controller.selection = TextSelection(
+  //           baseOffset: 0,
+  //           extentOffset: controller.text.length,
+  //         );
+  //       }
+  //     });
+  //   }
+  //
   //   return Container(
   //     decoration: BoxDecoration(
   //       color: Colors.grey[50],
@@ -1339,19 +1442,27 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
   //     ),
   //     child: TextField(
   //       controller: controller,
-  //       keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType, // ✅ multiline keyboard
-  //       maxLines: null,        // ✅ unlimited lines — grows with content
-  //       minLines: maxLines,    // ✅ starts at the specified height
+  //       focusNode: focusNode,
+  //       keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType,
+  //       maxLines: null,
+  //       minLines: maxLines,
   //       textInputAction: maxLines > 1
-  //           ? TextInputAction.newline  // ✅ Enter key adds new line instead of submitting
+  //           ? TextInputAction.newline
   //           : TextInputAction.done,
   //       style: const TextStyle(fontSize: 13),
   //       decoration: InputDecoration(
   //         hintText: hint,
   //         hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
   //         prefixIcon: Padding(
-  //           padding: EdgeInsets.only(bottom: maxLines > 1 ? (maxLines - 1) * 20 : 0), // ✅ align icon to top for multiline
+  //           padding: EdgeInsets.only(
+  //               bottom: maxLines > 1 ? (maxLines - 1) * 20 : 0),
   //           child: Icon(icon, size: 18, color: Colors.grey[500]),
+  //         ),
+  //         suffixText: suffixText,
+  //         suffixStyle: TextStyle(
+  //           fontSize: 13,
+  //           color: Colors.grey.shade500,
+  //           fontWeight: FontWeight.w500,
   //         ),
   //         border: InputBorder.none,
   //         contentPadding:
@@ -1367,21 +1478,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
     TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
     String? suffixText,
-    bool selectAllOnFocus = false,  // ← add this
+    bool selectAllOnFocus = false,
   }) {
-    final focusNode = selectAllOnFocus ? FocusNode() : null;
-
-    if (focusNode != null) {
-      focusNode.addListener(() {
-        if (focusNode.hasFocus) {
-          controller.selection = TextSelection(
-            baseOffset: 0,
-            extentOffset: controller.text.length,
-          );
-        }
-      });
-    }
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[50],
@@ -1390,7 +1488,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       ),
       child: TextField(
         controller: controller,
-        focusNode: focusNode,
         keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType,
         maxLines: null,
         minLines: maxLines,
@@ -1398,6 +1495,15 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
             ? TextInputAction.newline
             : TextInputAction.done,
         style: const TextStyle(fontSize: 13),
+        // ── Use onTap instead of FocusNode to select all ──
+        onTap: selectAllOnFocus
+            ? () {
+          controller.selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: controller.text.length,
+          );
+        }
+            : null,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
@@ -1419,6 +1525,94 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       ),
     );
   }
+  Future<String?> _showVehicleTypeDialog() async {
+    return await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.directions_car_outlined,
+                color: AppColors.primaryColor),
+            const SizedBox(width: 8),
+            const Text(
+              "Select Vehicle Type",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _vehicleTypeOption(
+              ctx,
+              icon: Icons.two_wheeler,
+              label: "Two Wheeler",
+              value: "Two Wheeler",
+            ),
+            const SizedBox(height: 8),
+            _vehicleTypeOption(
+              ctx,
+              icon: Icons.directions_car,
+              label: "Four Wheeler",
+              value: "Four Wheeler",
+            ),
+            const SizedBox(height: 8),
+            _vehicleTypeOption(
+              ctx,
+              icon: Icons.more_horiz,
+              label: "Other",
+              value: "Other",
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text("Cancel",
+                style: TextStyle(color: Colors.grey)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _vehicleTypeOption(
+      BuildContext ctx, {
+        required IconData icon,
+        required String label,
+        required String value,
+      }) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, value),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.primaryColor),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right,
+                size: 18, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SalesOrderProvider>();
@@ -1433,7 +1627,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-
+                // ── Only show save/submit when on Visit Log tab ──
+                if (_currentIndex == 2) ...[
                 // ── Save icon ───────────────────────────────────
                 IconButton(
                   tooltip: provider.eemCreated ? "Update Expenses" : "Save Expenses",
@@ -1640,7 +1835,9 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                           expenseRows.clear();
                           _addExpenseRow();
                           _startOdometer = null;
+                          _vehicleType = null;
                           _endOdometer = null;
+                          _activeTab = 0;
                         });
                         Fluttertoast.showToast(msg: "Expenses submitted successfully!");
                       } else {
@@ -1662,41 +1859,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                       color: Colors.white,
                     ),
                   ),
-
-                // ── Create Site Visit ───────────────────────────
-                // IconButton(
-                //   icon: const Icon(Icons.add_location_alt, color: Colors.white),
-                //   tooltip: "Create Site Visit",
-                //   onPressed: () async {
-                //     final provider =
-                //     Provider.of<SalesOrderProvider>(context, listen: false);
-                //
-                //     showDialog(
-                //       context: context,
-                //       barrierDismissible: false,
-                //       builder: (_) =>
-                //       const Center(child: CircularProgressIndicator()),
-                //     );
-                //
-                //     final canCreate = await provider.canCreateSiteVisit();
-                //
-                //     if (mounted)
-                //       Navigator.of(context, rootNavigator: true).pop();
-                //
-                //     if (!canCreate) {
-                //       Fluttertoast.showToast(
-                //         msg:
-                //         "Please check in today before creating a site visit.",
-                //         toastLength: Toast.LENGTH_LONG,
-                //         backgroundColor: Colors.red.shade600,
-                //         textColor: Colors.white,
-                //       );
-                //       return;
-                //     }
-                //
-                //     _showCreateSiteVisitDialog();
-                //   },
-                // ),
+            ],
               ],
             );
           },
@@ -1755,6 +1918,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+
           // ── Odometer Section ──────────────────────────────────────────
           Consumer<SalesOrderProvider>(
             builder: (context, provider, _) {
@@ -1775,6 +1939,20 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Row(
+                    //   children: [
+                    //     Icon(Icons.speed, size: 16, color: AppColors.primaryColor),
+                    //     const SizedBox(width: 6),
+                    //     const Text(
+                    //       "Odometer Readings",
+                    //       style: TextStyle(
+                    //         fontSize: 13,
+                    //         fontWeight: FontWeight.w600,
+                    //         color: Colors.black87,
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
                     Row(
                       children: [
                         Icon(Icons.speed, size: 16, color: AppColors.primaryColor),
@@ -1787,14 +1965,52 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                             color: Colors.black87,
                           ),
                         ),
+
+                        const Spacer(),
+
+                        if (_vehicleType != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppColors.primaryColor.withOpacity(0.25),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _vehicleType == "Two Wheeler"
+                                      ? Icons.two_wheeler
+                                      : _vehicleType == "Four Wheeler"
+                                      ? Icons.directions_car
+                                      : Icons.more_horiz,
+                                  size: 14,
+                                  color: AppColors.primaryColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _vehicleType!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 10),
 
                     Row(
                       children: [
-
-                        // ── Start chip (shown after start is set) ──
                         if (_startOdometer != null) ...[
                           Expanded(
                             child: GestureDetector(
@@ -1825,22 +2041,17 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
+                                          Text("Start",
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.green.shade600,
+                                                  fontWeight: FontWeight.w500)),
                                           Text(
-                                            "Start",
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.green.shade600,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          Text(
-                                            "${_startOdometer!.toStringAsFixed(0)} km",
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.green.shade800,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
+                                              "${_startOdometer!.toStringAsFixed(0)} km",
+                                              style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.green.shade800,
+                                                  fontWeight: FontWeight.w600)),
                                         ],
                                       ),
                                     ),
@@ -1856,8 +2067,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                               size: 16, color: Colors.grey.shade400),
                           const SizedBox(width: 10),
                         ],
-
-                        // ── End chip (shown after end is set) ──────
                         if (_endOdometer != null)
                           Expanded(
                             child: GestureDetector(
@@ -1886,8 +2095,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.orange.shade50,
                                   borderRadius: BorderRadius.circular(8),
-                                  border:
-                                  Border.all(color: Colors.orange.shade200),
+                                  border: Border.all(color: Colors.orange.shade200),
                                 ),
                                 child: Row(
                                   children: [
@@ -1898,22 +2106,17 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
+                                          Text("Finish",
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.orange.shade600,
+                                                  fontWeight: FontWeight.w500)),
                                           Text(
-                                            "Finish",
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.orange.shade600,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          Text(
-                                            "${_endOdometer!.toStringAsFixed(0)} km",
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.orange.shade800,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
+                                              "${_endOdometer!.toStringAsFixed(0)} km",
+                                              style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.orange.shade800,
+                                                  fontWeight: FontWeight.w600)),
                                         ],
                                       ),
                                     ),
@@ -1925,31 +2128,31 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                             ),
                           ),
 
-                        // ── Single Start/End button ─────────────────
                         if (_endOdometer == null)
                           Expanded(
                             child: ElevatedButton.icon(
-                              // onPressed: provider.isEEMSaveLoading
-                              //     ? null
-                              //     : () async {
-                              onPressed: (provider.isEEMSaveLoading || provider.isEEMEndLoading)
+                              onPressed:
+                              (provider.isEEMSaveLoading || provider.isEEMEndLoading)
                                   ? null
                                   : () async {
                                 final isStart = _startOdometer == null;
 
-                                // ── Check in validation ───────
                                 showDialog(
                                   context: context,
                                   barrierDismissible: false,
                                   builder: (_) => const Center(
                                       child: CircularProgressIndicator()),
                                 );
-                                final canProceed =
-                                await provider.canCreateSiteVisit();
+
+                                bool canProceed;
+                                if (isStart) {
+                                  canProceed = await provider.canCreateSiteVisit();
+                                } else {
+                                  canProceed = await provider.canStopTracking();
+                                }
+
                                 if (mounted)
-                                  Navigator.of(context,
-                                      rootNavigator: true)
-                                      .pop();
+                                  Navigator.of(context, rootNavigator: true).pop();
 
                                 if (!canProceed) {
                                   Fluttertoast.showToast(
@@ -1963,42 +2166,85 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                   return;
                                 }
 
-                                // ── Odometer input ────────────
-                                final value = await _showOdometerInputDialog(
-                                  title: isStart
-                                      ? "Start Odometer"
-                                      : "End Odometer",
-                                  hint: isStart
-                                      ? "e.g. 12500"
-                                      : "e.g. 12800",
-                                  initialValue: isStart
-                                      ? null
-                                      : _startOdometer,
-                                );
-
-                                if (value == null) return;
-
-                                if (!isStart && _startOdometer != null &&
-                                    value <= _startOdometer!) {
-                                  Fluttertoast.showToast(
-                                    msg: "End must be greater than start odometer.",
-                                    backgroundColor: Colors.red.shade600,
-                                    textColor: Colors.white,
-                                  );
-                                  return;
-                                }
-
                                 if (isStart) {
+                                  // ── Step 0: Check if location services are enabled ──
+                                  bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+                                  if (!serviceEnabled) {
+                                    final shouldOpenSettings = await showDialog<bool>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (ctx) => AlertDialog(
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16)),
+                                        title: Row(
+                                          children: [
+                                            Icon(Icons.location_off, color: Colors.red.shade600),
+                                            const SizedBox(width: 8),
+                                            const Text("Location Disabled",
+                                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                        content: const Text(
+                                          "Please turn on your device's location services to start tracking.",
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx, false),
+                                            child: const Text("Cancel",
+                                                style: TextStyle(color: Colors.grey)),
+                                          ),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primaryColor,
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(10)),
+                                            ),
+                                            onPressed: () => Navigator.pop(ctx, true),
+                                            child: const Text("Open Settings",
+                                                style: TextStyle(color: Colors.white)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (shouldOpenSettings == true) {
+                                      await Geolocator.openLocationSettings();
+                                    }
+                                    return; // stop here regardless — user must retry after enabling
+                                  }
+                                  // // ── Step 1: Ask vehicle type first ────────
+                                  // final vehicleType = await _showVehicleTypeDialog();
+                                  // if (vehicleType == null) return; // cancelled
+                                  final vehicleType = await _showVehicleTypeDialog();
+                                  if (vehicleType == null) return;
+
+                                  setState(() {
+                                    _vehicleType = vehicleType;
+                                  });
+
+                                  // ── Step 2: Ask start odometer ────────────
+                                  final value = await _showOdometerInputDialog(
+                                    title: "Start Odometer",
+                                    hint: "e.g. 12500",
+                                  );
+
+                                  if (value == null) return;
+
                                   setState(() => _startOdometer = value);
 
-                                  // ── Create EEM on Start ───────
                                   final pos = await _getCurrentPosition();
                                   final expenses = _collectExpenses();
+                                  final startTimeStr =
+                                  DateFormat('yyyy-MM-dd HH:mm:ss')
+                                      .format(DateTime.now());
+
                                   final ok = await provider.saveEEMExpenses(
                                     expenses,
                                     startOdometer: value,
+                                    startTime: startTimeStr,
                                     startLat: pos?.latitude,
                                     startLong: pos?.longitude,
+                                    vehicleType: vehicleType,  // ← added
                                   );
 
                                   Fluttertoast.showToast(
@@ -2012,14 +2258,32 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                   );
 
                                   if (!ok) {
-                                    setState(() => _startOdometer = null);
+                                    setState(() {
+                                      _startOdometer = null;
+                                      _vehicleType = null;
+                                    });
                                   }
-                                // } else {
-                                //   setState(() => _endOdometer = value);
-                                // }
                                 } else {
-                                  // ── End odometer confirmed ────────────────────
-                                  // Fetch current location
+                                  // ── End flow ───────────────────────────────
+                                  final value = await _showOdometerInputDialog(
+                                    title: "End Odometer",
+                                    hint: "e.g. 12800",
+                                    initialValue: _startOdometer,
+                                  );
+
+                                  if (value == null) return;
+
+                                  if (_startOdometer != null &&
+                                      value <= _startOdometer!) {
+                                    Fluttertoast.showToast(
+                                      msg:
+                                      "End must be greater than start odometer.",
+                                      backgroundColor: Colors.red.shade600,
+                                      textColor: Colors.white,
+                                    );
+                                    return;
+                                  }
+
                                   showDialog(
                                     context: context,
                                     barrierDismissible: false,
@@ -2030,11 +2294,13 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                   final pos = await _getCurrentPosition();
 
                                   if (mounted)
-                                    Navigator.of(context, rootNavigator: true).pop();
+                                    Navigator.of(context, rootNavigator: true)
+                                        .pop();
 
                                   if (pos == null) {
                                     Fluttertoast.showToast(
-                                      msg: "Could not fetch location. Please try again.",
+                                      msg:
+                                      "Could not fetch location. Please try again.",
                                       backgroundColor: Colors.red.shade600,
                                       textColor: Colors.white,
                                     );
@@ -2056,7 +2322,8 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                     );
                                   } else {
                                     Fluttertoast.showToast(
-                                      msg: "Failed to record end. Please try again.",
+                                      msg:
+                                      "Failed to record end. Please try again.",
                                       backgroundColor: Colors.red.shade600,
                                       textColor: Colors.white,
                                     );
@@ -2072,20 +2339,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                                     borderRadius: BorderRadius.circular(8)),
                                 elevation: 0,
                               ),
-                              // icon: provider.isEEMSaveLoading
-                              //     ? const SizedBox(
-                              //   width: 16,
-                              //   height: 16,
-                              //   child: CircularProgressIndicator(
-                              //       strokeWidth: 2, color: Colors.white),
-                              // )
-                              //     : Icon(
-                              //   _startOdometer == null
-                              //       ? Icons.trip_origin
-                              //       : Icons.outlined_flag,
-                              //   size: 16,
-                              //   color: Colors.white,
-                              // ),
                               icon: (provider.isEEMSaveLoading || provider.isEEMEndLoading)
                                   ? const SizedBox(
                                 width: 16,
@@ -2112,8 +2365,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                           ),
                       ],
                     ),
-
-                    // ── Total distance ──────────────────────────────
                     if (_startOdometer != null && _endOdometer != null) ...[
                       const SizedBox(height: 8),
                       Row(
@@ -2136,138 +2387,281 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
               );
             },
           ),
+
           const SizedBox(height: 12),
-          /// SITE VISITS HEADER
+
+// ── Tab Row ───────────────────────────────────────────────────
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+
+              // ── Row 1: Tabs + EEM badge ───────────────────────
               Row(
                 children: [
-                  const Text(
-                    "Site Visits",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(width: 8),
-                  // ── Count badge ──────────────────────────────
-                  Consumer<SalesOrderProvider>(
-                    builder: (context, provider, _) {
-                      final count = provider.todaySiteVisits.length;
-                      if (count == 0) return const SizedBox.shrink();
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          "$count",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primaryColor,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const Spacer(),
-                  // Refresh button — existing code unchanged
-                  // Consumer<SalesOrderProvider>(
-                  //   builder: (context, provider, _) =>
-                  //   provider.isSiteVisitsLoading
-                  //       ? const SizedBox(
-                  //     width: 18,
-                  //     height: 18,
-                  //     child: CircularProgressIndicator(strokeWidth: 2),
-                  //   )
-                  //       : IconButton(
-                  //     icon: Icon(Icons.refresh,
-                  //         size: 20, color: AppColors.primaryColor),
-                  //     onPressed: () => provider.fetchTodaySiteVisits(),
-                  //     padding: EdgeInsets.zero,
-                  //     constraints: const BoxConstraints(),
-                  //   ),
-                  // ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
 
-                      // ── Create Site Visit ─────────────────────
-                      IconButton(
-                        icon: Icon(
-                          Icons.add_location_alt,
-                          size: 22,
-                          color: AppColors.primaryColor,
-                        ),
-                        tooltip: "Create Site Visit",
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () async {
-                          final provider =
-                          Provider.of<SalesOrderProvider>(context, listen: false);
-
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (_) =>
-                            const Center(child: CircularProgressIndicator()),
-                          );
-
-                          final canCreate = await provider.canCreateSiteVisit();
-
-                          if (mounted) {
-                            Navigator.of(context, rootNavigator: true).pop();
-                          }
-
-                          if (!canCreate) {
-                            Fluttertoast.showToast(
-                              msg:
-                              "Please check in today before creating a site visit.",
-                              toastLength: Toast.LENGTH_LONG,
-                              backgroundColor: Colors.red.shade600,
-                              textColor: Colors.white,
-                            );
-                            return;
-                          }
-
-                          _showCreateSiteVisitDialog();
-                        },
-                      ),
-
-                      const SizedBox(width: 12),
-
-                      // ── Refresh Button ────────────────────────
-                      Consumer<SalesOrderProvider>(
-                        builder: (context, provider, _) =>
-                        provider.isSiteVisitsLoading
-                            ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                            : IconButton(
-                          icon: Icon(
-                            Icons.refresh,
-                            size: 20,
-                            color: AppColors.primaryColor,
-                          ),
-                          onPressed: () => provider.fetchTodaySiteVisits(),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                  // Site Visits tab
+                  GestureDetector(
+                    onTap: () => setState(() => _activeTab = 0),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: _activeTab == 0
+                            ? AppColors.primaryColor
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _activeTab == 0
+                              ? AppColors.primaryColor
+                              : Colors.grey.shade300,
                         ),
                       ),
-                    ],
-                  ),
-                  if (widget.isEditMode && eemDate != null)
-                    Text(
-                      _formatDate(eemDate!),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w500,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.location_on_outlined,
+                              size: 14,
+                              color: _activeTab == 0
+                                  ? Colors.white
+                                  : Colors.grey.shade600),
+                          const SizedBox(width: 5),
+                          Text(
+                            "Site Visits",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _activeTab == 0
+                                  ? Colors.white
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          Consumer<SalesOrderProvider>(
+                            builder: (context, provider, _) {
+                              final count = provider.todaySiteVisits.length;
+                              if (count == 0) return const SizedBox.shrink();
+                              return Container(
+                                margin: const EdgeInsets.only(left: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: _activeTab == 0
+                                      ? Colors.white.withOpacity(0.3)
+                                      : AppColors.primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  "$count",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _activeTab == 0
+                                        ? Colors.white
+                                        : AppColors.primaryColor,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Expenses tab
+                  GestureDetector(
+                    onTap: () => setState(() => _activeTab = 1),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: _activeTab == 1
+                            ? AppColors.primaryColor
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _activeTab == 1
+                              ? AppColors.primaryColor
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.receipt_long_outlined,
+                              size: 14,
+                              color: _activeTab == 1
+                                  ? Colors.white
+                                  : Colors.grey.shade600),
+                          const SizedBox(width: 5),
+                          Text(
+                            "Expenses",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _activeTab == 1
+                                  ? Colors.white
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          Builder(builder: (context) {
+                            final count = expenseRows
+                                .where((e) =>
+                            (e["type"]?.text ?? "").isNotEmpty &&
+                                (e["amount"]?.text ?? "").isNotEmpty)
+                                .length;
+                            if (count == 0) return const SizedBox.shrink();
+                            return Container(
+                              margin: const EdgeInsets.only(left: 5),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: _activeTab == 1
+                                    ? Colors.white.withOpacity(0.3)
+                                    : AppColors.primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                "$count",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: _activeTab == 1
+                                      ? Colors.white
+                                      : AppColors.primaryColor,
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // ── EEM name badge (left of spacer end) ──────────
+                  Consumer<SalesOrderProvider>(
+                    builder: (context, provider, _) {
+                      if (provider.isEEMRestoring) {
+                        return const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2));
+                      }
+
+                      if (widget.isEditMode && eemDate != null) {
+                        return Text(
+                          _formatDate(eemDate!),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
+
+              // ── Row 2: Site visit actions (only on Site Visits tab) ──
+              const SizedBox(height: 6),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+
+                  // Add Site Visit only for Site Visits tab
+                  if (_activeTab == 0) ...[
+                    IconButton(
+                      icon: Icon(
+                        Icons.add_location_alt,
+                        size: 20,
+                        color: AppColors.primaryColor,
+                      ),
+                      tooltip: "Create Site Visit",
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () async {
+                        final provider =
+                        Provider.of<SalesOrderProvider>(
+                          context,
+                          listen: false,
+                        );
+
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) =>
+                          const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+
+                        final canCreate =
+                        await provider.canCreateSiteVisit();
+
+                        if (mounted) {
+                          Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).pop();
+                        }
+
+                        if (!canCreate) {
+                          Fluttertoast.showToast(
+                            msg:
+                            "Please check in today before creating a site visit.",
+                            toastLength: Toast.LENGTH_LONG,
+                            backgroundColor: Colors.red,
+                            textColor: Colors.white,
+                          );
+                          return;
+                        }
+
+                        _showCreateSiteVisitDialog();
+                      },
+                    ),
+
+                    const SizedBox(width: 12),
+                  ],
+
+                  // Refresh available in BOTH tabs
+                  Consumer<SalesOrderProvider>(
+                    builder: (context, provider, _) =>
+                    provider.isSiteVisitsLoading
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                        : IconButton(
+                      icon: Icon(
+                        Icons.refresh,
+                        size: 20,
+                        color: AppColors.primaryColor,
+                      ),
+                      tooltip: _activeTab == 0
+                          ? "Refresh Site Visits"
+                          : "Refresh Expenses",
+                      onPressed: () async {
+                        if (_activeTab == 0) {
+                          await provider.fetchTodaySiteVisits();
+                        } else {
+                          // Refresh expenses data here
+                          // await _refreshExpenses();
+                        }
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ),
                 ],
               ),
               if (widget.isEditMode && eemName != null) ...[
@@ -2275,283 +2669,109 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                 Text(
                   eemName!,
                   style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w600,
-                  ),
+                      fontSize: 13,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600),
                 ),
               ],
             ],
           ),
+
           const SizedBox(height: 8),
 
-          // ✅ THIS BLOCK WAS MISSING — add it back
+          // ── Tab Content ───────────────────────────────────────────────
           Expanded(
-            flex: 6,
-            child: Consumer<SalesOrderProvider>(
-              builder: (context, provider, _) {
-                if (provider.isSiteVisitsLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (provider.todaySiteVisits.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.location_off_outlined,
-                            size: 40, color: Colors.grey.shade300),
-                        const SizedBox(height: 8),
-                        const Text(
-                          "No site visits today",
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: provider.todaySiteVisits.length,
-                  itemBuilder: (context, index) =>
-                      _todaySiteVisitCard(provider.todaySiteVisits[index]),
-                );
-              },
-            ),
+            child: _activeTab == 0
+                ? _buildSiteVisitsTab()
+                : _buildExpensesTab(),
           ),
-
-          // ── Other Expense divider ─────────────────────────────────────────────
-
-          const SizedBox(height: 15),
-          Row(
-            children: [
-
-              Expanded(
-                  child: Divider(thickness: 1, color: Colors.grey.shade400)),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Text("Expenses",
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ),
-              Expanded(
-                  child: Divider(thickness: 1, color: Colors.grey.shade400)),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-// ── Expense rows ──────────────────────────────────────────────────────
-          Expanded(
-            flex: 2,
-            child: ListView.builder(
-              itemCount: expenseRows.length,
-              itemBuilder: (context, index) => _expenseRow(index),
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-// ── Add row + Save/Submit icons in one compact row ────────────────────
-          Consumer<SalesOrderProvider>(
-            builder: (context, provider, _) {
-              return Row(
-                children: [
-                  // Add row button
-                  IconButton(
-                    icon: Icon(Icons.add_circle,
-                        color: AppColors.primaryColor, size: 28),
-                    onPressed: _addExpenseRow,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              );
-            },
-          ),
-
-          const SizedBox(height: 10),
         ],
       ),
     );
   }
 
-  // Widget _todaySiteVisitCard(Map<String, dynamic> visit) {
-  //   final customer =
-  //       visit["customer"]?.toString().trim() ?? "";
-  //   final site = visit["site"]?.toString().trim() ??
-  //       visit["site_lat"]?.toString() ??
-  //       "";
-  //   final eemName = visit["_eem_name"] ??
-  //       Provider.of<SalesOrderProvider>(context, listen: false).eemDocName ??
-  //       "";
-  //   // ── Actual distance ─────────────────────────────
-  //   final actualDistance =
-  //       visit["actual_distance"]?.toString().trim() ?? "";
-  //   final distanceTravelled =
-  //       visit["distance_travelled"]?.toString().trim() ?? "";
-  //   // ── Parse checkin_time ──────────────────────────────
-  //   String displayTime = "";
-  //   try {
-  //     final rawTime = visit["checkin_time"]?.toString().trim() ?? "";
-  //     if (rawTime.isNotEmpty) {
-  //       final parsed = DateFormat('yyyy-MM-dd HH:mm:ss').parse(rawTime);
-  //       displayTime = DateFormat('hh:mm a').format(parsed);
-  //     }
-  //   } catch (_) {}
-  //   // Format lat/long as location display
-  //   final double? lat = double.tryParse(
-  //       visit["site_lat"]?.toString() ?? "");
-  //   final double? lng = double.tryParse(
-  //       visit["site_long"]?.toString() ?? "");
-  //
-  //   return InkWell(
-  //     onTap: () => _showCreateSiteVisitDialog(existingVisit: {
-  //       ...visit,
-  //       // Map child table fields to dialog expected fields
-  //       "latitude": lat,
-  //       "longitude": lng,
-  //       "name": visit["name"],
-  //       "checkin_time": visit["checkin_time"],
-  //     }),
-  //     borderRadius: BorderRadius.circular(10),
-  //     child: Container(
-  //       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-  //       margin: const EdgeInsets.symmetric(vertical: 5),
-  //       decoration: BoxDecoration(
-  //         color: Colors.white,
-  //         borderRadius: BorderRadius.circular(10),
-  //         border: Border.all(color: Colors.grey.shade200),
-  //         boxShadow: [
-  //           BoxShadow(
-  //             color: Colors.black.withOpacity(0.04),
-  //             blurRadius: 6,
-  //             offset: const Offset(0, 2),
-  //           ),
-  //         ],
-  //       ),
-  //       child: Row(
-  //         children: [
-  //           // Icon
-  //           Container(
-  //             width: 36,
-  //             height: 36,
-  //             decoration: BoxDecoration(
-  //               color: AppColors.primaryColor.withOpacity(0.1),
-  //               shape: BoxShape.circle,
-  //             ),
-  //             child: Icon(Icons.location_on,
-  //                 color: AppColors.primaryColor, size: 18),
-  //           ),
-  //           const SizedBox(width: 12),
-  //
-  //           // Customer + Site
-  //           Expanded(
-  //             child: Column(
-  //               crossAxisAlignment: CrossAxisAlignment.start,
-  //               children: [
-  //                 Text(
-  //                   customer.isNotEmpty ? customer : site,
-  //                   maxLines: 1,
-  //                   overflow: TextOverflow.ellipsis,
-  //                   style: const TextStyle(
-  //                     fontWeight: FontWeight.w600,
-  //                     fontSize: 13,
-  //                     color: Colors.black87,
-  //                   ),
-  //                 ),
-  //                 if (customer.isNotEmpty && site.isNotEmpty) ...[
-  //                   const SizedBox(height: 3),
-  //                   Row(
-  //                     children: [
-  //                       Icon(Icons.map_outlined,
-  //                           size: 11, color: Colors.grey.shade500),
-  //                       const SizedBox(width: 4),
-  //                       Expanded(
-  //                         child: Text(
-  //                           site,
-  //                           maxLines: 1,
-  //                           overflow: TextOverflow.ellipsis,
-  //                           style: TextStyle(
-  //                             fontSize: 11,
-  //                             color: Colors.grey.shade600,
-  //                           ),
-  //                         ),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                 ],
-  //               ],
-  //
-  //             ),
-  //           ),
-  //
-  //           const SizedBox(width: 8),
-  //
-  //           // Delete icon
-  //           // GestureDetector(
-  //           //   onTap: () async {
-  //           //     final rowName = visit["name"];
-  //           //     if (rowName == null) return;
-  //           //
-  //           //     final confirm = await showDialog<bool>(
-  //           //       context: context,
-  //           //       builder: (ctx) => AlertDialog(
-  //           //         shape: RoundedRectangleBorder(
-  //           //             borderRadius: BorderRadius.circular(14)),
-  //           //         title: const Text("Delete Site Visit"),
-  //           //         content: Text(
-  //           //           "Are you sure you want to delete this site visit"
-  //           //               "${customer.isNotEmpty ? ' for $customer' : ''}?",
-  //           //         ),
-  //           //         actions: [
-  //           //           TextButton(
-  //           //             onPressed: () => Navigator.pop(ctx, false),
-  //           //             child: const Text("Cancel"),
-  //           //           ),
-  //           //           ElevatedButton(
-  //           //             style: ElevatedButton.styleFrom(
-  //           //               backgroundColor: Colors.red,
-  //           //               shape: RoundedRectangleBorder(
-  //           //                   borderRadius: BorderRadius.circular(8)),
-  //           //             ),
-  //           //             onPressed: () => Navigator.pop(ctx, true),
-  //           //             child: const Text("Delete",
-  //           //                 style: TextStyle(color: Colors.white)),
-  //           //           ),
-  //           //         ],
-  //           //       ),
-  //           //     );
-  //           //
-  //           //     if (confirm != true) return;
-  //           //
-  //           //     final provider = Provider.of<SalesOrderProvider>(
-  //           //         context,
-  //           //         listen: false);
-  //           //     final success =
-  //           //     await provider.deleteSiteVisit(rowName);
-  //           //     Fluttertoast.showToast(
-  //           //       msg: success
-  //           //           ? "Site Visit deleted successfully!"
-  //           //           : "Failed to delete Site Visit.",
-  //           //     );
-  //           //   },
-  //           //   child: Container(
-  //           //     padding: const EdgeInsets.all(6),
-  //           //     decoration: BoxDecoration(
-  //           //       color: Colors.red.shade50,
-  //           //       borderRadius: BorderRadius.circular(8),
-  //           //     ),
-  //           //     child: Icon(
-  //           //       Icons.delete_outline_rounded,
-  //           //       size: 18,
-  //           //       color: Colors.red.shade400,
-  //           //     ),
-  //           //   ),
-  //           // ),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
+// ── Site Visits Tab ───────────────────────────────────────────────────────────
+  Widget _buildSiteVisitsTab() {
+    return Consumer<SalesOrderProvider>(
+      builder: (context, provider, _) {
+        if (provider.isSiteVisitsLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (provider.todaySiteVisits.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.location_off_outlined,
+                    size: 40, color: Colors.grey.shade300),
+                const SizedBox(height: 8),
+                const Text(
+                  "No site visits today",
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: provider.todaySiteVisits.length,
+          itemBuilder: (context, index) =>
+              _todaySiteVisitCard(provider.todaySiteVisits[index]),
+        );
+      },
+    );
+  }
+
+// ── Expenses Tab ──────────────────────────────────────────────────────────────
+  Widget _buildExpensesTab() {
+    return Column(
+      children: [
+        Expanded(
+          child: expenseRows.isEmpty
+              ? Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.receipt_outlined,
+                    size: 40, color: Colors.grey.shade300),
+                const SizedBox(height: 8),
+                const Text(
+                  "No expenses added",
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ],
+            ),
+          )
+              : ListView.builder(
+            itemCount: expenseRows.length,
+            itemBuilder: (context, index) => _expenseRow(index),
+          ),
+        ),
+
+        const SizedBox(height: 4),
+
+        // ── Add + Save + Submit row ───────────────────────
+        Consumer<SalesOrderProvider>(
+          builder: (context, provider, _) {
+            return Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.add_circle,
+                      color: AppColors.primaryColor, size: 28),
+                  onPressed: _addExpenseRow,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _todaySiteVisitCard(Map<String, dynamic> visit) {
     final customer = visit["customer"]?.toString().trim() ?? "";
     final site = visit["site"]?.toString().trim() ??
@@ -2934,114 +3154,456 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
     }
     return '';
   }
-  Widget _expenseRow(int index) {
-    final provider = Provider.of<SalesOrderProvider>(context, listen: false);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+  Future<void> _showAmountDialog(int index, String expenseType) async {
+    final amountController = TextEditingController(
+      text: expenseRows[index]["amount"]?.text ?? "",
+    );
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.receipt_outlined, color: AppColors.primaryColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                expenseType,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: amountController,
+          autofocus: true,
+          keyboardType:
+          const TextInputType.numberWithOptions(decimal: true),
+          onTap: () {
+            amountController.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: amountController.text.length,
+            );
+          },
+          decoration: InputDecoration(
+            hintText: "0.00",
+            hintStyle: TextStyle(color: Colors.grey.shade400),
+            prefixText: "₹ ",
+            prefixStyle: TextStyle(
+                color: AppColors.primaryColor,
+                fontWeight: FontWeight.w600),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.primaryColor),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 13),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text("Cancel",
+                style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryColor,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 20, vertical: 10),
+            ),
+            onPressed: () {
+              final val = amountController.text.trim();
+              if (val.isEmpty || double.tryParse(val) == null) {
+                Fluttertoast.showToast(
+                    msg: "Please enter a valid amount.");
+                return;
+              }
+              Navigator.pop(ctx, val);
+            },
+            child: const Text("Confirm",
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        expenseRows[index]["amount"]?.text = result;
+      });
+    }
+  }
+
+//   Widget _expenseRow(int index) {
+//     final provider = Provider.of<SalesOrderProvider>(context, listen: false);
+//     final amount = expenseRows[index]["amount"]?.text ?? "";
+//     final hasAmount = amount.isNotEmpty && double.tryParse(amount) != null;
+//
+//     return Padding(
+//       padding: const EdgeInsets.symmetric(vertical: 2),
+//       child: Column(
+//         children: [
+//           Row(
+//             crossAxisAlignment: CrossAxisAlignment.center,
+//             children: [
+//               // ── Expense Type Dropdown ───────────────────────
+//               Expanded(
+//                 flex: 2,
+//                 child: FutureBuilder<List<String>>(
+//                   future: provider.fetchExpenseTypes(""),
+//                   builder: (context, snapshot) {
+//                     if (!snapshot.hasData) {
+//                       return const SizedBox(
+//                           height: 30,
+//                           child: Center(
+//                               child: CircularProgressIndicator(
+//                                   strokeWidth: 1)));
+//                     }
+//
+//                     final list = snapshot.data!;
+//
+//                     return DropdownButtonFormField<String>(
+//                       isDense: true,
+//                       isExpanded: true,
+//                       value: expenseRows[index]["type"]!.text.isNotEmpty
+//                           ? expenseRows[index]["type"]!.text
+//                           : null,
+//                       items: list.map((type) {
+//                         return DropdownMenuItem(
+//                           value: type,
+//                           child: Text(
+//                             type,
+//                             style: const TextStyle(fontSize: 13),
+//                             overflow: TextOverflow.ellipsis,
+//                             maxLines: 1,
+//                           ),
+//                         );
+//                       }).toList(),
+//                       decoration: const InputDecoration(
+//                         hintText: "Type",
+//                         isDense: true,
+//                         contentPadding: EdgeInsets.symmetric(
+//                             vertical: 4, horizontal: 0),
+//                         border: UnderlineInputBorder(),
+//                       ),
+//                       onChanged: (v) async {
+//                         setState(() {
+//                           expenseRows[index]["type"]?.text = v ?? "";
+//                         });
+//                         // ── Show amount dialog immediately ──
+//                         if (v != null && v.isNotEmpty) {
+//                           await _showAmountDialog(index, v);
+//                         }
+//                       },
+//                     );
+//                   },
+//                 ),
+//               ),
+//
+//               const SizedBox(width: 8),
+//
+//               // ── Amount display chip (tappable to edit) ──────
+// // ── Amount display (tappable to edit) ──────────
+//               Expanded(
+//                 flex: 1,
+//                 child: GestureDetector(
+//                   onTap: () {
+//                     final type = expenseRows[index]["type"]?.text ?? "";
+//                     if (type.isEmpty) {
+//                       Fluttertoast.showToast(
+//                           msg: "Please select an expense type first.");
+//                       return;
+//                     }
+//                     _showAmountDialog(index, type);
+//                   },
+//                   child: InputDecorator(
+//                     decoration: const InputDecoration(
+//                       hintText: "₹:",
+//                       isDense: true,
+//                       contentPadding: EdgeInsets.symmetric(vertical: 4),
+//                       border: UnderlineInputBorder(),
+//                     ),
+//                     child: Text(
+//                       hasAmount ? "₹$amount" : "",
+//                       style: const TextStyle(fontSize: 13),
+//                     ),
+//                   ),
+//                 ),
+//               ),
+//
+//               const SizedBox(width: 6),
+//
+//               // ── File Attachment Icon ─────────────────────────
+//               Consumer<SalesOrderProvider>(
+//                 builder: (context, provider, _) {
+//                   final hasAttachment =
+//                       expenseRows[index]["attachment"] != null ||
+//                           expenseRows[index]["attachmentFile"] != null;
+//
+//                   return InkWell(
+//                     onTap: provider.isUploadingFile
+//                         ? null
+//                         : () async {
+//                       await _handleFileAttachment(index, provider);
+//                     },
+//                     child: Padding(
+//                       padding: const EdgeInsets.all(4),
+//                       child: provider.isUploadingFile
+//                           ? const SizedBox(
+//                         width: 16,
+//                         height: 16,
+//                         child: CircularProgressIndicator(
+//                             strokeWidth: 2),
+//                       )
+//                           : Icon(
+//                         hasAttachment
+//                             ? Icons.attach_file
+//                             : Icons.attach_file_outlined,
+//                         size: 20,
+//                         color: hasAttachment
+//                             ? AppColors.primaryColor
+//                             : Colors.grey,
+//                       ),
+//                     ),
+//                   );
+//                 },
+//               ),
+//
+//               const SizedBox(width: 2),
+//
+//               // ── Delete Icon ──────────────────────────────────
+//               InkWell(
+//                 onTap: () {
+//                   if (expenseRows.length > 1) {
+//                     _removeExpenseRow(index);
+//                   }
+//                 },
+//                 child: const Padding(
+//                   padding: EdgeInsets.all(4),
+//                   child: Icon(Icons.close, size: 16, color: Colors.red),
+//                 ),
+//               ),
+//             ],
+//           ),
+//
+//           // ── Attachment name ──────────────────────────────────
+//           if (expenseRows[index]["attachmentFile"] != null ||
+//               expenseRows[index]["attachment"] != null)
+//             Padding(
+//               padding: const EdgeInsets.only(top: 4, left: 4),
+//               child: Row(
+//                 children: [
+//                   Expanded(
+//                     child: Text(
+//                       _getAttachmentName(index),
+//                       style: const TextStyle(
+//                         fontSize: 11,
+//                         color: Colors.grey,
+//                         fontStyle: FontStyle.italic,
+//                       ),
+//                       maxLines: 1,
+//                       overflow: TextOverflow.ellipsis,
+//                     ),
+//                   ),
+//                   InkWell(
+//                     onTap: () {
+//                       setState(() {
+//                         expenseRows[index]["attachment"] = null;
+//                         expenseRows[index]["attachmentFile"] = null;
+//                       });
+//                     },
+//                     child: const Padding(
+//                       padding: EdgeInsets.all(2),
+//                       child:
+//                       Icon(Icons.close, size: 12, color: Colors.red),
+//                     ),
+//                   ),
+//                 ],
+//               ),
+//             ),
+//         ],
+//       ),
+//     );
+//   }
+  Widget _expenseRow(int index) {
+    final provider =
+    Provider.of<SalesOrderProvider>(context, listen: false);
+
+    final amount = expenseRows[index]["amount"]?.text ?? "";
+
+    final hasAmount =
+        amount.isNotEmpty && double.tryParse(amount) != null;
+
+    final hasAttachment =
+        expenseRows[index]["attachment"] != null ||
+            expenseRows[index]["attachmentFile"] != null;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 3,
+      ),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ),
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
+
+          // HEADER
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Expense Type Dropdown
+
               Expanded(
-                flex: 1,
                 child: FutureBuilder<List<String>>(
                   future: provider.fetchExpenseTypes(""),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return const SizedBox(
-                          height: 30,
-                          child: Center(child: CircularProgressIndicator(strokeWidth: 1)));
+                        height: 28,
+                        child: Center(
+                          child: SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                            ),
+                          ),
+                        ),
+                      );
                     }
 
-                    var list = snapshot.data!;
+                    return DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: expenseRows[index]["type"]
+                            .text
+                            .isNotEmpty
+                            ? expenseRows[index]["type"].text
+                            : null,
+                        hint: const Text(
+                          "Expense Type",
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        items: snapshot.data!
+                            .map(
+                              (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e,
+                              overflow:
+                              TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        )
+                            .toList(),
+                        onChanged: (value) async {
+                          setState(() {
+                            expenseRows[index]["type"]
+                                .text = value ?? "";
+                          });
 
-                    return DropdownButtonFormField<String>(
-                      isDense: true,
-                      value: expenseRows[index]["type"]!.text.isNotEmpty
-                          ? expenseRows[index]["type"]!.text
-                          : null,
-                      items: list.map((type) {
-                        return DropdownMenuItem(
-                          value: type,
-                          child: Text(type, style: const TextStyle(fontSize: 13)),
-                        );
-                      }).toList(),
-                      decoration: const InputDecoration(
-                        hintText: "Type:",
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 4),
-                        border: UnderlineInputBorder(),
+                          if (value != null) {
+                            await _showAmountDialog(
+                              index,
+                              value,
+                            );
+                          }
+                        },
                       ),
-                      onChanged: (v) {
-                        expenseRows[index]["type"]?.text = v ?? "";
-                        setState(() {});
-                      },
                     );
                   },
                 ),
               ),
 
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
 
-              // Amount Input
-              Expanded(
-                flex: 1,
-                child: TextField(
-                  controller: expenseRows[index]["amount"],
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: const InputDecoration(
-                    hintText: "₹:",
-                    hintStyle: TextStyle(fontSize: 13),
-                    border: UnderlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 4),
+              GestureDetector(
+                onTap: () {
+                  final type =
+                      expenseRows[index]["type"]?.text ??
+                          "";
+
+                  if (type.isEmpty) {
+                    Fluttertoast.showToast(
+                      msg:
+                      "Please select an expense type first",
+                    );
+                    return;
+                  }
+
+                  _showAmountDialog(index, type);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor
+                        .withOpacity(.08),
+                    borderRadius:
+                    BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    hasAmount
+                        ? "₹$amount"
+                        : "₹0",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryColor,
+                    ),
                   ),
                 ),
               ),
 
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
 
-              // File Attachment Icon
-              Consumer<SalesOrderProvider>(
-                builder: (context, provider, _) {
-                  final hasAttachment = expenseRows[index]["attachment"] != null ||
-                      expenseRows[index]["attachmentFile"] != null;
-
-                  return InkWell(
-                    onTap: provider.isUploadingFile
-                        ? null
-                        : () async {
-                      await _handleFileAttachment(index, provider);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: provider.isUploadingFile
-                          ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                          : Icon(
-                        hasAttachment
-                            ? Icons.attach_file
-                            : Icons.attach_file_outlined,
-                        size: 20,
-                        color: hasAttachment
-                            ? AppColors.primaryColor
-                            : Colors.grey,
-                      ),
-                    ),
+              InkWell(
+                onTap: provider.isUploadingFile
+                    ? null
+                    : () async {
+                  await _handleFileAttachment(
+                    index,
+                    provider,
                   );
                 },
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    hasAttachment
+                        ? Icons.attach_file
+                        : Icons.attach_file_outlined,
+                    size: 18,
+                    color: hasAttachment
+                        ? AppColors.primaryColor
+                        : Colors.grey,
+                  ),
+                ),
               ),
 
-              const SizedBox(width: 2),
-
-              // Delete Icon
               InkWell(
                 onTap: () {
                   if (expenseRows.length > 1) {
@@ -3049,32 +3611,67 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                   }
                 },
                 child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 16, color: Colors.red),
+                  padding: EdgeInsets.all(2),
+                  child: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: Colors.red,
+                  ),
                 ),
               ),
             ],
           ),
 
-          // Show attachment name if exists
-          if (expenseRows[index]["attachmentFile"] != null ||
-              expenseRows[index]["attachment"] != null)
+          const SizedBox(height: 4),
+
+          // DESCRIPTION
+          TextFormField(
+            controller:
+            expenseRows[index]["description"],
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: 12,
+            ),
+            decoration: InputDecoration(
+              hintText: "Description",
+              isDense: true,
+              contentPadding:
+              const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+              border: OutlineInputBorder(
+                borderRadius:
+                BorderRadius.circular(8),
+              ),
+            ),
+          ),
+
+          // ATTACHMENT NAME
+          if (hasAttachment)
             Padding(
-              padding: const EdgeInsets.only(top: 4, left: 4),
+              padding: const EdgeInsets.only(top: 4),
               child: Row(
                 children: [
+                  const Icon(
+                    Icons.description_outlined,
+                    size: 12,
+                    color: Colors.grey,
+                  ),
+                  const SizedBox(width: 4),
+
                   Expanded(
                     child: Text(
                       _getAttachmentName(index),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey,
-                        fontStyle: FontStyle.italic,
-                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                      ),
                     ),
                   ),
+
                   InkWell(
                     onTap: () {
                       setState(() {
@@ -3082,9 +3679,10 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
                         expenseRows[index]["attachmentFile"] = null;
                       });
                     },
-                    child: const Padding(
-                      padding: EdgeInsets.all(2),
-                      child: Icon(Icons.close, size: 12, color: Colors.red),
+                    child: const Icon(
+                      Icons.cancel,
+                      size: 14,
+                      color: Colors.red,
                     ),
                   ),
                 ],
@@ -3094,7 +3692,6 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       ),
     );
   }
-
   Widget _bottomNavItem(IconData icon, String label, int index) {
     final isSelected = _currentIndex == index;
 
@@ -3117,30 +3714,7 @@ class _ExecutiveTrackerScreenState extends State<ExecutiveTrackerScreen> {
       ),
     );
   }
-  // Widget _wrapSwipe(Widget screen, int index) {
-  //   return GestureDetector(
-  //     behavior: HitTestBehavior.opaque, // 👈 ensures it covers full screen
-  //     onHorizontalDragEnd: (details) {
-  //       double velocity = details.primaryVelocity ?? 0;
-  //
-  //       if (index == 0 && velocity < 0) {
-  //         // Report Screen → Swipe Left → Go to Expense screen
-  //         setState(() => _currentIndex = 2);
-  //       }
-  //
-  //       if (index == 1 && velocity > 0) {
-  //         // Checkin Screen → Swipe Right → Go to Expense screen
-  //         setState(() => _currentIndex = 2);
-  //       }
-  //     },
-  //
-  //     child: Container(
-  //       width: double.infinity,
-  //       height: double.infinity,
-  //       child: screen, // 👈 Important: screen now fills full area
-  //     ),
-  //   );
-  // }
+
   Widget _wrapSwipe(Widget screen, int index) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

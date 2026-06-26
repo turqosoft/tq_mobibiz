@@ -78,7 +78,11 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
       print('Error fetching item details: $e');
     }
   }
-
+@override
+void dispose() {
+_hideOverlay();
+  super.dispose();
+}
   Future<void> _pickDate(BuildContext context, bool isTransactionDate) async {
     final initialDate = isTransactionDate
         ? (transactionDate ?? DateTime.now())
@@ -295,6 +299,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     required String itemTaxTemplate,
     required double lastPurchaseRate, // ✅ NEW
     String uom = '',   // 👇 new
+    double availableQty = 0.0,
     VoidCallback? onCa
   }) {
     showDialog(
@@ -309,6 +314,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         itemTaxTemplate: itemTaxTemplate,
         lastPurchaseRate: lastPurchaseRate, // ✅ NEW
         uom: uom,           // 👇 pass it down
+        availableQty: availableQty,
         onCancel: () {},
         onItemAdded: (addedRate, addedQty) {
           final double addedAmount = addedRate * addedQty;
@@ -346,6 +352,11 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     final uom = item.uom?.isNotEmpty == true    // 👈 add this
         ? item.uom!
         : (message?["uom"] ?? message?["stock_uom"] ?? '');
+    // ✅ Fetch available qty for this item
+    final qtyMap = await provider.fetchItemActualQty(item.itemCode);  // or your API service call
+    final actualQty = qtyMap['${item.itemCode}__actual'] ?? 0.0;
+    final reservedQty = qtyMap['${item.itemCode}__reserved'] ?? 0.0;
+    final availableQty = actualQty - reservedQty;
     showDialog(
       context: context,
       builder: (context) => AddItemDialog(
@@ -360,7 +371,8 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
         isEdit: true, // ✅ IMPORTANT
         editIndex: index,
         onCancel: onCancel,
-        uom: uom,              // ✅ use the resolved variable, not item.uom
+        uom: uom,
+        availableQty: availableQty,
         onItemAdded: (rate, qty) {
           setState(() {
             _isFormDirty = true;
@@ -458,29 +470,79 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(item.itemCode ?? '',
                         style: const TextStyle(color: Colors.grey)),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: (item.actualQty ?? 0) > 0
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: (item.actualQty ?? 0) > 0
-                              ? Colors.green.shade300
-                              : Colors.red.shade300,
-                        ),
-                      ),
-                      child: Text(
-                        'Qty: ${(item.actualQty ?? 0).toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: (item.actualQty ?? 0) > 0
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
-                        ),
-                      ),
+                    // trailing: Container(
+                    //   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    //   decoration: BoxDecoration(
+                    //     color: (item.actualQty ?? 0) > 0
+                    //         ? Colors.green.shade50
+                    //         : Colors.red.shade50,
+                    //     borderRadius: BorderRadius.circular(12),
+                    //     border: Border.all(
+                    //       color: (item.actualQty ?? 0) > 0
+                    //           ? Colors.green.shade300
+                    //           : Colors.red.shade300,
+                    //     ),
+                    //   ),
+                    //   child: Text(
+                    //     'Qty: ${(item.actualQty ?? 0).toStringAsFixed(0)}',
+                    //     style: TextStyle(
+                    //       fontSize: 11,
+                    //       fontWeight: FontWeight.w600,
+                    //       color: (item.actualQty ?? 0) > 0
+                    //           ? Colors.green.shade700
+                    //           : Colors.red.shade700,
+                    //     ),
+                    //   ),
+                    // ),
+                    trailing: Builder(
+                      builder: (context) {
+                        final actual = item.actualQty ?? 0;
+                        final reserved = item.reservedQty ?? 0;
+                        final available = actual - reserved;
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            // Actual Qty badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.blue.shade300),
+                              ),
+                              child: Text(
+                                'Actual: ${actual.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            // Available Qty badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: available > 0 ? Colors.green.shade50 : Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: available > 0 ? Colors.green.shade300 : Colors.red.shade300,
+                                ),
+                              ),
+                              child: Text(
+                                'Avail: ${available.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: available > 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     onTap: () async {
                       _hideOverlay();
@@ -536,6 +598,7 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
                             itemTaxTemplate: message["item_tax_template"] ?? "",
                             lastPurchaseRate: lastPurchaseRate,
                             uom: message["uom"] ?? "",   // 👇 new
+                            availableQty: (item.actualQty ?? 0) - (item.reservedQty ?? 0),
 
                           );
                         } else {
@@ -570,7 +633,9 @@ class CreateQuotationTabState extends State<CreateQuotationTab> with AutomaticKe
     _overlayEntry?.remove();
     _overlayEntry = null;
   }
-
+  void hideSearchOverlay() {
+    _hideOverlay();
+  }
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1175,7 +1240,7 @@ class AddItemDialog extends StatefulWidget {
   final bool isEdit;
   final int? editIndex;
   final String uom;             // 👇 new
-
+  final double availableQty;
 
   const AddItemDialog({
     super.key,
@@ -1192,7 +1257,7 @@ class AddItemDialog extends StatefulWidget {
     this.isEdit = false,
     this.editIndex,
     this.uom = '',              // 👇 new
-
+    this.availableQty = 0.0,
 
   });
 
@@ -1216,6 +1281,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
   late FocusNode _discountFocusNode;
   double _baseRate = 0.0;
   bool _isUpdatingDiscount = false;
+  bool _qtyExceedsAvailable = false;
 
   @override
   void initState() {
@@ -1324,6 +1390,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
     setState(() {
       _totalAmount = total;
       _totalController.text = total.toStringAsFixed(3);
+      _qtyExceedsAvailable = quantity > widget.availableQty;
     });
   }
   void _updateRateFromTotal() {
@@ -1371,165 +1438,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
     super.dispose();
   }
-  //
-  // @override
-  // Widget build(BuildContext context) {
-  //   return AlertDialog(
-  //     title: Column(
-  //       crossAxisAlignment: CrossAxisAlignment.start,
-  //       children: [
-  //
-  //         RichText(
-  //           text: TextSpan(
-  //             children: [
-  //               TextSpan(
-  //                 text: widget.itemName,
-  //                 style: const TextStyle(
-  //                   fontSize: 14,
-  //                   fontWeight: FontWeight.w600,
-  //                   color: Colors.black87,
-  //                 ),
-  //               ),
-  //               TextSpan(
-  //                 text: " (${widget.itemCode})",
-  //                 style: const TextStyle(
-  //                   fontSize: 14,
-  //                   fontWeight: FontWeight.normal,
-  //                   color: Colors.black54,
-  //                 ),
-  //               ),
-  //               if (widget.uom.isNotEmpty)   // 👈 add this block
-  //                 TextSpan(
-  //                   text: " · ${widget.uom}",
-  //                   style: const TextStyle(
-  //                     fontSize: 13,
-  //                     fontWeight: FontWeight.normal,
-  //                     color: Colors.blueGrey,
-  //                   ),
-  //                 ),
-  //             ],
-  //           ),
-  //         ),
-  //
-  //       ],
-  //     ),
-  //     content: SingleChildScrollView(
-  //       child: Column(
-  //         mainAxisSize: MainAxisSize.min,
-  //         children: [
-  //           TextField(
-  //             controller: _itemTaxTemplateController,
-  //             readOnly: true,
-  //             decoration: const InputDecoration(
-  //               labelText: 'Item Tax Template',
-  //             ),
-  //           ),
-  //           TextField(
-  //             controller: TextEditingController(
-  //               text: widget.lastPurchaseRate.toStringAsFixed(3),
-  //             ),
-  //             readOnly: true,
-  //             decoration: const InputDecoration(
-  //               labelText: 'Last Purchase Rate',
-  //             ),
-  //           ),
-  //           TextField(
-  //             controller: _priceListRateController,
-  //             focusNode: _priceListRateFocusNode,
-  //             keyboardType: TextInputType.number,
-  //             decoration: InputDecoration(labelText: 'Price List Rate'),
-  //           ),
-  //           TextField(
-  //             // readOnly: true,
-  //             controller: _discountPercentageController,
-  //             keyboardType: TextInputType.number,
-  //             focusNode: _discountFocusNode,
-  //             decoration: InputDecoration(labelText: 'Discount Percentage'),
-  //           ),
-  //           TextField(
-  //             controller: _rateController,
-  //             focusNode: _rateFocusNode,
-  //             keyboardType: TextInputType.number,
-  //             decoration: InputDecoration(labelText: 'Rate'),
-  //           ),
-  //
-  //
-  //           TextField(
-  //             controller: _quantityController,
-  //             focusNode: _quantityFocusNode,
-  //             keyboardType: TextInputType.number,
-  //             decoration: InputDecoration(labelText: 'Quantity'),
-  //           ),
-  //
-  //           TextField(
-  //             controller: _totalController,
-  //             focusNode: _totalFocusNode,
-  //             readOnly: true,
-  //             keyboardType: TextInputType.number,
-  //             decoration: InputDecoration(labelText: 'Total'),
-  //           ),
-  //
-  //
-  //         ],
-  //       ),
-  //     ),
-  //     actions: [
-  //
-  //       TextButton(
-  //         onPressed: () {
-  //           final rate = double.tryParse(_rateController.text) ?? 0.0;
-  //           final quantity = double.tryParse(_quantityController.text) ?? 0;
-  //           final priceListRate = double.tryParse(_priceListRateController.text) ?? 0.0;
-  //           final discountPercentage = double.tryParse(_discountPercentageController.text) ?? 0.0;
-  //
-  //           if (rate <= 0) {
-  //             Fluttertoast.showToast(msg: "Please enter a valid rate");
-  //           } else if (quantity <= 0) {
-  //             Fluttertoast.showToast(msg: "Please enter a valid quantity");
-  //           } else {
-  //             final provider = Provider.of<SalesOrderProvider>(context, listen: false);
-  //
-  //             if (widget.isEdit && widget.editIndex != null) {
-  //               provider.editItem(
-  //                 widget.editIndex!,
-  //                 rate,
-  //                 quantity,
-  //                 priceListRate,
-  //                 discountPercentage,
-  //               );
-  //             } else {
-  //               provider.addItem(
-  //                 rate,
-  //                 quantity,
-  //                 widget.itemName,
-  //                 widget.itemCode,
-  //                 priceListRate,
-  //                 discountPercentage,
-  //                 widget.itemTaxTemplate,
-  //                 widget.lastPurchaseRate,
-  //                 uom: widget.uom,
-  //               );
-  //             }
-  //             // ✅ Notify parent to update global total
-  //             widget.onItemAdded?.call(rate, quantity);
-  //
-  //             Navigator.of(context).pop();
-  //           }
-  //         },
-  //         // child: const Text('Add'),
-  //         child: Text(widget.isEdit ? 'Save' : 'Add'),
-  //       ),
-  //
-  //       TextButton(
-  //         onPressed: () {
-  //           widget.onCancel();
-  //           Navigator.of(context).pop();
-  //         },
-  //         child: Text('Cancel'),
-  //       ),
-  //     ],
-  //   );
-  // }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -1615,6 +1524,25 @@ class _AddItemDialogState extends State<AddItemDialog> {
             const SizedBox(height: 8),
 
             // ── Rate + Quantity ─────────────────────────────────
+            // Row(
+            //   children: [
+            //     Expanded(
+            //       child: _compactField(
+            //         controller: _rateController,
+            //         focusNode: _rateFocusNode,
+            //         label: 'Rate',
+            //       ),
+            //     ),
+            //     const SizedBox(width: 8),
+            //     Expanded(
+            //       child: _compactField(
+            //         controller: _quantityController,
+            //         focusNode: _quantityFocusNode,
+            //         label: 'Quantity',
+            //       ),
+            //     ),
+            //   ],
+            // ),
             Row(
               children: [
                 Expanded(
@@ -1626,10 +1554,33 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _compactField(
-                    controller: _quantityController,
-                    focusNode: _quantityFocusNode,
-                    label: 'Quantity',
+                  child: Column(                              // ✅ wrap in Column
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _compactField(
+                        controller: _quantityController,
+                        focusNode: _quantityFocusNode,
+                        label: 'Quantity',
+                      ),
+                      if (_qtyExceedsAvailable)              // ✅ warning row
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  size: 13, color: Colors.orange.shade700),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  'Exceeds available (${widget.availableQty.toStringAsFixed(0)})',
+                                  style: TextStyle(
+                                      fontSize: 10, color: Colors.orange.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
