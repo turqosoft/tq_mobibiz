@@ -1,6 +1,4 @@
 PODS:
-  - device_info_plus (0.0.1):
-    - Flutter
   - Flutter (1.0.0)
   - flutter_bluetooth_printer (2.0.0):
     - Flutter
@@ -8,23 +6,17 @@ PODS:
     - Flutter
   - open_filex (0.0.2):
     - Flutter
-  - package_info_plus (0.4.5):
-    - Flutter
   - permission_handler_apple (9.3.0):
     - Flutter
 
 DEPENDENCIES:
-  - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - Flutter (from `Flutter`)
   - flutter_bluetooth_printer (from `.symlinks/plugins/flutter_bluetooth_printer/ios`)
   - fluttertoast (from `.symlinks/plugins/fluttertoast/ios`)
   - open_filex (from `.symlinks/plugins/open_filex/ios`)
-  - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
 
 EXTERNAL SOURCES:
-  device_info_plus:
-    :path: ".symlinks/plugins/device_info_plus/ios"
   Flutter:
     :path: Flutter
   flutter_bluetooth_printer:
@@ -33,20 +25,16 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/fluttertoast/ios"
   open_filex:
     :path: ".symlinks/plugins/open_filex/ios"
-  package_info_plus:
-    :path: ".symlinks/plugins/package_info_plus/ios"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
 
 SPEC CHECKSUMS:
-  device_info_plus: 71ffc6ab7634ade6267c7a93088ed7e4f74e5896
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_bluetooth_printer: 1b8389f49b4e978f840226ddd3166b17c7f74b75
   fluttertoast: 2c67e14dce98bbdb200df9e1acf610d7a6264ea1
   open_filex: 432f3cd11432da3e39f47fcc0df2b1603854eff1
-  package_info_plus: 566e1b7a2f3900e4b0020914ad3fc051dcc95596
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
 
-PODFILE CHECKSUM: 8e6af8b48323e1ab43e70306dcd8327744e8b6e3
+PODFILE CHECKSUM: 04fc9a2e560b03ddebda86e5e579db29de6635ca
 
 COCOAPODS: 1.16.2
